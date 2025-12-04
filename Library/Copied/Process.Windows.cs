@@ -1,4 +1,5 @@
 ﻿using Microsoft.Win32.SafeHandles;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -107,6 +108,67 @@ internal static class ProcessUtils
         }
 
         return procSH;
+    }
+
+    // Using synchronous Anonymous pipes for process input/output redirection means we would end up
+    // wasting a worker threadpool thread per pipe instance. Overlapped pipe IO is desirable, since
+    // it will take advantage of the NT IO completion port infrastructure. But we can't really use
+    // Overlapped I/O for process input/output as it would break Console apps (managed Console class
+    // methods such as WriteLine as well as native CRT functions like printf) which are making an
+    // assumption that the console standard handles (obtained via GetStdHandle()) are opened
+    // for synchronous I/O and hence they can work fine with ReadFile/WriteFile synchronously!
+    internal static void CreatePipe(out SafeFileHandle parentHandle, out SafeFileHandle childHandle, bool parentInputs)
+    {
+        Interop.Kernel32.SECURITY_ATTRIBUTES securityAttributesParent = default;
+        securityAttributesParent.bInheritHandle = Interop.BOOL.TRUE;
+
+        SafeFileHandle? hTmp = null;
+        try
+        {
+            if (parentInputs)
+            {
+                CreatePipeWithSecurityAttributes(out childHandle, out hTmp, ref securityAttributesParent, 0);
+            }
+            else
+            {
+                CreatePipeWithSecurityAttributes(out hTmp,
+                                                      out childHandle,
+                                                      ref securityAttributesParent,
+                                                      0);
+            }
+            // Duplicate the parent handle to be non-inheritable so that the child process
+            // doesn't have access. This is done for correctness sake, exact reason is unclear.
+            // One potential theory is that child process can do something brain dead like
+            // closing the parent end of the pipe and there by getting into a blocking situation
+            // as parent will not be draining the pipe at the other end anymore.
+            IntPtr currentProcHandle = Interop.Kernel32.GetCurrentProcess();
+            if (!Interop.Kernel32.DuplicateHandle(currentProcHandle,
+                                                 hTmp,
+                                                 currentProcHandle,
+                                                 out parentHandle,
+                                                 0,
+                                                 false,
+                                                 Interop.Kernel32.HandleOptions.DUPLICATE_SAME_ACCESS))
+            {
+                throw new Win32Exception();
+            }
+        }
+        finally
+        {
+            if (hTmp != null && !hTmp.IsInvalid)
+            {
+                hTmp.Dispose();
+            }
+        }
+    }
+
+    private static void CreatePipeWithSecurityAttributes(out SafeFileHandle hReadPipe, out SafeFileHandle hWritePipe, ref Interop.Kernel32.SECURITY_ATTRIBUTES lpPipeAttributes, int nSize)
+    {
+        bool ret = Interop.Kernel32.CreatePipe(out hReadPipe, out hWritePipe, ref lpPipeAttributes, nSize);
+        if (!ret || hReadPipe.IsInvalid || hWritePipe.IsInvalid)
+        {
+            throw new Win32Exception();
+        }
     }
 
     private static void BuildCommandLine(CommandLineInfo startInfo, ref ValueStringBuilder commandLine)

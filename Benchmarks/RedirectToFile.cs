@@ -18,7 +18,6 @@ public class RedirectToFile
     public void BuiltIn()
     {
         using TextWriter text = new StreamWriter(_filePath!);
-        // Inspired by https://github.com/dotnet/dotnet/blob/305623c3cd0df455e01b95ed3a8c347e650b315f/eng/tools/BuildComparer/SigningComparer.cs#L267-L269
         using (Process process = new())
         {
             process.StartInfo.FileName = "dotnet";
@@ -38,13 +37,14 @@ public class RedirectToFile
     }
 
     // For some reason it gets stuck, I need to attach a debugger and see why
-    //[Benchmark]
+    [Benchmark]
     public void Shell()
     {
         using (Process process = new())
         {
             process.StartInfo.FileName = @"c:\windows\system32\cmd.exe";
-            process.StartInfo.Arguments = $"/k \"dotnet --help > {_filePath}\"";
+            process.StartInfo.Arguments = $"/c \"dotnet --help > {_filePath}\"";
+            process.StartInfo.CreateNoWindow = true;
 
             process.Start();
 

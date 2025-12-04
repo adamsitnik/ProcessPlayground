@@ -9,7 +9,6 @@ public class Discard
     [Benchmark(Baseline = true)]
     public void BuiltIn()
     {
-        // If you don’t set RedirectStandardOutput = true, .NET does not create a pipe for you. The child process simply uses the inherited handle.
         // Inspired by https://github.com/dotnet/dotnet/blob/305623c3cd0df455e01b95ed3a8c347e650b315f/eng/tools/BuildComparer/SigningComparer.cs#L267-L269
         using (Process process = new())
         {

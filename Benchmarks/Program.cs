@@ -6,7 +6,8 @@ using BenchmarkDotNet.Running;
 
 var config = ManualConfig.CreateMinimumViable()
     .AddJob(Job.ShortRun)
-    .AddDiagnoser(MemoryDiagnoser.Default);
+    .AddDiagnoser(MemoryDiagnoser.Default)
+    .AddDiagnoser(ThreadingDiagnoser.Default);
 
 BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly)
     .Run(args, config);
