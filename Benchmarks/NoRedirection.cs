@@ -8,7 +8,7 @@ namespace Benchmarks;
 public class NoRedirection
 {
     [Benchmark(Baseline = true)]
-    public void BuiltIn()
+    public void Old()
     {
         ProcessStartInfo info = new()
         {
@@ -21,13 +21,38 @@ public class NoRedirection
     }
 
     [Benchmark]
-    public void Custom()
+    public async Task<int> OldAsync()
+    {
+        ProcessStartInfo info = new()
+        {
+            FileName = "dotnet",
+            ArgumentList = { "--help" },
+        };
+
+        using Process process = Process.Start(info)!;
+        await process.WaitForExitAsync();
+        return process.ExitCode;
+    }
+
+    [Benchmark]
+    public int New()
     {
         CommandLineInfo info = new(new("dotnet"))
         {
             Arguments = { "--help" },
         };
 
-        info.Execute();
+        return info.Execute();
+    }
+
+    [Benchmark]
+    public async Task<int> NewAsync()
+    {
+        CommandLineInfo info = new(new("dotnet"))
+        {
+            Arguments = { "--help" },
+        };
+
+        return await info.ExecuteAsync();
     }
 }

@@ -7,7 +7,7 @@ namespace Benchmarks;
 public class Discard
 {
     [Benchmark(Baseline = true)]
-    public void BuiltIn()
+    public int Old()
     {
         // Inspired by https://github.com/dotnet/dotnet/blob/305623c3cd0df455e01b95ed3a8c347e650b315f/eng/tools/BuildComparer/SigningComparer.cs#L267-L269
         using (Process process = new())
@@ -28,17 +28,52 @@ public class Discard
             process.BeginErrorReadLine();
 
             process.WaitForExit();
+
+            return process.ExitCode;
         }
     }
 
     [Benchmark]
-    public void Custom()
+    public async Task<int> OldAsync()
+    {
+        using (Process process = new())
+        {
+            process.StartInfo.FileName = "dotnet";
+            process.StartInfo.Arguments = "--help";
+            process.StartInfo.CreateNoWindow = true;
+            process.StartInfo.RedirectStandardOutput = true;
+            process.StartInfo.RedirectStandardError = true;
+
+            process.Start();
+
+            Task<string> readOutput = process.StandardOutput.ReadToEndAsync();
+            Task<string> readError = process.StandardError.ReadToEndAsync();
+
+            await Task.WhenAll(process.WaitForExitAsync(), readOutput, readError);
+
+            return process.ExitCode;
+        }
+    }
+
+    [Benchmark]
+    public int New()
     {
         CommandLineInfo info = new(new("dotnet"))
         {
             Arguments = { "--help" },
         };
 
-        info.DiscardOutput();
+        return info.Discard();
+    }
+
+    [Benchmark]
+    public async Task<int> NewAsync()
+    {
+        CommandLineInfo info = new(new("dotnet"))
+        {
+            Arguments = { "--help" },
+        };
+
+        return await info.DiscardAsync();
     }
 }

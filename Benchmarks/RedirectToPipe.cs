@@ -7,7 +7,7 @@ namespace Benchmarks;
 public class RedirectToPipe
 {
     [Benchmark(Baseline = true)]
-    public async Task BuiltIn()
+    public async Task OldAsync()
     {
         ProcessStartInfo info = new()
         {
@@ -47,32 +47,19 @@ public class RedirectToPipe
     }
 
     [Benchmark]
-    public async Task ConsumeLinesSeparately()
+    public async Task<int> NewAsync()
     {
         CommandLineInfo info = new(new("dotnet"))
         {
             Arguments = { "--help" },
         };
 
-        await foreach ((string line, bool isError) in info.ReadLinesAsync())
+        var lines = info.ReadOutputAsync();
+        await foreach (var line in lines)
         {
             // We don't re-print, so the benchmark focuses on reading only.
             _ = line;
         }
-    }
-
-    [Benchmark]
-    public async Task ConsumeLinesTogether()
-    {
-        CommandLineInfo info = new(new("dotnet"))
-        {
-            Arguments = { "--help" },
-        };
-
-        await foreach (string line in info.ReadAllLinesAsync())
-        {
-            // We don't re-print, so the benchmark focuses on reading only.
-            _ = line;
-        }
+        return lines.ExitCode;
     }
 }

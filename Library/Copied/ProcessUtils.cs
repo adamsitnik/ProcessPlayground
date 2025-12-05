@@ -8,31 +8,6 @@ namespace Library;
 internal static class ProcessUtils
 {
     private static readonly object s_createProcessLock = new object();
-    
-    internal static bool WaitForExit(this SafeProcessHandle handle, int milliseconds)
-    {
-        try
-        {
-            if (handle.IsInvalid)
-                return true;
-
-            using (Interop.Kernel32.ProcessWaitHandle processWaitHandle = new Interop.Kernel32.ProcessWaitHandle(handle))
-            {
-                return !processWaitHandle.WaitOne(milliseconds);
-            }
-        }
-        finally
-        {
-            // If we have a hard timeout, we cannot wait for the streams
-            if (milliseconds == Timeout.Infinite)
-            {
-                //_output?.EOF.GetAwaiter().GetResult();
-                //_error?.EOF.GetAwaiter().GetResult();
-            }
-
-            handle?.Dispose();
-        }
-    }
 
     internal static unsafe SafeProcessHandle StartCore(CommandLineInfo startInfo,
         SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)

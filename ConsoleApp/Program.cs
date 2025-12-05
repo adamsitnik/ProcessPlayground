@@ -4,10 +4,46 @@ using System.Diagnostics;
 
 #pragma warning disable  // Local function is declared but never used
 
-RedirectToFileShell();
-//await StreamAllAsync();
+await StreamLongRunningWithTimeoutAsync();
 
-static void NoRedirectionBuiltIn()
+static void LongRunningWithTimeout()
+{
+    CommandLineInfo info = new(new("ping"))
+    {
+        Arguments = { "microsoft.com", "-t" /* Ping the specified host until stopped */ },
+        KillOnCancelKeyPress = true,
+    };
+
+    int exitCode = info.Execute(TimeSpan.FromSeconds(3));
+    Console.WriteLine($"Process exited with: {exitCode}");
+}
+
+static async Task LongRunningWithTimeoutAsync()
+{
+    CommandLineInfo info = new(new("ping"))
+    {
+        Arguments = { "microsoft.com", "-t" /* Ping the specified host until stopped */ },
+        KillOnCancelKeyPress = true,
+    };
+
+    using CancellationTokenSource cts = new(TimeSpan.FromSeconds(3));
+    int exitCode = await info.ExecuteAsync(cts.Token);
+    Console.WriteLine($"Process exited with: {exitCode}");
+}
+
+static void LongRunningWithCtrlC()
+{
+    CommandLineInfo info = new(new("ping"))
+    {
+        Arguments = { "microsoft.com", "-t" /* Ping the specified host until stopped */ },
+        KillOnCancelKeyPress = true,
+    };
+
+    int exitCode = info.Execute();
+    Console.WriteLine($"Process exited with: {exitCode}");
+}
+
+static void StartAndWaitForExit()
 {
     // If you don’t set RedirectStandardOutput = true, .NET does not create a pipe for you. The child process simply uses the inherited handle.
     ProcessStartInfo info = new()
@@ -20,7 +56,7 @@ static void NoRedirectionBuiltIn()
     process.WaitForExit();
 }
 
-static void NoRedirectionCustom()
+static void Execute()
 {
     // If you don’t set RedirectStandardOutput = true, .NET does not create a pipe for you. The child process simply uses the inherited handle.
     CommandLineInfo info = new(new("dotnet"))
@@ -28,9 +64,21 @@ static void NoRedirectionCustom()
         Arguments = { "--help" },
     };
 
-    info.Execute();
+    int exitCode = info.Execute();
+    Console.WriteLine($"Process exited with: {exitCode}");
 }
 
+static async Task ExecuteAsync()
+{
+    // If you don’t set RedirectStandardOutput = true, .NET does not create a pipe for you. The child process simply uses the inherited handle.
+    CommandLineInfo info = new(new("dotnet"))
+    {
+        Arguments = { "--help" },
+    };
+
+    int exitCode = await info.ExecuteAsync();
+    Console.WriteLine($"Process exited with: {exitCode}");
+}
 
 static void RedirectToFileShell()
 {
@@ -52,7 +100,7 @@ static void RedirectToFile()
         Arguments = { "--help" },
     };
 
-    info.RedirectToFile("custom.txt");
+    info.RedirectToFiles(inputFile: null, outputFile: "custom.txt", errorFile: null);
 }
 
 static async Task StreamAsync()
@@ -62,28 +110,32 @@ static async Task StreamAsync()
         Arguments = { "--help" },
     };
 
-    await foreach (var (line, isError) in info.ReadLinesAsync())
+    var output = info.ReadOutputAsync();
+    await foreach (var line in output)
     {
-        if (isError)
+        if (line.StandardError)
         {
-            Console.Error.WriteLine($"ERR: {line}");
+            Console.Error.WriteLine($"ERR: {line.Content}");
         }
         else
         {
-            Console.WriteLine($"OUT: {line}");
+            Console.WriteLine($"OUT: {line.Content}");
         }
     }
+    Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
 }
 
-static async Task StreamAllAsync()
+static async Task StreamLongRunningWithTimeoutAsync()
 {
-    CommandLineInfo info = new(new("dotnet"))
+    CommandLineInfo info = new(new("ping"))
     {
-        Arguments = { "--help" },
+        Arguments = { "microsoft.com", "-t" /* Ping the specified host until stopped */ },
+        KillOnCancelKeyPress = true,
     };
 
-    await foreach (string line in info.ReadAllLinesAsync())
+    using CancellationTokenSource cts = new(TimeSpan.FromSeconds(3));
+    await foreach (var line in info.ReadOutputAsync().WithCancellation(cts.Token))
     {
-        Console.WriteLine($"ALL: {line}");
+        Console.WriteLine(line.Content);
     }
 }
