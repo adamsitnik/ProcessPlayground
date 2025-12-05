@@ -37,7 +37,7 @@ public class NoRedirection
     [Benchmark]
     public int New()
     {
-        CommandLineInfo info = new(new("dotnet"))
+        CommandLineInfo info = new("dotnet")
         {
             Arguments = { "--help" },
         };
@@ -48,7 +48,7 @@ public class NoRedirection
     [Benchmark]
     public async Task<int> NewAsync()
     {
-        CommandLineInfo info = new(new("dotnet"))
+        CommandLineInfo info = new("dotnet")
         {
             Arguments = { "--help" },
         };

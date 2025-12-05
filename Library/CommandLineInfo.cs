@@ -1,11 +1,10 @@
 ﻿using Microsoft.Win32.SafeHandles;
-using System.Runtime.CompilerServices;
 using System.Text;
 using static Library.LowLevelHelpers;
 
 namespace Library;
 
-public class CommandLineInfo
+public sealed class CommandLineInfo
 {
     private List<string>? _arguments;
     private Dictionary<string, string?>? _envVars;

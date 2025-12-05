@@ -8,7 +8,7 @@ await StreamLongRunningWithTimeoutAsync();
 
 static void LongRunningWithTimeout()
 {
-    CommandLineInfo info = new(new("ping"))
+    CommandLineInfo info = new("ping")
     {
         Arguments = { "microsoft.com", "-t" /* Ping the specified host until stopped */ },
         KillOnCancelKeyPress = true,
@@ -20,7 +20,7 @@ static void LongRunningWithTimeout()
 
 static async Task LongRunningWithTimeoutAsync()
 {
-    CommandLineInfo info = new(new("ping"))
+    CommandLineInfo info = new("ping")
     {
         Arguments = { "microsoft.com", "-t" /* Ping the specified host until stopped */ },
         KillOnCancelKeyPress = true,
@@ -33,7 +33,7 @@ static async Task LongRunningWithTimeoutAsync()
 
 static void LongRunningWithCtrlC()
 {
-    CommandLineInfo info = new(new("ping"))
+    CommandLineInfo info = new("ping")
     {
         Arguments = { "microsoft.com", "-t" /* Ping the specified host until stopped */ },
         KillOnCancelKeyPress = true,
@@ -59,7 +59,7 @@ static void StartAndWaitForExit()
 static void Execute()
 {
     // If you don’t set RedirectStandardOutput = true, .NET does not create a pipe for you. The child process simply uses the inherited handle.
-    CommandLineInfo info = new(new("dotnet"))
+    CommandLineInfo info = new("dotnet")
     {
         Arguments = { "--help" },
     };
@@ -71,7 +71,7 @@ static void Execute()
 static async Task ExecuteAsync()
 {
     // If you don’t set RedirectStandardOutput = true, .NET does not create a pipe for you. The child process simply uses the inherited handle.
-    CommandLineInfo info = new(new("dotnet"))
+    CommandLineInfo info = new("dotnet")
     {
         Arguments = { "--help" },
     };
@@ -95,7 +95,7 @@ static void RedirectToFileShell()
 
 static void RedirectToFile()
 {
-    CommandLineInfo info = new(new("dotnet"))
+    CommandLineInfo info = new("dotnet")
     {
         Arguments = { "--help" },
     };
@@ -105,7 +105,7 @@ static void RedirectToFile()
 
 static async Task StreamAsync()
 {
-    CommandLineInfo info = new(new("dotnet"))
+    CommandLineInfo info = new("dotnet")
     {
         Arguments = { "--help" },
     };
@@ -127,7 +127,7 @@ static async Task StreamAsync()
 
 static async Task StreamLongRunningWithTimeoutAsync()
 {
-    CommandLineInfo info = new(new("ping"))
+    CommandLineInfo info = new("ping")
     {
         Arguments = { "microsoft.com", "-t" /* Ping the specified host until stopped */ },
         KillOnCancelKeyPress = true,

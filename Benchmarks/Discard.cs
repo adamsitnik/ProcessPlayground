@@ -58,7 +58,7 @@ public class Discard
     [Benchmark]
     public int New()
     {
-        CommandLineInfo info = new(new("dotnet"))
+        CommandLineInfo info = new("dotnet")
         {
             Arguments = { "--help" },
         };
@@ -69,7 +69,7 @@ public class Discard
     [Benchmark]
     public async Task<int> NewAsync()
     {
-        CommandLineInfo info = new(new("dotnet"))
+        CommandLineInfo info = new("dotnet")
         {
             Arguments = { "--help" },
         };
