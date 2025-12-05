@@ -46,12 +46,10 @@ CommandLineInfo info = new("dotnet")
 An async enumerable that streams output lines from a command-line process.
 
 ```csharp
-var output = info.ReadOutputAsync();
-await foreach (var line in output)
+await foreach (var line in info.ReadOutputAsync())
 {
     Console.WriteLine(line.Content);
 }
-Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
 ```
 
 ### `OutputLine`
@@ -88,8 +86,7 @@ int exitCode = await info.ExecuteAsync();
 ```csharp
 CommandLineInfo info = new("ping")
 {
-    Arguments = { "microsoft.com", "-t" },  // Ping until stopped
-    KillOnCancelKeyPress = true
+    Arguments = { "microsoft.com", "-t" }  // Ping until stopped
 };
 
 // Kill after 3 seconds
@@ -118,11 +115,18 @@ int exitCode = await info.DiscardAsync();
 This is more efficient than the traditional approach of redirecting output and discarding it in event handlers:
 
 ```csharp
-// Old approach (inefficient)
 process.StartInfo.RedirectStandardOutput = true;
 process.StartInfo.RedirectStandardError = true;
+
 process.OutputDataReceived += (sender, e) => { };  // Allocates per-line
 process.ErrorDataReceived += (sender, e) => { };
+
+process.Start();
+
+process.BeginOutputReadLine();
+process.BeginErrorReadLine();
+
+process.WaitForExit();
 ```
 
 ### Redirect to Files
@@ -149,7 +153,7 @@ This is significantly faster than reading output through pipes and writing to fi
 
 ### Stream Output Lines
 
-For streaming output line-by-line as an async enumerable:
+For streaming output line-by-line as an async enumerable to avoid any deadlocks:
 
 ```csharp
 CommandLineInfo info = new("dotnet")
@@ -172,22 +176,6 @@ await foreach (var line in output)
 Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
 ```
 
-### Stream with Timeout and Cancellation
-
-```csharp
-CommandLineInfo info = new("ping")
-{
-    Arguments = { "microsoft.com", "-t" },
-    KillOnCancelKeyPress = true
-};
-
-using CancellationTokenSource cts = new(TimeSpan.FromSeconds(3));
-await foreach (var line in info.ReadOutputAsync().WithCancellation(cts.Token))
-{
-    Console.WriteLine(line.Content);
-}
-```
-
 ## Comparison with Process API
 
 | Task | Process API | CommandLineInfo API |
@@ -198,11 +186,11 @@ await foreach (var line in info.ReadOutputAsync().WithCancellation(cts.Token))
 | Redirect to file | Redirect + read + write to file | `info.RedirectToFiles()` |
 | Stream output | Redirect + `ReadLineAsync` loop | `info.ReadOutputAsync()` |
 | Ctrl+C handling | Manual `CancelKeyPress` subscription | `KillOnCancelKeyPress = true` |
-| Timeout | Manual timer + kill | `Execute(TimeSpan)` or `CancellationToken` |
+| Timeout | `WaitForExit(int)` + `Kill` | `Execute(TimeSpan)` or `CancellationToken` |
 
 ## Project Structure
 
-- **Library/**: Core implementation of `CommandLineInfo` and related types
+- **Library/**: Core implementation of `CommandLineInfo` and related types (currently works only on Windows)
 - **ConsoleApp/**: Sample console application demonstrating usage
 - **Benchmarks/**: BenchmarkDotNet benchmarks comparing performance
 
@@ -223,7 +211,7 @@ dotnet run
 
 ```bash
 cd Benchmarks
-dotnet run -c Release
+dotnet run -c Release --filter *
 ```
 
 ## License
