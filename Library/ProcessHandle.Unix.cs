@@ -47,27 +47,30 @@ public static partial class ProcessHandle
         }
         
         // Prepare arguments array (argv)
-        List<string> argList = new() { options.FileName };
+        List<string> argList = new() { resolvedPath };
         argList.AddRange(options.Arguments);
         
         // Prepare environment array (envp)
-        List<string> envList = new();
-        if (options.Environment.Count > 0)
+        // Start with current environment variables
+        Dictionary<string, string?> envDict = new();
+        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
         {
-            foreach (var kvp in options.Environment)
-            {
-                if (kvp.Value != null)
-                {
-                    envList.Add($"{kvp.Key}={kvp.Value}");
-                }
-            }
+            envDict[(string)entry.Key] = (string?)entry.Value;
         }
-        else
+        
+        // Override/add with provided environment variables
+        foreach (var kvp in options.Environment)
         {
-            // Use current environment
-            foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+            envDict[kvp.Key] = kvp.Value;
+        }
+        
+        // Convert to list of strings
+        List<string> envList = new();
+        foreach (var kvp in envDict)
+        {
+            if (kvp.Value != null)
             {
-                envList.Add($"{entry.Key}={entry.Value}");
+                envList.Add($"{kvp.Key}={kvp.Value}");
             }
         }
 
