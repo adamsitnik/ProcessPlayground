@@ -24,7 +24,6 @@
 
   <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
     <Compile Remove="PipingTests.cs" />
-    <Compile Remove="ProcessTests.cs" />
   </ItemGroup>
 
 </Project>
