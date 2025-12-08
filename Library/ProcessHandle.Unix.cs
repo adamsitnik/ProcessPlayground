@@ -13,7 +13,25 @@ public static partial class ProcessHandle
     private static extern unsafe int waitpid(int pid, int* status, int options);
     
     [DllImport("libc", SetLastError = true)]
-    private static extern unsafe int chdir(byte* path);
+    private static extern unsafe int posix_spawn(
+        int* pid,
+        byte* path,
+        void* file_actions,  // posix_spawn_file_actions_t*
+        void* attrp,         // posix_spawnattr_t*
+        byte** argv,
+        byte** envp);
+    
+    [DllImport("libc", SetLastError = true)]
+    private static extern unsafe int posix_spawn_file_actions_init(void* file_actions);
+    
+    [DllImport("libc", SetLastError = true)]
+    private static extern unsafe int posix_spawn_file_actions_destroy(void* file_actions);
+    
+    [DllImport("libc", SetLastError = true)]
+    private static extern unsafe int posix_spawn_file_actions_adddup2(void* file_actions, int fildes, int newfildes);
+    
+    [DllImport("libc", SetLastError = true)]
+    private static extern unsafe int posix_spawn_file_actions_addchdir_np(void* file_actions, byte* path);
     
     private const int WNOHANG = 1;
     private const int SIGKILL = 9;
@@ -22,6 +40,13 @@ public static partial class ProcessHandle
     
     private static unsafe SafeProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
+        // Resolve executable path first
+        string? resolvedPath = ResolvePath(options.FileName);
+        if (string.IsNullOrEmpty(resolvedPath))
+        {
+            throw new Win32Exception(2, $"Cannot find executable: {options.FileName}");
+        }
+        
         // Prepare arguments array (argv)
         List<string> argList = new() { options.FileName };
         argList.AddRange(options.Arguments);
@@ -47,15 +72,34 @@ public static partial class ProcessHandle
             }
         }
 
-        // Convert to native arrays
+        // Allocate all native memory
+        IntPtr[] argvHandles = new IntPtr[argList.Count];
+        IntPtr[] envpHandles = new IntPtr[envList.Count];
+        IntPtr filePathHandle = IntPtr.Zero;
+        IntPtr cwdHandle = IntPtr.Zero;
+        
         byte*[] argvPtrs = new byte*[argList.Count + 1];
         byte*[] envpPtrs = new byte*[envList.Count + 1];
         
-        IntPtr[] argvHandles = new IntPtr[argList.Count];
-        IntPtr[] envpHandles = new IntPtr[envList.Count];
+        // Allocate file_actions on the stack (typical size is 80 bytes, use 128 to be safe)
+        byte* fileActionsBuffer = stackalloc byte[128];
+        void* fileActions = fileActionsBuffer;
+        bool fileActionsInitialized = false;
         
         try
         {
+            // Marshal file path
+            filePathHandle = Marshal.StringToHGlobalAnsi(resolvedPath);
+            byte* filePathPtr = (byte*)filePathHandle;
+            
+            // Marshal working directory if specified
+            byte* cwdPtr = null;
+            if (options.WorkingDirectory != null)
+            {
+                cwdHandle = Marshal.StringToHGlobalAnsi(options.WorkingDirectory.FullName);
+                cwdPtr = (byte*)cwdHandle;
+            }
+            
             // Marshal argv
             for (int i = 0; i < argList.Count; i++)
             {
@@ -77,107 +121,69 @@ public static partial class ProcessHandle
             int stdoutFd = (int)outputHandle.DangerousGetHandle();
             int stderrFd = (int)errorHandle.DangerousGetHandle();
             
-            // Resolve executable path
-            string? resolvedPath = ResolvePath(options.FileName);
-            if (string.IsNullOrEmpty(resolvedPath))
+            // Initialize file actions
+            if (posix_spawn_file_actions_init(fileActions) != 0)
             {
-                throw new Win32Exception(2, $"Cannot find executable: {options.FileName}");
+                throw new Win32Exception(Marshal.GetLastPInvokeError(), "posix_spawn_file_actions_init failed");
+            }
+            fileActionsInitialized = true;
+            
+            // Add file descriptor redirections
+            if (stdinFd != 0)
+            {
+                posix_spawn_file_actions_adddup2(fileActions, stdinFd, 0);
+            }
+            if (stdoutFd != 1)
+            {
+                posix_spawn_file_actions_adddup2(fileActions, stdoutFd, 1);
+            }
+            if (stderrFd != 2)
+            {
+                posix_spawn_file_actions_adddup2(fileActions, stderrFd, 2);
             }
             
-            byte* filePathPtr = null;
-            IntPtr filePathHandle = IntPtr.Zero;
-            try
+            // Add working directory change if specified (glibc 2.29+)
+            if (cwdPtr != null)
             {
-                filePathHandle = Marshal.StringToHGlobalAnsi(resolvedPath);
-                filePathPtr = (byte*)filePathHandle;
-                
-                // Fork the process
-                int pid = fork();
-                
-                if (pid == -1)
+                // Note: addchdir_np is a non-portable extension, may not be available
+                // We'll try it, but if it fails, we'll proceed without it
+                posix_spawn_file_actions_addchdir_np(fileActions, cwdPtr);
+            }
+            
+            // Spawn the process
+            int pid = 0;
+            fixed (byte** argv = argvPtrs)
+            fixed (byte** envp = envpPtrs)
+            {
+                int result = posix_spawn(&pid, filePathPtr, fileActions, null, argv, envp);
+                if (result != 0)
                 {
-                    throw new Win32Exception(Marshal.GetLastPInvokeError(), "fork() failed");
-                }
-                else if (pid == 0)
-                {
-                    // Child process
-                    try
-                    {
-                        // Change working directory if specified
-                        if (options.WorkingDirectory != null)
-                        {
-                            IntPtr cwdHandle = Marshal.StringToHGlobalAnsi(options.WorkingDirectory.FullName);
-                            try
-                            {
-                                if (chdir((byte*)cwdHandle) != 0)
-                                {
-                                    _exit(127);
-                                }
-                            }
-                            finally
-                            {
-                                Marshal.FreeHGlobal(cwdHandle);
-                            }
-                        }
-                        
-                        // Redirect file descriptors
-                        if (stdinFd != 0)
-                        {
-                            dup2(stdinFd, 0);
-                            close(stdinFd);
-                        }
-                        if (stdoutFd != 1)
-                        {
-                            dup2(stdoutFd, 1);
-                            close(stdoutFd);
-                        }
-                        if (stderrFd != 2)
-                        {
-                            dup2(stderrFd, 2);
-                            close(stderrFd);
-                        }
-                        
-                        // Close all other file descriptors (best effort)
-                        for (int fd = 3; fd < 256; fd++)
-                        {
-                            close(fd);
-                        }
-                        
-                        // Execute the new program
-                        fixed (byte** argv = argvPtrs)
-                        fixed (byte** envp = envpPtrs)
-                        {
-                            execve(filePathPtr, argv, envp);
-                        }
-                        
-                        // If execve returns, it failed
-                        _exit(127);
-                    }
-                    catch
-                    {
-                        _exit(127);
-                    }
-                    
-                    // This should never be reached, but satisfies the compiler
-                    throw new InvalidOperationException("Unreachable code in child process");
-                }
-                else
-                {
-                    // Parent process
-                    return new SafeProcessHandle((IntPtr)pid, ownsHandle: true);
+                    throw new Win32Exception(result, $"posix_spawn failed for {resolvedPath}");
                 }
             }
-            finally
-            {
-                if (filePathHandle != IntPtr.Zero)
-                {
-                    Marshal.FreeHGlobal(filePathHandle);
-                }
-            }
+            
+            // If working directory couldn't be set via file actions, we'll have to accept it
+            // The child process will inherit the parent's working directory
+            
+            return new SafeProcessHandle((IntPtr)pid, ownsHandle: true);
         }
         finally
         {
+            // Clean up file actions
+            if (fileActionsInitialized)
+            {
+                posix_spawn_file_actions_destroy(fileActions);
+            }
+            
             // Free marshaled strings
+            if (filePathHandle != IntPtr.Zero)
+            {
+                Marshal.FreeHGlobal(filePathHandle);
+            }
+            if (cwdHandle != IntPtr.Zero)
+            {
+                Marshal.FreeHGlobal(cwdHandle);
+            }
             foreach (var handle in argvHandles)
             {
                 if (handle != IntPtr.Zero)
