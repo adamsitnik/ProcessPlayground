@@ -18,6 +18,9 @@ public static partial class FileExtensions
     [DllImport("libc", SetLastError = true)]
     private static extern int fcntl(int fd, int cmd, int arg);
     
+    [DllImport("libc", SetLastError = true)]
+    private static extern int close(int fd);
+    
     private const int O_RDWR = 0x0002;
     private static readonly int O_CLOEXEC = OperatingSystem.IsMacOS() ? 0x1000000 : 0x80000;
     private const int F_SETFD = 2;
@@ -60,11 +63,17 @@ public static partial class FileExtensions
                 // Set FD_CLOEXEC on both file descriptors
                 if (fcntl(fds[0], F_SETFD, FD_CLOEXEC) < 0)
                 {
-                    throw new System.ComponentModel.Win32Exception(Marshal.GetLastPInvokeError());
+                    int errno = Marshal.GetLastPInvokeError();
+                    close(fds[0]);
+                    close(fds[1]);
+                    throw new System.ComponentModel.Win32Exception(errno);
                 }
                 if (fcntl(fds[1], F_SETFD, FD_CLOEXEC) < 0)
                 {
-                    throw new System.ComponentModel.Win32Exception(Marshal.GetLastPInvokeError());
+                    int errno = Marshal.GetLastPInvokeError();
+                    close(fds[0]);
+                    close(fds[1]);
+                    throw new System.ComponentModel.Win32Exception(errno);
                 }
             }
             else
