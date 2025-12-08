@@ -107,7 +107,7 @@ The `ProcessHandle` APIs provide fine-grained control over process creation and 
 This example demonstrates piping output from one process to another using anonymous pipes:
 
 ```csharp
-using Library;
+using System.TBA;  // The actual namespace for these APIs
 using Microsoft.Win32.SafeHandles;
 
 // Create an anonymous pipe
