@@ -8,18 +8,18 @@ public static partial class FileExtensions
     // P/Invoke declarations
     [DllImport("libc", SetLastError = true)]
     private static extern unsafe int open(byte* pathname, int flags);
-    
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe int pipe2(int* pipefd, int flags);
-    
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe int pipe(int* pipefd);
-    
-    [DllImport("libc", SetLastError = true)]
-    private static extern int fcntl(int fd, int cmd, int arg);
-    
+
     [DllImport("libc", SetLastError = true)]
     private static extern int close(int fd);
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern unsafe int pipe(int* pipefd);
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern unsafe int pipe2(int* pipefd, int flags);
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int fcntl(int fd, int cmd, int arg);
     
     private const int O_RDWR = 0x0002;
     private static readonly int O_CLOEXEC = OperatingSystem.IsMacOS() ? 0x1000000 : 0x80000;
@@ -46,47 +46,39 @@ public static partial class FileExtensions
         }
     }
 
-    private static void CreateAnonymousPipeCore(out SafeFileHandle read, out SafeFileHandle write)
+    private static unsafe void CreateAnonymousPipeCore(out SafeFileHandle read, out SafeFileHandle write)
     {
-        unsafe
-        {
-            int* fds = stackalloc int[2];
+        int* fds = stackalloc int[2];
             
-            if (OperatingSystem.IsMacOS())
+        if (OperatingSystem.IsMacOS())
+        {
+            // macOS doesn't have pipe2, use pipe + fcntl
+            if (pipe(fds) < 0)
             {
-                // macOS doesn't have pipe2, use pipe + fcntl
-                if (pipe(fds) < 0)
-                {
-                    throw new System.ComponentModel.Win32Exception(Marshal.GetLastPInvokeError());
-                }
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastPInvokeError());
+            }
                 
-                // Set FD_CLOEXEC on both file descriptors
-                if (fcntl(fds[0], F_SETFD, FD_CLOEXEC) < 0)
-                {
-                    int errno = Marshal.GetLastPInvokeError();
-                    close(fds[0]);
-                    close(fds[1]);
-                    throw new System.ComponentModel.Win32Exception(errno);
-                }
-                if (fcntl(fds[1], F_SETFD, FD_CLOEXEC) < 0)
-                {
-                    int errno = Marshal.GetLastPInvokeError();
-                    close(fds[0]);
-                    close(fds[1]);
-                    throw new System.ComponentModel.Win32Exception(errno);
-                }
-            }
-            else
+            // Set FD_CLOEXEC on both file descriptors
+            if (fcntl(fds[0], F_SETFD, FD_CLOEXEC) < 0 || fcntl(fds[1], F_SETFD, FD_CLOEXEC) < 0)
             {
-                // Linux has pipe2
-                if (pipe2(fds, O_CLOEXEC) < 0)
-                {
-                    throw new System.ComponentModel.Win32Exception(Marshal.GetLastPInvokeError());
-                }
-            }
+                int errno = Marshal.GetLastPInvokeError();
 
-            read = new SafeFileHandle(fds[0], ownsHandle: true);
-            write = new SafeFileHandle(fds[1], ownsHandle: true);
+                close(fds[0]);
+                close(fds[1]);
+
+                throw new System.ComponentModel.Win32Exception(errno);
+            }
         }
+        else
+        {
+            // Linux has pipe2 (atomic creation with O_CLOEXEC)
+            if (pipe2(fds, O_CLOEXEC) < 0)
+            {
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastPInvokeError());
+            }
+        }
+
+        read = new SafeFileHandle(fds[0], ownsHandle: true);
+        write = new SafeFileHandle(fds[1], ownsHandle: true);
     }
 }
