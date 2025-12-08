@@ -13,7 +13,7 @@ public static partial class FileExtensions
     private static extern unsafe int pipe2(int* pipefd, int flags);
     
     private const int O_RDWR = 0x0002;
-    private const int O_CLOEXEC = 0x80000;
+    private static readonly int O_CLOEXEC = OperatingSystem.IsMacOS() ? 0x1000000 : 0x80000;
     
     private static SafeFileHandle OpenNullFileHandleCore()
     {
