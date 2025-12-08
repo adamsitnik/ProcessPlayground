@@ -131,23 +131,38 @@ public static partial class ProcessHandle
             // Add file descriptor redirections
             if (stdinFd != 0)
             {
-                posix_spawn_file_actions_adddup2(fileActions, stdinFd, 0);
+                int result = posix_spawn_file_actions_adddup2(fileActions, stdinFd, 0);
+                if (result != 0)
+                {
+                    throw new Win32Exception(result, "posix_spawn_file_actions_adddup2 failed for stdin");
+                }
             }
             if (stdoutFd != 1)
             {
-                posix_spawn_file_actions_adddup2(fileActions, stdoutFd, 1);
+                int result = posix_spawn_file_actions_adddup2(fileActions, stdoutFd, 1);
+                if (result != 0)
+                {
+                    throw new Win32Exception(result, "posix_spawn_file_actions_adddup2 failed for stdout");
+                }
             }
             if (stderrFd != 2)
             {
-                posix_spawn_file_actions_adddup2(fileActions, stderrFd, 2);
+                int result = posix_spawn_file_actions_adddup2(fileActions, stderrFd, 2);
+                if (result != 0)
+                {
+                    throw new Win32Exception(result, "posix_spawn_file_actions_adddup2 failed for stderr");
+                }
             }
             
             // Add working directory change if specified (glibc 2.29+)
             if (cwdPtr != null)
             {
-                // Note: addchdir_np is a non-portable extension, may not be available
-                // We'll try it, but if it fails, we'll proceed without it
-                posix_spawn_file_actions_addchdir_np(fileActions, cwdPtr);
+                // Note: addchdir_np is a non-portable extension, may not be available on all systems
+                int result = posix_spawn_file_actions_addchdir_np(fileActions, cwdPtr);
+                if (result != 0 && result != 38) // 38 = ENOSYS (function not implemented)
+                {
+                    throw new Win32Exception(result, "posix_spawn_file_actions_addchdir_np failed");
+                }
             }
             
             // Spawn the process
@@ -281,8 +296,9 @@ public static partial class ProcessHandle
                         }
                     }
                     
-                    // Sleep a bit before polling again
-                    Thread.Sleep(10);
+                    // Sleep before polling again, using progressive backoff
+                    int sleepMs = Math.Min((int)(now - startTime) / 10 + 1, 50);
+                    Thread.Sleep(sleepMs);
                 }
             }
         }
@@ -305,46 +321,48 @@ public static partial class ProcessHandle
             }
         });
         
-        // Poll for process exit in a background task
-        return await Task.Run(() =>
+        // Poll for process exit asynchronously
+        int pollDelay = 1; // Start with 1ms
+        while (!cancellationToken.IsCancellationRequested)
         {
-            unsafe
+            // Call the wait function synchronously since it's non-blocking
+            (int result, int status) = WaitPidNonBlocking(pid);
+            
+            if (result == pid)
             {
-                int status = 0;
-                
-                while (!cancellationToken.IsCancellationRequested)
-                {
-                    // Non-blocking wait
-                    int result = waitpid(pid, &status, WNOHANG);
-                    if (result == pid)
-                    {
-                        return GetExitCodeFromStatus(status);
-                    }
-                    else if (result == -1)
-                    {
-                        int errno = Marshal.GetLastPInvokeError();
-                        if (errno == EINTR)
-                        {
-                            continue;
-                        }
-                        else if (errno == ECHILD) // no child process
-                        {
-                            // Process already exited or doesn't exist
-                            return -1;
-                        }
-                        throw new Win32Exception(errno, "waitpid() failed");
-                    }
-                    else if (result == 0)
-                    {
-                        // Process still running, wait a bit
-                        Thread.Sleep(10);
-                    }
-                }
-                
-                // If we get here, we were cancelled
-                throw new OperationCanceledException(cancellationToken);
+                return GetExitCodeFromStatus(status);
             }
-        }, cancellationToken).ConfigureAwait(false);
+            else if (result == -1)
+            {
+                int errno = Marshal.GetLastPInvokeError();
+                if (errno == EINTR)
+                {
+                    continue;
+                }
+                else if (errno == ECHILD) // no child process
+                {
+                    // Process already exited or doesn't exist
+                    return -1;
+                }
+                throw new Win32Exception(errno, "waitpid() failed");
+            }
+            else if (result == 0)
+            {
+                // Process still running, wait asynchronously with progressive backoff
+                await Task.Delay(pollDelay, cancellationToken).ConfigureAwait(false);
+                pollDelay = Math.Min(pollDelay * 2, 50); // Progressive backoff up to 50ms
+            }
+        }
+        
+        // If we get here, we were cancelled
+        throw new OperationCanceledException(cancellationToken);
+    }
+    
+    private static unsafe (int result, int status) WaitPidNonBlocking(int pid)
+    {
+        int status = 0;
+        int result = waitpid(pid, &status, WNOHANG);
+        return (result, status);
     }
     
     private static int GetExitCodeFromStatus(int status)
