@@ -22,8 +22,4 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
-    <Compile Remove="PipingTests.cs" />
-  </ItemGroup>
-
 </Project>
