@@ -1,0 +1,8 @@
+﻿using Library;
+
+ProcessStartOptions info = new("dotnet")
+{
+    Arguments = { "--help" },
+};
+
+return ChildProcess.Execute(info);
