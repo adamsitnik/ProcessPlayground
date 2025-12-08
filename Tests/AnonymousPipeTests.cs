@@ -1,0 +1,41 @@
+﻿using Library;
+using Microsoft.Win32.SafeHandles;
+
+namespace Tests;
+
+public class AnonymousPipeTests
+{
+    [Fact]
+    public void CreateAnonymousPipe_CreatesValidHandles()
+    {
+        File.CreateAnonymousPipe(out SafeFileHandle readHandle, out SafeFileHandle writeHandle);
+
+        Assert.False(readHandle.IsInvalid);
+        Assert.False(readHandle.IsClosed);
+        Assert.False(writeHandle.IsInvalid);
+        Assert.False(writeHandle.IsClosed);
+    }
+
+    [Fact]
+    public async Task AnonymousPipe_AllowsCommunication()
+    {
+        byte[] message = "Hello, Pipe!"u8.ToArray();
+
+        File.CreateAnonymousPipe(out SafeFileHandle readHandle, out SafeFileHandle writeHandle);
+
+        using (readHandle)
+        using (writeHandle)
+        using (FileStream readStream = new FileStream(readHandle, FileAccess.Read, bufferSize: 0, isAsync: false))
+        using (FileStream writeStream = new FileStream(writeHandle, FileAccess.Write, bufferSize: 0, isAsync: false))
+        {
+            await writeStream.WriteAsync(message);
+            await writeStream.FlushAsync();
+
+            byte[] buffer = new byte[message.Length];
+            int bytesRead = await readStream.ReadAsync(buffer);
+
+            Assert.Equal(message.Length, bytesRead);
+            Assert.Equal(message, buffer);
+        }
+    }
+}
