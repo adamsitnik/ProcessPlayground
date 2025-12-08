@@ -37,9 +37,9 @@ public sealed class CommandLineInfo
         // Design: this is exactly what ProcessStartInfo does when RedirectStandard{Input,Output,Error} are false (default).
         // We allow specifying a timeout and killing the process if it exceeds it or when Ctrl+C is pressed,
         // as this is what most users do anyway.
-        using SafeFileHandle inputHandle = GetStdInputHandle();
-        using SafeFileHandle outputHandle = GetStdOutputHandle();
-        using SafeFileHandle errorHandle = GetStdErrorHandle();
+        using SafeFileHandle inputHandle = Console.GetStdInputHandle();
+        using SafeFileHandle outputHandle = Console.GetStdOutputHandle();
+        using SafeFileHandle errorHandle = Console.GetStdErrorHandle();
 
         using SafeProcessHandle procHandle = ProcessUtils.StartCore(this, inputHandle, outputHandle, errorHandle);
         return HandleExit(procHandle, timeout);
@@ -52,9 +52,9 @@ public sealed class CommandLineInfo
     /// <returns>The exit code of the process.</returns>
     public async Task<int> ExecuteAsync(CancellationToken cancellationToken = default)
     {
-        using SafeFileHandle inputHandle = GetStdInputHandle();
-        using SafeFileHandle outputHandle = GetStdOutputHandle();
-        using SafeFileHandle errorHandle = GetStdErrorHandle();
+        using SafeFileHandle inputHandle = Console.GetStdInputHandle();
+        using SafeFileHandle outputHandle = Console.GetStdOutputHandle();
+        using SafeFileHandle errorHandle = Console.GetStdErrorHandle();
 
         using SafeProcessHandle procHandle = ProcessUtils.StartCore(this, inputHandle, outputHandle, errorHandle);
         return await HandleExitAsync(procHandle, cancellationToken);
@@ -71,7 +71,7 @@ public sealed class CommandLineInfo
         // Design: currently, we don't have a way to discard output in ProcessStartInfo,
         // and users often implement it on their own by redirecting the output, consuming it and ignoring it.
         // It's very expensive! We can provide a native way to do it.
-        using SafeFileHandle nullHandle = OpenNullHandle();
+        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
 
         using SafeProcessHandle procHandle = ProcessUtils.StartCore(this, nullHandle, nullHandle, nullHandle);
         return HandleExit(procHandle, timeout);
@@ -84,7 +84,7 @@ public sealed class CommandLineInfo
     /// <returns>The exit code of the process.</returns>
     public async Task<int> DiscardAsync(CancellationToken cancellationToken = default)
     {
-        using SafeFileHandle nullHandle = OpenNullHandle();
+        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
 
         using SafeProcessHandle procHandle = ProcessUtils.StartCore(this, nullHandle, nullHandle, nullHandle);
         return await HandleExitAsync(procHandle, cancellationToken);

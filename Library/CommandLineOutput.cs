@@ -40,10 +40,10 @@ public class CommandLineOutput : IAsyncEnumerable<OutputLine>
         bool killOnCtrlC = _commandLineInfo.KillOnCancelKeyPress;
         using CancellationTokenSource? cts = killOnCtrlC ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken) : null;
 
-        ProcessUtils.CreatePipe(out SafeFileHandle parentOutputHandle, out SafeFileHandle childOutputHandle, parentInputs: false);
-        ProcessUtils.CreatePipe(out SafeFileHandle parentErrorHandle, out SafeFileHandle childErrorHandle, parentInputs: false);
+        File.CreateAnonymousPipe(out SafeFileHandle parentOutputHandle, out SafeFileHandle childOutputHandle);
+        File.CreateAnonymousPipe(out SafeFileHandle parentErrorHandle, out SafeFileHandle childErrorHandle);
 
-        using SafeFileHandle inputHandle = GetStdInputHandle();
+        using SafeFileHandle inputHandle = Console.GetStdInputHandle();
         using (parentOutputHandle)
         using (childOutputHandle)
         using (childErrorHandle)

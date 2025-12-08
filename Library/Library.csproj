@@ -7,4 +7,18 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+    <Compile Remove="**/*.Unix.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
+    <Compile Remove="**/*.Windows.cs" />
+    <PackageReference Include="Tmds.LibC" Version="0.5.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Workaround https://github.com/dotnet/project-system/issues/935 -->
+    <None Include="**/*.cs" />
+  </ItemGroup>
+
 </Project>

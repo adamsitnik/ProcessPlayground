@@ -24,21 +24,6 @@ internal static class LowLevelHelpers
         return exitCode;
     }
 
-    internal static SafeFileHandle GetStdErrorHandle() => GetStdHandle(Interop.Kernel32.HandleTypes.STD_ERROR_HANDLE);
-
-    internal static SafeFileHandle GetStdOutputHandle() => GetStdHandle(Interop.Kernel32.HandleTypes.STD_OUTPUT_HANDLE);
-
-    internal static SafeFileHandle GetStdInputHandle() => GetStdHandle(Interop.Kernel32.HandleTypes.STD_INPUT_HANDLE);
-
-    internal static unsafe SafeFileHandle OpenNullHandle() => Interop.Kernel32.CreateFile(
-        "NUL",
-        Interop.Kernel32.GenericOperations.GENERIC_WRITE,
-        FileShare.ReadWrite | FileShare.Inheritable,
-        null,
-        FileMode.Open,
-        0,
-        IntPtr.Zero);
-
     internal static int GetTimeoutInMilliseconds(TimeSpan? timeout)
         => timeout switch
         {
@@ -53,17 +38,17 @@ internal static class LowLevelHelpers
         // Otherwise, the child process will not be able to use them (and Console.Out just does nothing in such case).
         SafeFileHandle inputHandle = inputFile switch
         {
-            null => OpenNullHandle(),
+            null => File.OpenNullFileHandle(),
             _ => File.OpenHandle(inputFile, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Inheritable),
         };
         SafeFileHandle outputHandle = outputFile switch
         {
-            null => OpenNullHandle(),
+            null => File.OpenNullFileHandle(),
             _ => File.OpenHandle(outputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read | FileShare.Write | FileShare.Inheritable)
         };
         SafeFileHandle errorHandle = errorFile switch
         {
-            null => OpenNullHandle(),
+            null => File.OpenNullFileHandle(),
             // When output and error are the same file, we use the same handle!
             _ when errorFile == outputFile => outputHandle,
             _ => File.OpenHandle(errorFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read | FileShare.Write | FileShare.Inheritable),
@@ -71,6 +56,4 @@ internal static class LowLevelHelpers
 
         return (inputHandle, outputHandle, errorHandle);
     }
-
-    private static SafeFileHandle GetStdHandle(int handleType) => new(Interop.Kernel32.GetStdHandle(handleType), false);
 }

@@ -4,7 +4,7 @@ using System.Diagnostics;
 
 #pragma warning disable  // Local function is declared but never used
 
-await StreamLongRunningWithTimeoutAsync();
+await ExecuteAsync();
 
 static void LongRunningWithTimeout()
 {
