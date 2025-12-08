@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
+    <Compile Remove="Copied/Windows/*.cs" />
     <Compile Remove="**/*.Windows.cs" />
     <PackageReference Include="Tmds.LibC" Version="0.5.0" />
   </ItemGroup>
