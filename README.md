@@ -11,26 +11,68 @@ Running external processes and capturing their output is a common task in .NET a
 3. **No native file redirection**: Redirecting output to files requires reading the output stream and writing to files manually, which is expensive
 4. **Timeout and cancellation handling**: Users frequently need to implement their own Ctrl+C handling and timeout logic
 
-The `CommandLineInfo` API addresses these issues with a simpler, more efficient design.
+This playground explores a new design that addresses these issues with a layered API approach: low-level primitives for advanced scenarios, and high-level convenience methods for common use cases.
 
-## Key Types
+## API Overview
 
-### `CommandLineInfo`
+### Low-Level APIs: Console Handle Access
 
-The main class for configuring and executing a command-line process. Similar to `ProcessStartInfo`, but with a simpler API focused on common use cases.
+New methods on `System.Console` to access standard input, output, and error handles:
 
 ```csharp
-CommandLineInfo info = new("dotnet")
+namespace System
 {
-    Arguments = { "--help" },
-    WorkingDirectory = new DirectoryInfo("/path/to/dir"),
-    Environment = { ["MY_VAR"] = "value" },
-    CreateNoWindow = true,
-    KillOnCancelKeyPress = true
-};
+    public static class Console
+    {
+        public static SafeFileHandle GetStdInputHandle();
+        public static SafeFileHandle GetStdOutputHandle();
+        public static SafeFileHandle GetStdErrorHandle();
+    }
+}
 ```
 
-#### Properties
+These APIs provide direct access to the standard handles of the current process, enabling advanced scenarios like handle inheritance and redirection.
+
+### Low-Level APIs: File Utilities
+
+New methods on `System.IO.File` for process I/O scenarios:
+
+```csharp
+namespace System.IO
+{
+    public static class File
+    {
+        public static SafeFileHandle OpenNullFileHandle();
+        public static void CreateAnonymousPipe(out SafeFileHandle read, out SafeFileHandle write);
+    }
+}
+```
+
+- **`OpenNullFileHandle()`**: Opens a handle to the null device (`NUL` on Windows, `/dev/null` on Unix). Useful for discarding process output or providing empty input.
+- **`CreateAnonymousPipe()`**: Creates an anonymous pipe for inter-process communication. The read end can be used to read data written to the write end.
+
+### ProcessStartOptions
+
+An option bag class for configuring process creation. Similar to `ProcessStartInfo`, but simpler:
+
+```csharp
+namespace System.TBA
+{
+    public sealed class ProcessStartOptions
+    {
+        public string FileName { get; }
+        public IList<string> Arguments { get; }
+        public IDictionary<string, string?> Environment { get; }
+        public DirectoryInfo? WorkingDirectory { get; set; }
+        public bool CreateNoWindow { get; set; }
+        public bool KillOnParentDeath { get; set; }
+
+        public ProcessStartOptions(string fileName);
+    }
+}
+```
+
+**Properties:**
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -39,22 +81,123 @@ CommandLineInfo info = new("dotnet")
 | `Environment` | `IDictionary<string, string?>` | Environment variables for the child process |
 | `WorkingDirectory` | `DirectoryInfo?` | Working directory for the child process |
 | `CreateNoWindow` | `bool` | Whether to create a console window |
-| `KillOnCancelKeyPress` | `bool` | Whether to kill the process when Ctrl+C is pressed |
+| `KillOnParentDeath` | `bool` | Whether to kill the process when the parent process exits |
 
-### `CommandLineOutput`
+### Low-Level APIs: ProcessHandle
 
-An async enumerable that streams output lines from a command-line process.
+Low-level APIs for advanced process management scenarios:
 
 ```csharp
-await foreach (var line in info.ReadOutputAsync())
+namespace System.TBA
 {
-    Console.WriteLine(line.Content);
+    public static class ProcessHandle
+    {
+        public static SafeProcessHandle Start(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error);
+        public static int GetProcessId(SafeProcessHandle processHandle);
+        public static int WaitForExit(SafeProcessHandle processHandle, TimeSpan? timeout = default);
+        public static Task<int> WaitForExitAsync(SafeProcessHandle processHandle, CancellationToken cancellationToken = default);
+    }
 }
 ```
 
-### `OutputLine`
+The `ProcessHandle` APIs provide fine-grained control over process creation and lifecycle management. They enable advanced scenarios like piping between processes.
 
-A readonly struct representing a single line of output.
+**Example: Piping between processes**
+
+This example demonstrates piping output from one process to another using anonymous pipes:
+
+```csharp
+using Library;
+using Microsoft.Win32.SafeHandles;
+
+// Create an anonymous pipe
+File.CreateAnonymousPipe(out SafeFileHandle readPipe, out SafeFileHandle writePipe);
+
+using (readPipe)
+using (writePipe)
+{
+    // Producer process writes to the pipe
+    ProcessStartOptions producer = new("cmd")
+    {
+        Arguments = { "/c", "echo hello world & echo test line & echo another test" }
+    };
+    
+    // Consumer process reads from the pipe
+    ProcessStartOptions consumer = new("findstr")
+    {
+        Arguments = { "test" }
+    };
+
+    // Start producer with output redirected to the write end of the pipe
+    using SafeProcessHandle producerHandle = ProcessHandle.Start(producer, input: null, output: writePipe, error: null);
+
+    // Close write end in parent so consumer will get EOF
+    writePipe.Close();
+
+    // Start consumer with input from the read end of the pipe
+    using SafeFileHandle outputHandle = File.OpenHandle("output.txt", FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+    using SafeProcessHandle consumerHandle = ProcessHandle.Start(consumer, readPipe, outputHandle, error: null);
+
+    // Wait for both processes to complete
+    await ProcessHandle.WaitForExitAsync(producerHandle);
+    await ProcessHandle.WaitForExitAsync(consumerHandle);
+}
+
+// Read the filtered output
+string result = await File.ReadAllTextAsync("output.txt");
+Console.WriteLine(result); // Prints "test line" and "another test"
+```
+
+### High-Level APIs: ChildProcess
+
+High-level convenience methods for common process execution scenarios:
+
+```csharp
+namespace System.TBA
+{
+    public static class ChildProcess
+    {
+        /// <summary>
+        /// Executes the process with STD IN/OUT/ERR redirected to current process. Waits for its completion, returns exit code.
+        /// </summary>
+        public static int Execute(ProcessStartOptions options, TimeSpan? timeout = default);
+        public static Task<int> ExecuteAsync(ProcessStartOptions options, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Executes the process with STD IN/OUT/ERR discarded. Waits for its completion, returns exit code.
+        /// </summary>
+        public static int Discard(ProcessStartOptions options, TimeSpan? timeout = default);
+        public static Task<int> DiscardAsync(ProcessStartOptions options, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Executes the process with STD IN/OUT/ERR redirected to specified files. Waits for its completion, returns exit code.
+        /// </summary>
+        public static int RedirectToFiles(ProcessStartOptions options, string? inputFile, string? outputFile, string? errorFile, TimeSpan? timeout = default);
+        public static Task<int> RedirectToFilesAsync(ProcessStartOptions options, string? inputFile, string? outputFile, string? errorFile, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Creates an instance of <see cref="CommandLineOutput"/> to stream the output of the process.
+        /// </summary>
+        public static CommandLineOutput ReadOutputAsync(ProcessStartOptions options, Encoding? encoding = null);
+    }
+}
+```
+
+### CommandLineOutput
+
+An async enumerable that streams output lines from a command-line process:
+
+```csharp
+public class CommandLineOutput : IAsyncEnumerable<OutputLine>
+{
+    public int ProcessId { get; }  // Available after enumeration starts
+    public int ExitCode { get; }   // Available after enumeration completes
+}
+```
+
+### OutputLine
+
+A readonly struct representing a single line of output:
 
 ```csharp
 public readonly struct OutputLine
@@ -71,30 +214,30 @@ public readonly struct OutputLine
 The simplest way to run a process with stdin/stdout/stderr redirected to the current process:
 
 ```csharp
-CommandLineInfo info = new("dotnet")
+ProcessStartOptions options = new("dotnet")
 {
     Arguments = { "--help" }
 };
 
-int exitCode = info.Execute();
+int exitCode = ChildProcess.Execute(options);
 // or async
-int exitCode = await info.ExecuteAsync();
+int exitCode = await ChildProcess.ExecuteAsync(options);
 ```
 
 ### Execute with Timeout
 
 ```csharp
-CommandLineInfo info = new("ping")
+ProcessStartOptions options = new("ping")
 {
     Arguments = { "microsoft.com", "-t" }  // Ping until stopped
 };
 
 // Kill after 3 seconds
-int exitCode = info.Execute(TimeSpan.FromSeconds(3));
+int exitCode = ChildProcess.Execute(options, TimeSpan.FromSeconds(3));
 
 // or with CancellationToken
 using CancellationTokenSource cts = new(TimeSpan.FromSeconds(3));
-int exitCode = await info.ExecuteAsync(cts.Token);
+int exitCode = await ChildProcess.ExecuteAsync(options, cts.Token);
 ```
 
 ### Discard Output
@@ -102,14 +245,14 @@ int exitCode = await info.ExecuteAsync(cts.Token);
 When you need to run a process but don't care about its output:
 
 ```csharp
-CommandLineInfo info = new("dotnet")
+ProcessStartOptions options = new("dotnet")
 {
     Arguments = { "--help" }
 };
 
-int exitCode = info.Discard();
+int exitCode = ChildProcess.Discard(options);
 // or async
-int exitCode = await info.DiscardAsync();
+int exitCode = await ChildProcess.DiscardAsync(options);
 ```
 
 This is more efficient than the traditional approach of redirecting output and discarding it in event handlers:
@@ -134,19 +277,20 @@ process.WaitForExit();
 Redirect stdin/stdout/stderr directly to files without reading through .NET:
 
 ```csharp
-CommandLineInfo info = new("dotnet")
+ProcessStartOptions options = new("dotnet")
 {
     Arguments = { "--help" }
 };
 
-int exitCode = info.RedirectToFiles(
+int exitCode = ChildProcess.RedirectToFiles(
+    options,
     inputFile: null,           // null = NUL device (EOF)
     outputFile: "output.txt",  // stdout goes here
     errorFile: "error.txt"     // stderr goes here, or use same as outputFile
 );
 
 // or async
-int exitCode = await info.RedirectToFilesAsync(null, "output.txt", null);
+int exitCode = await ChildProcess.RedirectToFilesAsync(options, null, "output.txt", null);
 ```
 
 This is significantly faster than reading output through pipes and writing to files manually.
@@ -156,12 +300,12 @@ This is significantly faster than reading output through pipes and writing to fi
 For streaming output line-by-line as an async enumerable to avoid any deadlocks:
 
 ```csharp
-CommandLineInfo info = new("dotnet")
+ProcessStartOptions options = new("dotnet")
 {
     Arguments = { "--help" }
 };
 
-var output = info.ReadOutputAsync();
+var output = ChildProcess.ReadOutputAsync(options);
 await foreach (var line in output)
 {
     if (line.StandardError)
@@ -178,20 +322,27 @@ Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
 
 ## Comparison with Process API
 
-| Task | Process API | CommandLineInfo API |
-|------|-------------|---------------------|
-| Run and wait | `Process.Start()` + `WaitForExit()` | `info.Execute()` |
-| Run async | `Process.Start()` + `WaitForExitAsync()` | `info.ExecuteAsync()` |
-| Discard output | Redirect + empty event handlers | `info.Discard()` |
-| Redirect to file | Redirect + read + write to file | `info.RedirectToFiles()` |
-| Stream output | Redirect + `ReadLineAsync` loop | `info.ReadOutputAsync()` |
-| Ctrl+C handling | Manual `CancelKeyPress` subscription | `KillOnCancelKeyPress = true` |
+| Task | Process API | New API |
+|------|-------------|---------|
+| Run and wait | `Process.Start()` + `WaitForExit()` | `ChildProcess.Execute()` |
+| Run async | `Process.Start()` + `WaitForExitAsync()` | `ChildProcess.ExecuteAsync()` |
+| Discard output | Redirect + empty event handlers | `ChildProcess.Discard()` |
+| Redirect to file | Redirect + read + write to file | `ChildProcess.RedirectToFiles()` |
+| Stream output | Redirect + `ReadLineAsync` loop | `ChildProcess.ReadOutputAsync()` |
+| Piping between processes | Complex handle management | `ProcessHandle.Start()` with pipes |
+| Parent death handling | Manual implementation | `KillOnParentDeath = true` |
 | Timeout | `WaitForExit(int)` + `Kill` | `Execute(TimeSpan)` or `CancellationToken` |
 
 ## Project Structure
 
-- **Library/**: Core implementation of `CommandLineInfo` and related types (currently works only on Windows)
+- **Library/**: Core implementation of the process APIs
+  - Low-level handle APIs (`Console`, `File`)
+  - `ProcessStartOptions` configuration class
+  - `ProcessHandle` for advanced process control
+  - `ChildProcess` high-level convenience methods
+  - `CommandLineOutput` for streaming process output
 - **ConsoleApp/**: Sample console application demonstrating usage
+- **Tests/**: Unit tests including piping examples
 - **Benchmarks/**: BenchmarkDotNet benchmarks comparing performance
 
 ## Building
@@ -205,6 +356,13 @@ dotnet build
 ```bash
 cd ConsoleApp
 dotnet run
+```
+
+## Running Tests
+
+```bash
+cd Tests
+dotnet test
 ```
 
 ## Running Benchmarks
