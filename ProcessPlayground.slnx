@@ -2,4 +2,5 @@
   <Project Path="Benchmarks/Benchmarks.csproj" />
   <Project Path="ConsoleApp/ConsoleApp.csproj" />
   <Project Path="Library/Library.csproj" />
+  <Project Path="Tests/Tests.csproj" Id="716e91a2-b497-4cac-b455-697c631af8ab" />
 </Solution>
