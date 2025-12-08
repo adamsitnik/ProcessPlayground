@@ -10,11 +10,22 @@ public static partial class ProcessHandle
     {
         ArgumentNullException.ThrowIfNull(options);
 
+        bool disposeInput = input is null, disposeOutput = output is null, disposeError = error is null;
+
         input ??= File.OpenNullFileHandle();
         output ??= File.OpenNullFileHandle();
         error ??= File.OpenNullFileHandle();
 
-        return StartCore(options, input, output, error);
+        try
+        {
+            return StartCore(options, input, output, error);
+        }
+        finally
+        {
+            if (disposeInput) input.Dispose();
+            if (disposeOutput) output.Dispose();
+            if (disposeError) error.Dispose();
+        }
     }
 
     public static int GetProcessId(SafeProcessHandle processHandle)
