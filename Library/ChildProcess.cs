@@ -87,11 +87,11 @@ public static class ChildProcess
     /// <remarks>When <paramref name="timeout"/> is not specified, the default is to wait indefinitely.</remarks>
     public static int RedirectToFiles(ProcessStartOptions options, string? inputFile, string? outputFile, string? errorFile, TimeSpan? timeout = default)
     {
+        ArgumentNullException.ThrowIfNull(options);
+
         // Design: currently, we don't have a way to redirect to files in ProcessStartInfo,
         // and users often implement it on their own by redirecting the output, consuming it and copying to file(s).
         // It's very expensive! We can provide a native way to do it.
-
-        ArgumentNullException.ThrowIfNull(options);
 
         // NOTE: Since we accept file names, named pipes should work OOTB.
         // This will allow advanced users to implement more complex scenarios, but also fail into deadlocks if they don't consume the produced input!
