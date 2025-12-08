@@ -1,11 +1,20 @@
 ﻿using Microsoft.Win32.SafeHandles;
 using System.Runtime.InteropServices;
-using static Tmds.Linux.LibC;
 
 namespace Library;
 
 public static partial class FileExtensions
 {
+    // P/Invoke declarations
+    [DllImport("libc", SetLastError = true)]
+    private static extern unsafe int open(byte* pathname, int flags);
+    
+    [DllImport("libc", SetLastError = true)]
+    private static extern unsafe int pipe2(int* pipefd, int flags);
+    
+    private const int O_RDWR = 0x0002;
+    private const int O_CLOEXEC = 0x80000;
+    
     private static SafeFileHandle OpenNullFileHandleCore()
     {
         // I've not tested File.OpenHandle. I am afraid it may fail due to enforced file sharing.
