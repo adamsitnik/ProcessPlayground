@@ -13,21 +13,42 @@ public class PipingTests
         using (readPipe)
         using (writePipe)
         {
-            ProcessStartOptions producer = new("cmd")
+            ProcessStartOptions producer;
+            ProcessStartOptions consumer;
+            string expectedOutput;
+
+            if (OperatingSystem.IsWindows())
             {
-                Arguments = { "/c", "echo hello world & echo test line & echo another test" }
-            };
+                producer = new("cmd")
+                {
+                    Arguments = { "/c", "echo hello world & echo test line & echo another test" }
+                };
+                consumer = new("findstr")
+                {
+                    Arguments = { "test" }
+                };
+                // findstr adds a trailing space on Windows
+                expectedOutput = "test line \nanother test\n";
+            }
+            else
+            {
+                // Unix: use sh with printf to avoid echo implementation differences
+                producer = new("sh")
+                {
+                    Arguments = { "-c", "printf 'hello world\\ntest line\\nanother test\\n'" }
+                };
+                consumer = new("grep")
+                {
+                    Arguments = { "test" }
+                };
+                // grep doesn't add trailing spaces
+                expectedOutput = "test line\nanother test\n";
+            }
 
             using SafeProcessHandle producerHandle = ProcessHandle.Start(producer, input: null, output: writePipe, error: null);
 
             // Close write end in parent so consumer will get EOF
             writePipe.Close();
-
-            // Second process: consume from pipe and filter
-            ProcessStartOptions consumer = new("findstr")
-            {
-                Arguments = { "test" }
-            };
 
             using (SafeFileHandle outputHandle = File.OpenHandle("output.txt", FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
             {
@@ -38,7 +59,7 @@ public class PipingTests
             }
 
             string result = await File.ReadAllTextAsync("output.txt");
-            Assert.Equal("test line \nanother test\n", result, ignoreLineEndingDifferences: true);
+            Assert.Equal(expectedOutput, result, ignoreLineEndingDifferences: true);
         }
     }
 }

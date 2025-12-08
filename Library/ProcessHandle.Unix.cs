@@ -1,15 +1,20 @@
 ﻿using Microsoft.Win32.SafeHandles;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
-using static Tmds.Linux.LibC;
 
 namespace Library;
 
 public static partial class ProcessHandle
 {
-    // P/Invoke declarations for functions not in Tmds.LibC
+    // P/Invoke declarations
     [DllImport("libc", SetLastError = true)]
     private static extern unsafe int waitpid(int pid, int* status, int options);
+    
+    [DllImport("libc", SetLastError = true)]
+    private static extern int kill(int pid, int sig);
+    
+    [DllImport("libc", SetLastError = true)]
+    private static extern unsafe int access(byte* pathname, int mode);
     
     [DllImport("libc", SetLastError = true)]
     private static extern unsafe int posix_spawn(
