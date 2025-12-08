@@ -15,7 +15,7 @@ public static partial class FileExtensions
         {
             fixed (byte* devNullPtr = devNull)
             {
-                int result = open(devNullPtr, O_RDWR);
+                int result = open(devNullPtr, O_RDWR | O_CLOEXEC);
                 if (result < 0)
                 {
                     throw new System.ComponentModel.Win32Exception(Marshal.GetLastPInvokeError());
@@ -25,15 +25,13 @@ public static partial class FileExtensions
             }
         }
     }
-        //=>  File.OpenHandle("dev/null", FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Inheritable);
 
     private static void CreateAnonymousPipeCore(out SafeFileHandle read, out SafeFileHandle write)
     {
         unsafe
         {
             int* fds = stackalloc int[2];
-            // We don't use O_CLOEXEC here, as we want those handles to be inheritable by default.
-            if (pipe(fds) < 0)
+            if (pipe2(fds, O_CLOEXEC) < 0)
             {
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastPInvokeError());
             }

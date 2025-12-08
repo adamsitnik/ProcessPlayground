@@ -32,6 +32,7 @@ public static partial class ProcessHandle
         Interop.Kernel32.PROCESS_INFORMATION processInfo = default;
         Interop.Kernel32.SECURITY_ATTRIBUTES unused_SecAttrs = default;
         SafeProcessHandle procSH = new();
+        IntPtr currentProcHandle = Interop.Kernel32.GetCurrentProcess();
 
         // Take a global lock to synchronize all redirect pipe handle creations and CreateProcess
         // calls. We do not want one process to inherit the handles created concurrently for another
@@ -39,13 +40,17 @@ public static partial class ProcessHandle
         // into multiple child processes.
         lock (s_createProcessLock)
         {
+            using SafeFileHandle duplicatedInput = Duplicate(inputHandle, currentProcHandle);
+            using SafeFileHandle duplicatedOutput = Duplicate(outputHandle, currentProcHandle);
+            using SafeFileHandle duplicatedError = Duplicate(errorHandle, currentProcHandle);
+
             try
             {
                 startupInfo.cb = sizeof(Interop.Kernel32.STARTUPINFO);
 
-                startupInfo.hStdInput = inputHandle.DangerousGetHandle();
-                startupInfo.hStdOutput = outputHandle.DangerousGetHandle();
-                startupInfo.hStdError = errorHandle.DangerousGetHandle();
+                startupInfo.hStdInput = duplicatedInput.DangerousGetHandle();
+                startupInfo.hStdOutput = duplicatedOutput.DangerousGetHandle();
+                startupInfo.hStdError = duplicatedError.DangerousGetHandle();
 
                 startupInfo.dwFlags = Interop.Advapi32.StartupInfoOptions.STARTF_USESTDHANDLES;
 
@@ -96,6 +101,23 @@ public static partial class ProcessHandle
         }
 
         return procSH;
+
+        static SafeFileHandle Duplicate(SafeFileHandle sourceHandle, nint currentProcHandle)
+        {
+            if (!Interop.Kernel32.DuplicateHandle(
+                currentProcHandle,
+                sourceHandle,
+                currentProcHandle,
+                out SafeFileHandle duplicated,
+                0,
+                true, // ENABLE INHERITANCE SO THE CHILD PROCESS CAN USE IT!
+                Interop.Kernel32.HandleOptions.DUPLICATE_SAME_ACCESS))
+            {
+                throw new Win32Exception();
+            }
+
+            return duplicated;
+        }
     }
 
     private static int GetProcessIdCore(SafeProcessHandle processHandle)

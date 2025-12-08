@@ -9,7 +9,6 @@ public static partial class FileExtensions
     private static unsafe SafeFileHandle OpenNullFileHandleCore()
     {
         Interop.Kernel32.SECURITY_ATTRIBUTES securityAttributes = default;
-        securityAttributes.bInheritHandle = Interop.BOOL.TRUE;
 
         SafeFileHandle handle = Interop.Kernel32.CreateFile(
             "NUL",
@@ -31,8 +30,6 @@ public static partial class FileExtensions
     private static void CreateAnonymousPipeCore(out SafeFileHandle read, out SafeFileHandle write)
     {
         Interop.Kernel32.SECURITY_ATTRIBUTES securityAttributesParent = default;
-        // Allow the pipe handles to be inherited by child processes.
-        securityAttributesParent.bInheritHandle = Interop.BOOL.TRUE;
 
         bool ret = Interop.Kernel32.CreatePipe(out read, out write, ref securityAttributesParent, 0);
         if (!ret || read.IsInvalid || write.IsInvalid)

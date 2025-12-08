@@ -135,24 +135,22 @@ public static class ChildProcess
 
     private static (SafeFileHandle input, SafeFileHandle output, SafeFileHandle error) OpenFileHandlesForRedirection(string? inputFile, string? outputFile, string? errorFile)
     {
-        // All files must be opened with FileShare.Inheritable to allow the child process to inherit the handles!
-        // Otherwise, the child process will not be able to use them (and Console.Out just does nothing in such case).
         SafeFileHandle inputHandle = inputFile switch
         {
             null => File.OpenNullFileHandle(),
-            _ => File.OpenHandle(inputFile, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Write | FileShare.Inheritable),
+            _ => File.OpenHandle(inputFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite),
         };
         SafeFileHandle outputHandle = outputFile switch
         {
             null => File.OpenNullFileHandle(),
-            _ => File.OpenHandle(outputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read | FileShare.Write | FileShare.Inheritable)
+            _ => File.OpenHandle(outputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite)
         };
         SafeFileHandle errorHandle = errorFile switch
         {
             null => File.OpenNullFileHandle(),
             // When output and error are the same file, we use the same handle!
             _ when errorFile == outputFile => outputHandle,
-            _ => File.OpenHandle(errorFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read | FileShare.Write | FileShare.Inheritable),
+            _ => File.OpenHandle(errorFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite),
         };
 
         return (inputHandle, outputHandle, errorHandle);
