@@ -98,22 +98,22 @@ public class RedirectToFile
     [Benchmark]
     public int New()
     {
-        CommandLineInfo info = new("dotnet")
+        ProcessStartOptions info = new("dotnet")
         {
             Arguments = { "--help" },
         };
 
-        return info.RedirectToFiles(inputFile: null, outputFile: _filePath!, errorFile: null);
+        return ChildProcess.RedirectToFiles(info, inputFile: null, outputFile: _filePath!, errorFile: null);
     }
 
     [Benchmark]
-    public async Task<int> NewAsync()
+    public Task<int> NewAsync()
     {
-        CommandLineInfo info = new("dotnet")
+        ProcessStartOptions info = new("dotnet")
         {
             Arguments = { "--help" },
         };
 
-        return await info.RedirectToFilesAsync(inputFile: null, outputFile: _filePath!, errorFile: null);
+        return ChildProcess.RedirectToFilesAsync(info, inputFile: null, outputFile: _filePath!, errorFile: null);
     }
 }

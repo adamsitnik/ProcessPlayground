@@ -37,22 +37,22 @@ public class NoRedirection
     [Benchmark]
     public int New()
     {
-        CommandLineInfo info = new("dotnet")
+        ProcessStartOptions info = new("dotnet")
         {
             Arguments = { "--help" },
         };
 
-        return info.Execute();
+        return ChildProcess.Execute(info);
     }
 
     [Benchmark]
-    public async Task<int> NewAsync()
+    public Task<int> NewAsync()
     {
-        CommandLineInfo info = new("dotnet")
+        ProcessStartOptions info = new("dotnet")
         {
             Arguments = { "--help" },
         };
 
-        return await info.ExecuteAsync();
+        return ChildProcess.ExecuteAsync(info);
     }
 }

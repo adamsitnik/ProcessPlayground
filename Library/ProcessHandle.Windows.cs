@@ -1,0 +1,162 @@
+﻿using Microsoft.Win32.SafeHandles;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace Library;
+
+public static partial class ProcessHandle
+{
+    // Linux doesn't have a corresponding sys-call just to get exit code of a process by its handle.
+    // That is why it's Windows-specific helper.
+    internal static int GetExitCode(SafeProcessHandle processHandle)
+    {
+        if (!Interop.Kernel32.GetExitCodeProcess(processHandle, out int exitCode))
+        {
+            throw new InvalidOperationException("Parent process should alway be able to get the exit code.");
+        }
+        else if (exitCode == Interop.Kernel32.HandleOptions.STILL_ACTIVE)
+        {
+            throw new InvalidOperationException("Process has not exited yet.");
+        }
+
+        return exitCode;
+    }
+
+    private static unsafe SafeProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
+    {
+        ValueStringBuilder commandLine = new(stackalloc char[256]);
+        ProcessUtils.BuildCommandLine(options, ref commandLine);
+
+        Interop.Kernel32.STARTUPINFO startupInfo = default;
+        Interop.Kernel32.PROCESS_INFORMATION processInfo = default;
+        Interop.Kernel32.SECURITY_ATTRIBUTES unused_SecAttrs = default;
+        SafeProcessHandle procSH = new();
+
+        // Take a global lock to synchronize all redirect pipe handle creations and CreateProcess
+        // calls. We do not want one process to inherit the handles created concurrently for another
+        // process, as that will impact the ownership and lifetimes of those handles now inherited
+        // into multiple child processes.
+        lock (s_createProcessLock)
+        {
+            try
+            {
+                startupInfo.cb = sizeof(Interop.Kernel32.STARTUPINFO);
+
+                startupInfo.hStdInput = inputHandle.DangerousGetHandle();
+                startupInfo.hStdOutput = outputHandle.DangerousGetHandle();
+                startupInfo.hStdError = errorHandle.DangerousGetHandle();
+
+                startupInfo.dwFlags = Interop.Advapi32.StartupInfoOptions.STARTF_USESTDHANDLES;
+
+                int creationFlags = 0;
+                if (options.CreateNoWindow) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NO_WINDOW;
+
+                string? environmentBlock = null;
+                if (options.Environment.Count > 0)
+                {
+                    creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_UNICODE_ENVIRONMENT;
+                    environmentBlock = ProcessUtils.GetEnvironmentVariablesBlock(options.Environment);
+                }
+
+                string? workingDirectory = options.WorkingDirectory?.FullName;
+                int errorCode = 0;
+
+                commandLine.NullTerminate();
+                fixed (char* environmentBlockPtr = environmentBlock)
+                fixed (char* commandLinePtr = &commandLine.GetPinnableReference())
+                {
+                    bool retVal = Interop.Kernel32.CreateProcess(
+                        null,                // we don't need this since all the info is in commandLine
+                        commandLinePtr,      // pointer to the command line string
+                        ref unused_SecAttrs, // address to process security attributes, we don't need to inherit the handle
+                        ref unused_SecAttrs, // address to thread security attributes.
+                        true,                // handle inheritance flag
+                        creationFlags,       // creation flags
+                        (IntPtr)environmentBlockPtr, // pointer to new environment block
+                        workingDirectory,    // pointer to current directory name
+                        ref startupInfo,     // pointer to STARTUPINFO
+                        ref processInfo      // pointer to PROCESS_INFORMATION
+                    );
+                    if (!retVal)
+                        errorCode = Marshal.GetLastWin32Error();
+                }
+
+                if (processInfo.hProcess != IntPtr.Zero && processInfo.hProcess != new IntPtr(-1))
+                    Marshal.InitHandle(procSH, processInfo.hProcess);
+                if (processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
+                    Interop.Kernel32.CloseHandle(processInfo.hThread);
+            }
+            catch
+            {
+                procSH.Dispose();
+
+                throw;
+            }
+        }
+
+        return procSH;
+    }
+
+    private static int GetProcessIdCore(SafeProcessHandle processHandle)
+    {
+        int result = Interop.Kernel32.GetProcessId(processHandle);
+        if (result == 0)
+        {
+            throw new Win32Exception(Marshal.GetLastPInvokeError());
+        }
+        return result;
+    }
+
+    private static int WaitForExitCore(SafeProcessHandle processHandle, int milliseconds)
+    {
+        using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(processHandle);
+        if (!processWaitHandle.WaitOne(milliseconds))
+        {
+            Interop.Kernel32.TerminateProcess(processHandle, exitCode: -1);
+        }
+
+        return GetExitCode(processHandle);
+    }
+
+    private static async Task<int> WaitForExitAsyncCore(SafeProcessHandle processHandle, CancellationToken cancellationToken)
+    {
+        using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(processHandle);
+
+        TaskCompletionSource<bool> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        RegisteredWaitHandle? registeredWaitHandle = null;
+        CancellationTokenRegistration ctr = default;
+
+        try
+        {
+            // Register a wait on the process handle (infinite timeout, we rely on CancellationToken)
+            registeredWaitHandle = ThreadPool.RegisterWaitForSingleObject(
+                processWaitHandle,
+                (state, timedOut) => ((TaskCompletionSource<bool>)state!).TrySetResult(true),
+                tcs,
+                Timeout.Infinite,
+                executeOnlyOnce: true);
+
+            if (cancellationToken.CanBeCanceled)
+            {
+                ctr = cancellationToken.Register(
+                    state =>
+                    {
+                        var (handle, taskSource) = ((SafeProcessHandle, TaskCompletionSource<bool>))state!;
+                        Interop.Kernel32.TerminateProcess(handle, exitCode: -1);
+                        taskSource.TrySetCanceled();
+                    },
+                    (processHandle, tcs));
+            }
+
+            await tcs.Task.ConfigureAwait(false);
+        }
+        finally
+        {
+            ctr.Dispose();
+            registeredWaitHandle?.Unregister(null);
+        }
+
+        return GetExitCode(processHandle);
+    }
+}

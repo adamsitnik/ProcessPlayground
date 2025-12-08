@@ -49,12 +49,12 @@ public class RedirectToPipe
     [Benchmark]
     public async Task<int> NewAsync()
     {
-        CommandLineInfo info = new("dotnet")
+        ProcessStartOptions info = new("dotnet")
         {
             Arguments = { "--help" },
         };
 
-        var lines = info.ReadOutputAsync();
+        var lines = ChildProcess.ReadOutputAsync(info);
         await foreach (var line in lines)
         {
             // We don't re-print, so the benchmark focuses on reading only.

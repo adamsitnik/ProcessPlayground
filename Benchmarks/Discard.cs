@@ -58,22 +58,22 @@ public class Discard
     [Benchmark]
     public int New()
     {
-        CommandLineInfo info = new("dotnet")
+        ProcessStartOptions info = new("dotnet")
         {
             Arguments = { "--help" },
         };
 
-        return info.Discard();
+        return ChildProcess.Discard(info);
     }
 
     [Benchmark]
-    public async Task<int> NewAsync()
+    public Task<int> NewAsync()
     {
-        CommandLineInfo info = new("dotnet")
+        ProcessStartOptions info = new("dotnet")
         {
             Arguments = { "--help" },
         };
 
-        return await info.DiscardAsync();
+        return ChildProcess.DiscardAsync(info);
     }
 }

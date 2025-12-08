@@ -1,90 +1,11 @@
 ﻿using Microsoft.Win32.SafeHandles;
 using System.ComponentModel;
-using System.Runtime.InteropServices;
 using System.Text;
 
 namespace Library;
 
 internal static class ProcessUtils
 {
-    private static readonly object s_createProcessLock = new object();
-
-    internal static unsafe SafeProcessHandle StartCore(CommandLineInfo startInfo,
-        SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
-    {
-        ValueStringBuilder commandLine = new(stackalloc char[256]);
-        BuildCommandLine(startInfo, ref commandLine);
-
-        Interop.Kernel32.STARTUPINFO startupInfo = default;
-        Interop.Kernel32.PROCESS_INFORMATION processInfo = default;
-        Interop.Kernel32.SECURITY_ATTRIBUTES unused_SecAttrs = default;
-        SafeProcessHandle procSH = new SafeProcessHandle();
-
-        // Take a global lock to synchronize all redirect pipe handle creations and CreateProcess
-        // calls. We do not want one process to inherit the handles created concurrently for another
-        // process, as that will impact the ownership and lifetimes of those handles now inherited
-        // into multiple child processes.
-        lock (s_createProcessLock)
-        {
-            try
-            {
-                startupInfo.cb = sizeof(Interop.Kernel32.STARTUPINFO);
-
-                startupInfo.hStdInput = inputHandle.DangerousGetHandle();
-                startupInfo.hStdOutput = outputHandle.DangerousGetHandle();
-                startupInfo.hStdError = errorHandle.DangerousGetHandle();
-
-                startupInfo.dwFlags = Interop.Advapi32.StartupInfoOptions.STARTF_USESTDHANDLES;
-
-                int creationFlags = 0;
-                if (startInfo.CreateNoWindow) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NO_WINDOW;
-
-                string? environmentBlock = null;
-                if (startInfo.Environment.Count > 0)
-                {
-                    creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_UNICODE_ENVIRONMENT;
-                    environmentBlock = GetEnvironmentVariablesBlock(startInfo.Environment);
-                }
-
-                string? workingDirectory = startInfo.WorkingDirectory?.FullName;
-                int errorCode = 0;
-
-                commandLine.NullTerminate();
-                fixed (char* environmentBlockPtr = environmentBlock)
-                fixed (char* commandLinePtr = &commandLine.GetPinnableReference())
-                {
-                    bool retVal = Interop.Kernel32.CreateProcess(
-                        null,                // we don't need this since all the info is in commandLine
-                        commandLinePtr,      // pointer to the command line string
-                        ref unused_SecAttrs, // address to process security attributes, we don't need to inherit the handle
-                        ref unused_SecAttrs, // address to thread security attributes.
-                        true,                // handle inheritance flag
-                        creationFlags,       // creation flags
-                        (IntPtr)environmentBlockPtr, // pointer to new environment block
-                        workingDirectory,    // pointer to current directory name
-                        ref startupInfo,     // pointer to STARTUPINFO
-                        ref processInfo      // pointer to PROCESS_INFORMATION
-                    );
-                    if (!retVal)
-                        errorCode = Marshal.GetLastWin32Error();
-                }
-
-                if (processInfo.hProcess != IntPtr.Zero && processInfo.hProcess != new IntPtr(-1))
-                    Marshal.InitHandle(procSH, processInfo.hProcess);
-                if (processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
-                    Interop.Kernel32.CloseHandle(processInfo.hThread);
-            }
-            catch
-            {
-                procSH.Dispose();
-
-                throw;
-            }
-        }
-
-        return procSH;
-    }
-
     // Using synchronous Anonymous pipes for process input/output redirection means we would end up
     // wasting a worker threadpool thread per pipe instance. Overlapped pipe IO is desirable, since
     // it will take advantage of the NT IO completion port infrastructure. But we can't really use
@@ -146,14 +67,14 @@ internal static class ProcessUtils
         }
     }
 
-    private static void BuildCommandLine(CommandLineInfo startInfo, ref ValueStringBuilder commandLine)
+    internal static void BuildCommandLine(ProcessStartOptions options, ref ValueStringBuilder commandLine)
     {
         // Construct a StringBuilder with the appropriate command line
         // to pass to CreateProcess.  If the filename isn't already
         // in quotes, we quote it here.  This prevents some security
         // problems (it specifies exactly which part of the string
         // is the file to execute).
-        ReadOnlySpan<char> fileName = startInfo.FileName.AsSpan().Trim();
+        ReadOnlySpan<char> fileName = options.FileName.AsSpan().Trim();
         bool fileNameIsQuoted = fileName.StartsWith('"') && fileName.EndsWith('"');
         if (!fileNameIsQuoted)
         {
@@ -167,10 +88,10 @@ internal static class ProcessUtils
             commandLine.Append('"');
         }
 
-        startInfo.AppendArgumentsTo(ref commandLine);
+        AppendArgumentsTo(options, ref commandLine);
     }
 
-    private static string GetEnvironmentVariablesBlock(IDictionary<string, string?> sd)
+    internal static string GetEnvironmentVariablesBlock(IDictionary<string, string?> sd)
     {
         // https://learn.microsoft.com/windows/win32/procthread/changing-environment-variables
         // "All strings in the environment block must be sorted alphabetically by name. The sort is
@@ -197,9 +118,9 @@ internal static class ProcessUtils
         return result.ToString();
     }
 
-    private static void AppendArgumentsTo(this CommandLineInfo info, ref ValueStringBuilder stringBuilder)
+    private static void AppendArgumentsTo(ProcessStartOptions options, ref ValueStringBuilder stringBuilder)
     {
-        foreach (string argument in info.Arguments)
+        foreach (string argument in options.Arguments)
         {
             PasteArguments.AppendArgument(ref stringBuilder, argument);
         }
