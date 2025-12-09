@@ -9,7 +9,7 @@ public class ProcessTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ReadOutputAsyncReturnsAllInfo(bool error)
+    public async Task ReadOutputLinesAsyncReturnsAllInfo(bool error)
     {
         (int expectedExitCode, string expectedOutput, string expectedError) = await OldAsync(error);
 
@@ -23,7 +23,7 @@ public class ProcessTests
             info.Arguments.Add("--invalid-argument-to-produce-error");
         }
 
-        var lines = ChildProcess.ReadOutputAsync(info);
+        var lines = ChildProcess.ReadOutputLinesAsync(info);
 
         // Nothing is started yet, as the enumeration hasn't begun.
         Assert.Throws<InvalidOperationException>(() => _ = lines.ProcessId);

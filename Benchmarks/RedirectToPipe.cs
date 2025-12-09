@@ -54,7 +54,7 @@ public class RedirectToPipe
             Arguments = { "--help" },
         };
 
-        var lines = ChildProcess.ReadOutputAsync(info);
+        var lines = ChildProcess.ReadOutputLinesAsync(info);
         await foreach (var line in lines)
         {
             // We don't re-print, so the benchmark focuses on reading only.

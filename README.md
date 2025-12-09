@@ -169,28 +169,28 @@ namespace System.TBA
         public static Task<int> RedirectToFilesAsync(ProcessStartOptions options, string? inputFile, string? outputFile, string? errorFile, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Creates an instance of <see cref="CommandLineOutput"/> to stream the output of the process.
+        /// Creates an instance of <see cref="ProcessOutputLines"/> to stream the output of the process.
         /// </summary>
-        public static CommandLineOutput ReadOutputAsync(ProcessStartOptions options, Encoding? encoding = null);
+        public static ProcessOutputLines ReadOutputLinesAsync(ProcessStartOptions options, Encoding? encoding = null);
     }
 }
 ```
 
-### CommandLineOutput
+### ProcessOutputLines
 
 An async enumerable that streams output lines from a command-line process:
 
 ```csharp
 namespace System.TBA;
 
-public class CommandLineOutput : IAsyncEnumerable<OutputLine>
+public class ProcessOutputLines : IAsyncEnumerable<OutputLine>
 {
     public int ProcessId { get; }  // Available after enumeration starts
     public int ExitCode { get; }   // Available after enumeration completes
 }
 ```
 
-The `CommandLineOutput` class allows you to read output lines as they are produced by the process, avoiding deadlocks and excessive memory usage.
+The `ProcessOutputLines` class allows you to read output lines as they are produced by the process, avoiding deadlocks and excessive memory usage.
 
 ### OutputLine
 
@@ -339,7 +339,7 @@ Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
   - `ProcessStartOptions` configuration class
   - `SafeProcessHandle` for advanced process control
   - `ChildProcess` high-level convenience methods
-  - `CommandLineOutput` for streaming process output
+  - `ProcessOutputLines` for streaming process output
 - **ConsoleApp/**: Sample console application demonstrating usage
 - **Tests/**: Unit tests including piping examples
 - **Benchmarks/**: BenchmarkDotNet benchmarks comparing performance

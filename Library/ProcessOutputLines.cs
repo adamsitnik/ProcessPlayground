@@ -6,13 +6,13 @@ namespace Library;
 /// <summary>
 /// An async enumerable that streams output lines from a command line process.
 /// </summary>
-public class CommandLineOutput : IAsyncEnumerable<OutputLine>
+public class ProcessOutputLines : IAsyncEnumerable<OutputLine>
 {
     private readonly ProcessStartOptions _options;
     private readonly Encoding? _encoding;
     private int? _exitCode, _processId;
 
-    internal CommandLineOutput(ProcessStartOptions options, Encoding? encoding)
+    internal ProcessOutputLines(ProcessStartOptions options, Encoding? encoding)
     {
         _options = options;
         _encoding = encoding;

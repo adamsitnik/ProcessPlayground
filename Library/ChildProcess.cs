@@ -122,11 +122,11 @@ public static class ChildProcess
     }
 
     /// <summary>
-    /// Creates an instance of <see cref="CommandLineOutput"/> to stream the output of the process.
+    /// Creates an instance of <see cref="ProcessOutputLines"/> to stream the output of the process.
     /// </summary>
     /// <param name="encoding">The encoding to use when reading the output. If null, the default encoding is used.</param>
-    /// <returns>An instance of <see cref="CommandLineOutput"/> ready to be enumerated.</returns>
-    public static CommandLineOutput ReadOutputAsync(ProcessStartOptions options, Encoding? encoding = null)
+    /// <returns>An instance of <see cref="ProcessOutputLines"/> ready to be enumerated.</returns>
+    public static ProcessOutputLines ReadOutputLinesAsync(ProcessStartOptions options, Encoding? encoding = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
