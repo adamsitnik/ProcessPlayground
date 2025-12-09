@@ -47,7 +47,7 @@ public class CommandLineOutput : IAsyncEnumerable<OutputLine>
             using SafeProcessHandle procHandle = ProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
             _processId = ProcessHandle.GetProcessId(procHandle);
 
-            // NOTE: we could get current console Encoding here, it's ommited for the sake of simplicity of the proof of concept.
+            // NOTE: we could get current console Encoding here, it's omitted for the sake of simplicity of the proof of concept.
             Encoding encoding = _encoding ?? Encoding.UTF8;
             using StreamReader outputReader = new(new FileStream(parentOutputHandle, FileAccess.Read, bufferSize: 0), encoding);
             using StreamReader errorReader = new(new FileStream(parentErrorHandle, FileAccess.Read, bufferSize: 0), encoding);
@@ -58,25 +58,52 @@ public class CommandLineOutput : IAsyncEnumerable<OutputLine>
             while (true)
             {
                 Task completedTask = await Task.WhenAny(readOutput, readError);
-
                 bool isError = completedTask == readError;
+
+                // Read the first completed line
                 string? line = await (isError ? readError : readOutput);
+                if (line is not null)
+                {
+                    yield return new(line, isError);
+
+                    // Continue reading from the same stream while data is immediately available
+                    StreamReader activeReader = isError ? errorReader : outputReader;
+                    while (true)
+                    {
+                        ValueTask<string?> nextRead = activeReader.ReadLineAsync(cancellationToken);
+
+                        // Check if the read completes immediately (data already available)
+                        if (nextRead.IsCompleted)
+                        {
+                            line = await nextRead;
+                            if (line is null)
+                            {
+                                break;
+                            }
+
+                            yield return new(line, isError);
+                        }
+                        else
+                        {
+                            // Data not immediately available, switch back to WhenAny pattern
+                            if (isError)
+                            {
+                                readError = nextRead.AsTask();
+                            }
+                            else
+                            {
+                                readOutput = nextRead.AsTask();
+                            }
+                            break;
+                        }
+                    }
+                }
+
                 if (line is null)
                 {
+                    // This stream ended, wait for the other
                     await (isError ? readOutput : readError);
-
                     break;
-                }
-
-                yield return new(line, isError);
-
-                if (isError)
-                {
-                    readError = errorReader.ReadLineAsync(cancellationToken).AsTask();
-                }
-                else
-                {
-                    readOutput = outputReader.ReadLineAsync(cancellationToken).AsTask();
                 }
             }
 
