@@ -12,6 +12,7 @@
   </PropertyGroup>
 
   <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+    <Compile Remove="Copied/Unix/*.cs" />
     <Compile Remove="**/*.Unix.cs" />
   </ItemGroup>
 

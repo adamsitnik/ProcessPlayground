@@ -47,9 +47,6 @@ public class PipingTests
 
             using SafeProcessHandle producerHandle = ProcessHandle.Start(producer, input: null, output: writePipe, error: null);
 
-            // Close write end in parent so consumer will get EOF
-            writePipe.Close();
-
             using (SafeFileHandle outputHandle = File.OpenHandle("output.txt", FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
             {
                 using SafeProcessHandle consumerHandle = ProcessHandle.Start(consumer, readPipe, outputHandle, error: null);
