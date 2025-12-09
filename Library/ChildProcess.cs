@@ -21,8 +21,8 @@ public static class ChildProcess
         using SafeFileHandle outputHandle = Console.GetStandardOutputHandle();
         using SafeFileHandle errorHandle = Console.GetStandardErrorHandle();
 
-        using SafeProcessHandle procHandle = ProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return ProcessHandle.WaitForExit(procHandle, timeout);
+        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
+        return procHandle.WaitForExit(timeout);
     }
 
     /// <summary>
@@ -38,8 +38,8 @@ public static class ChildProcess
         using SafeFileHandle outputHandle = Console.GetStandardOutputHandle();
         using SafeFileHandle errorHandle = Console.GetStandardErrorHandle();
 
-        using SafeProcessHandle procHandle = ProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return await ProcessHandle.WaitForExitAsync(procHandle, cancellationToken);
+        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
+        return await procHandle.WaitForExitAsync(cancellationToken);
     }
 
     /// <summary>
@@ -57,8 +57,8 @@ public static class ChildProcess
         // It's very expensive! We can provide a native way to do it.
         using SafeFileHandle nullHandle = File.OpenNullFileHandle();
 
-        using SafeProcessHandle procHandle = ProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
-        return ProcessHandle.WaitForExit(procHandle, timeout);
+        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
+        return procHandle.WaitForExit(timeout);
     }
 
     /// <summary>
@@ -72,8 +72,8 @@ public static class ChildProcess
 
         using SafeFileHandle nullHandle = File.OpenNullFileHandle();
 
-        using SafeProcessHandle procHandle = ProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
-        return await ProcessHandle.WaitForExitAsync(procHandle, cancellationToken);
+        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
+        return await procHandle.WaitForExitAsync(cancellationToken);
     }
 
     /// <summary>
@@ -98,8 +98,8 @@ public static class ChildProcess
         var handles = OpenFileHandlesForRedirection(inputFile, outputFile, errorFile);
         using SafeFileHandle inputHandle = handles.input, outputHandle = handles.output, errorHandle = handles.error;
 
-        using SafeProcessHandle procHandle = ProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return ProcessHandle.WaitForExit(procHandle, timeout);
+        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
+        return procHandle.WaitForExit(timeout);
     }
 
     /// <summary>
@@ -117,8 +117,8 @@ public static class ChildProcess
         var handles = OpenFileHandlesForRedirection(inputFile, outputFile, errorFile);
         using SafeFileHandle inputHandle = handles.input, outputHandle = handles.output, errorHandle = handles.error;
 
-        using SafeProcessHandle procHandle = ProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return await ProcessHandle.WaitForExitAsync(procHandle, cancellationToken);
+        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
+        return await procHandle.WaitForExitAsync(cancellationToken);
     }
 
     /// <summary>

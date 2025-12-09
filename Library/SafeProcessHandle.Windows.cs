@@ -1,15 +1,15 @@
-﻿using Microsoft.Win32.SafeHandles;
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
+using Library;
 
-namespace Library;
+namespace Microsoft.Win32.SafeHandles;
 
-public static partial class ProcessHandle
+public static partial class SafeProcessHandleExtensions
 {
     // Linux doesn't have a corresponding sys-call just to get exit code of a process by its handle.
     // That is why it's Windows-specific helper.
-    internal static int GetExitCode(SafeProcessHandle processHandle)
+    internal static int GetExitCode(this SafeProcessHandle processHandle)
     {
         if (!Interop.Kernel32.GetExitCodeProcess(processHandle, out int exitCode))
         {

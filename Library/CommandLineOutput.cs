@@ -44,8 +44,8 @@ public class CommandLineOutput : IAsyncEnumerable<OutputLine>
         using (childErrorHandle)
         using (parentErrorHandle)
         {
-            using SafeProcessHandle procHandle = ProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
-            _processId = ProcessHandle.GetProcessId(procHandle);
+            using SafeProcessHandle procHandle = SafeProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
+            _processId = procHandle.GetProcessId();
 
             // NOTE: we could get current console Encoding here, it's omitted for the sake of simplicity of the proof of concept.
             Encoding encoding = _encoding ?? Encoding.UTF8;
@@ -117,9 +117,9 @@ public class CommandLineOutput : IAsyncEnumerable<OutputLine>
             }
 
 #if WINDOWS
-            _exitCode = ProcessHandle.GetExitCode(procHandle);
+            _exitCode = procHandle.GetExitCode();
 #else
-            _exitCode = await ProcessHandle.WaitForExitAsync(procHandle, cancellationToken);
+            _exitCode = await procHandle.WaitForExitAsync(cancellationToken);
 #endif
         }
     }
