@@ -42,13 +42,13 @@ public class NamedPipeTests
                 Arguments = { "Hello from FIFO" }
             };
 
-            using SafeProcessHandle processHandle = ProcessHandle.Start(
+            using SafeProcessHandle processHandle = SafeProcessHandle.Start(
                 options, 
                 input: null, 
                 output: fifoWriteHandle, 
                 error: null);
 
-            await ProcessHandle.WaitForExitAsync(processHandle);
+            await processHandle.WaitForExitAsync();
 
             // Note: fifoWriteHandle is disposed by ProcessHandle.Start for pipes
             string output = await readTask;
