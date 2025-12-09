@@ -28,17 +28,20 @@ public class NamedPipeTests
             PipeDirection.InOut,
             1,
             PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous);
+            PipeOptions.None); // Synchronous IO as expected for STD handles
 
-        // Start a process that writes to the named pipe
-        var connectTask = serverPipe.WaitForConnectionAsync();
+        // Start a process and connect in parallel
+        var connectTask = Task.Run(() => serverPipe.WaitForConnection());
+
+        // Create SafeFileHandle from the pipe handle to pass to ProcessHandle.Start
+        SafeFileHandle pipeHandle = new SafeFileHandle(serverPipe.SafePipeHandle.DangerousGetHandle(), ownsHandle: false);
 
         ProcessStartOptions options = new("cmd")
         {
-            Arguments = { "/c", $"echo Hello from named pipe > \\\\.\\pipe\\{pipeName}" }
+            Arguments = { "/c", $"echo Hello from named pipe {pipeName}" }
         };
 
-        using SafeProcessHandle processHandle = ProcessHandle.Start(options, input: null, output: null, error: null);
+        using SafeProcessHandle processHandle = ProcessHandle.Start(options, input: null, output: pipeHandle, error: null);
         
         await connectTask;
         await ProcessHandle.WaitForExitAsync(processHandle);
@@ -48,6 +51,7 @@ public class NamedPipeTests
         string output = await reader.ReadToEndAsync();
         
         Assert.Contains("Hello from named pipe", output);
+        Assert.Contains(pipeName, output);
     }
 
     [Fact]
@@ -59,51 +63,56 @@ public class NamedPipeTests
         }
 
         string inputPipeName = $"test_input_pipe_{Guid.NewGuid()}";
-        string outputFileName = Path.GetTempFileName();
+        string outputPipeName = $"test_output_pipe_{Guid.NewGuid()}";
 
-        try
+        using var inputServerPipe = new NamedPipeServerStream(
+            inputPipeName,
+            PipeDirection.Out,
+            1,
+            PipeTransmissionMode.Byte,
+            PipeOptions.None); // Synchronous IO as expected for STD handles
+
+        using var outputServerPipe = new NamedPipeServerStream(
+            outputPipeName,
+            PipeDirection.In,
+            1,
+            PipeTransmissionMode.Byte,
+            PipeOptions.None); // Synchronous IO as expected for STD handles
+
+        // Start connections in parallel
+        var inputConnectTask = Task.Run(() => inputServerPipe.WaitForConnection());
+        var outputConnectTask = Task.Run(() => outputServerPipe.WaitForConnection());
+
+        // Create SafeFileHandles from the pipe handles
+        SafeFileHandle inputHandle = new SafeFileHandle(inputServerPipe.SafePipeHandle.DangerousGetHandle(), ownsHandle: false);
+        SafeFileHandle outputHandle = new SafeFileHandle(outputServerPipe.SafePipeHandle.DangerousGetHandle(), ownsHandle: false);
+
+        ProcessStartOptions options = new("findstr")
         {
-            using var inputServerPipe = new NamedPipeServerStream(
-                inputPipeName,
-                PipeDirection.Out,
-                1,
-                PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous);
+            Arguments = { "test" }
+        };
 
-            // Start connection and process in parallel
-            var connectTask = inputServerPipe.WaitForConnectionAsync();
+        using SafeProcessHandle processHandle = ProcessHandle.Start(options, input: inputHandle, output: outputHandle, error: null);
+        
+        await inputConnectTask;
+        await outputConnectTask;
 
-            ProcessStartOptions options = new("cmd")
-            {
-                Arguments = { "/c", $"findstr test < \\\\.\\pipe\\{inputPipeName} > {outputFileName}" }
-            };
+        // Write test data to the input pipe
+        using var writer = new StreamWriter(inputServerPipe, Encoding.UTF8);
+        await writer.WriteLineAsync("this is a test line");
+        await writer.WriteLineAsync("another line");
+        await writer.WriteLineAsync("test again");
+        await writer.FlushAsync();
+        inputServerPipe.Close(); // Close to signal EOF
 
-            using SafeProcessHandle processHandle = ProcessHandle.Start(options, input: null, output: null, error: null);
-            
-            await connectTask;
+        // Read from output pipe
+        using var reader = new StreamReader(outputServerPipe, Encoding.UTF8);
+        string output = await reader.ReadToEndAsync();
 
-            // Write test data to the pipe
-            using var writer = new StreamWriter(inputServerPipe, Encoding.UTF8);
-            await writer.WriteLineAsync("this is a test line");
-            await writer.WriteLineAsync("another line");
-            await writer.WriteLineAsync("test again");
-            await writer.FlushAsync();
-            inputServerPipe.WaitForPipeDrain();
-            inputServerPipe.Close();
+        await ProcessHandle.WaitForExitAsync(processHandle);
 
-            await ProcessHandle.WaitForExitAsync(processHandle);
-
-            // Read output
-            string output = await File.ReadAllTextAsync(outputFileName);
-            Assert.Contains("test", output);
-        }
-        finally
-        {
-            if (File.Exists(outputFileName))
-            {
-                File.Delete(outputFileName);
-            }
-        }
+        Assert.Contains("test", output);
+        Assert.Contains("test line", output);
     }
 
     [Fact]
