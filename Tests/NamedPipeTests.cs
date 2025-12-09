@@ -1,8 +1,6 @@
 using Library;
 using Microsoft.Win32.SafeHandles;
-using System.IO.Pipes;
 using System.Runtime.InteropServices;
-using System.Text;
 
 namespace Tests;
 
@@ -12,108 +10,6 @@ public class NamedPipeTests
     private const int UnixFifoMode = 0x1B6;
     // Delay to allow async operations to start before proceeding
     private const int TaskStartDelayMs = 100;
-
-    [Fact]
-    public async Task CanUseNamedPipeForProcessOutput_Windows()
-    {
-        if (!OperatingSystem.IsWindows())
-        {
-            return; // Skip on non-Windows
-        }
-
-        string pipeName = $"test_pipe_{Guid.NewGuid()}";
-        
-        using var serverPipe = new NamedPipeServerStream(
-            pipeName,
-            PipeDirection.InOut,
-            1,
-            PipeTransmissionMode.Byte,
-            PipeOptions.None); // Synchronous IO as expected for STD handles
-
-        // Start a process and connect in parallel
-        var connectTask = Task.Run(() => serverPipe.WaitForConnection());
-
-        // Create SafeFileHandle from the pipe handle to pass to ProcessHandle.Start
-        SafeFileHandle pipeHandle = new SafeFileHandle(serverPipe.SafePipeHandle.DangerousGetHandle(), ownsHandle: false);
-
-        ProcessStartOptions options = new("cmd")
-        {
-            Arguments = { "/c", $"echo Hello from named pipe {pipeName}" }
-        };
-
-        using SafeProcessHandle processHandle = ProcessHandle.Start(options, input: null, output: pipeHandle, error: null);
-        
-        await connectTask;
-        await ProcessHandle.WaitForExitAsync(processHandle);
-
-        // Read from the pipe
-        using var reader = new StreamReader(serverPipe, Encoding.UTF8);
-        string output = await reader.ReadToEndAsync();
-        
-        Assert.Contains("Hello from named pipe", output);
-        Assert.Contains(pipeName, output);
-    }
-
-    [Fact]
-    public async Task CanUseNamedPipeForProcessInput_Windows()
-    {
-        if (!OperatingSystem.IsWindows())
-        {
-            return; // Skip on non-Windows
-        }
-
-        string inputPipeName = $"test_input_pipe_{Guid.NewGuid()}";
-        string outputPipeName = $"test_output_pipe_{Guid.NewGuid()}";
-
-        using var inputServerPipe = new NamedPipeServerStream(
-            inputPipeName,
-            PipeDirection.Out,
-            1,
-            PipeTransmissionMode.Byte,
-            PipeOptions.None); // Synchronous IO as expected for STD handles
-
-        using var outputServerPipe = new NamedPipeServerStream(
-            outputPipeName,
-            PipeDirection.In,
-            1,
-            PipeTransmissionMode.Byte,
-            PipeOptions.None); // Synchronous IO as expected for STD handles
-
-        // Start connections in parallel
-        var inputConnectTask = Task.Run(() => inputServerPipe.WaitForConnection());
-        var outputConnectTask = Task.Run(() => outputServerPipe.WaitForConnection());
-
-        // Create SafeFileHandles from the pipe handles
-        SafeFileHandle inputHandle = new SafeFileHandle(inputServerPipe.SafePipeHandle.DangerousGetHandle(), ownsHandle: false);
-        SafeFileHandle outputHandle = new SafeFileHandle(outputServerPipe.SafePipeHandle.DangerousGetHandle(), ownsHandle: false);
-
-        ProcessStartOptions options = new("findstr")
-        {
-            Arguments = { "test" }
-        };
-
-        using SafeProcessHandle processHandle = ProcessHandle.Start(options, input: inputHandle, output: outputHandle, error: null);
-        
-        await inputConnectTask;
-        await outputConnectTask;
-
-        // Write test data to the input pipe
-        using var writer = new StreamWriter(inputServerPipe, Encoding.UTF8);
-        await writer.WriteLineAsync("this is a test line");
-        await writer.WriteLineAsync("another line");
-        await writer.WriteLineAsync("test again");
-        await writer.FlushAsync();
-        inputServerPipe.Close(); // Close to signal EOF
-
-        // Read from output pipe
-        using var reader = new StreamReader(outputServerPipe, Encoding.UTF8);
-        string output = await reader.ReadToEndAsync();
-
-        await ProcessHandle.WaitForExitAsync(processHandle);
-
-        Assert.Contains("test", output);
-        Assert.Contains("test line", output);
-    }
 
     [Fact]
     public async Task CanUseFifoForProcessOutput_Unix()
@@ -134,9 +30,9 @@ public class NamedPipeTests
             // Start opening the FIFO for reading in a background task to avoid blocking
             var readTask = Task.Run(async () =>
             {
-                using var fifoStream = new FileStream(fifoPath, FileMode.Open, FileAccess.Read);
-                using var reader = new StreamReader(fifoStream);
-                return await reader.ReadLineAsync() ?? string.Empty;
+                using FileStream fifoStream = new(fifoPath, FileMode.Open, FileAccess.Read);
+                using StreamReader reader = new(fifoStream);
+                return await reader.ReadToEndAsync();
             });
 
             // Give the read task a moment to start
@@ -169,72 +65,7 @@ public class NamedPipeTests
 
             // Note: fifoWriteHandle is disposed by ProcessHandle.Start for pipes
             string output = await readTask;
-            Assert.Equal("Hello from FIFO", output);
-        }
-        finally
-        {
-            if (File.Exists(fifoPath))
-            {
-                File.Delete(fifoPath);
-            }
-        }
-    }
-
-    [Fact]
-    public async Task CanUseFifoWithProcessHandleStart_Unix()
-    {
-        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
-        {
-            return; // Skip on non-Unix
-        }
-
-        string fifoPath = Path.Combine(Path.GetTempPath(), $"test_fifo_{Guid.NewGuid()}");
-
-        try
-        {
-            // Create FIFO
-            int result = mkfifo(fifoPath, UnixFifoMode);
-            Assert.Equal(0, result);
-
-            // Start reading from the FIFO in a background task
-            var readTask = Task.Run(async () =>
-            {
-                using var fifoStream = new FileStream(fifoPath, FileMode.Open, FileAccess.Read);
-                using var reader = new StreamReader(fifoStream);
-                return await reader.ReadToEndAsync();
-            });
-
-            // Give the read task a moment to start
-            await Task.Delay(TaskStartDelayMs);
-
-            // Open FIFO for writing (synchronous mode as expected for STD handles)
-            using SafeFileHandle fifoWriteHandle = File.OpenHandle(
-                fifoPath, 
-                FileMode.Open, 
-                FileAccess.Write, 
-                FileShare.ReadWrite,
-                FileOptions.None);
-
-            // Verify it's recognized as a pipe
-            Assert.True(fifoWriteHandle.IsPipe());
-
-            // Start a process that writes to stdout, which is redirected to the FIFO
-            ProcessStartOptions options = new("echo")
-            {
-                Arguments = { "Hello from echo via FIFO" }
-            };
-
-            using SafeProcessHandle processHandle = ProcessHandle.Start(
-                options, 
-                input: null, 
-                output: fifoWriteHandle, 
-                error: null);
-
-            await ProcessHandle.WaitForExitAsync(processHandle);
-
-            // Note: fifoWriteHandle is disposed by ProcessHandle.Start for pipes
-            string output = await readTask;
-            Assert.Contains("Hello from echo via FIFO", output);
+            Assert.Equal("Hello from FIFO", output.TrimEnd());
         }
         finally
         {

@@ -42,14 +42,14 @@ public class SocketTests
         // Note: writeSocket is disposed by ProcessHandle.Start for pipes
 
         // Read from the socket
-        using var socketStream = new FileStream(readSocket, FileAccess.Read);
-        using var reader = new StreamReader(socketStream, Encoding.UTF8);
+        using FileStream socketStream = new(readSocket, FileAccess.Read);
+        using StreamReader reader = new(socketStream, Encoding.UTF8);
         
         string output = await reader.ReadToEndAsync();
 
         await ProcessHandle.WaitForExitAsync(processHandle);
 
-        Assert.Contains("Hello from socket", output);
+        Assert.Equal("Hello from socket", output.TrimEnd());
     }
 
     // P/Invoke for Unix socketpair
