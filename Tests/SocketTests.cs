@@ -1,0 +1,61 @@
+using Library;
+using Microsoft.Win32.SafeHandles;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace Tests;
+
+public class SocketTests
+{
+    [Fact]
+    public async Task CanUseSocketPairForProcessOutput_Unix()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return; // Skip on non-Unix
+        }
+
+        // Create a socket pair
+        int[] fds = new int[2];
+        int result = socketpair(AF_UNIX, SOCK_STREAM, 0, fds);
+        Assert.Equal(0, result);
+
+        using SafeFileHandle readSocket = new(fds[0], ownsHandle: true);
+        using SafeFileHandle writeSocket = new(fds[1], ownsHandle: true);
+
+        // Verify they're recognized as pipes (sockets are treated as pipes)
+        Assert.True(readSocket.IsPipe());
+        Assert.True(writeSocket.IsPipe());
+
+        // Start a process that writes to the socket
+        ProcessStartOptions options = new("echo")
+        {
+            Arguments = { "Hello from socket" }
+        };
+
+        using SafeProcessHandle processHandle = ProcessHandle.Start(
+            options,
+            input: null,
+            output: writeSocket,
+            error: null);
+
+        // Note: writeSocket is disposed by ProcessHandle.Start for pipes
+
+        // Read from the socket
+        using var socketStream = new FileStream(readSocket, FileAccess.Read);
+        using var reader = new StreamReader(socketStream, Encoding.UTF8);
+        
+        string output = await reader.ReadToEndAsync();
+
+        await ProcessHandle.WaitForExitAsync(processHandle);
+
+        Assert.Contains("Hello from socket", output);
+    }
+
+    // P/Invoke for Unix socketpair
+    private const int AF_UNIX = 1;
+    private const int SOCK_STREAM = 1;
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int socketpair(int domain, int type, int protocol, int[] sv);
+}
