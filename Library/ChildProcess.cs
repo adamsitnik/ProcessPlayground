@@ -1,7 +1,7 @@
 ﻿using Microsoft.Win32.SafeHandles;
 using System.Text;
 
-namespace Library;
+namespace System.TBA;
 
 public static class ChildProcess
 {
@@ -21,8 +21,8 @@ public static class ChildProcess
         using SafeFileHandle outputHandle = Console.GetStandardOutputHandle();
         using SafeFileHandle errorHandle = Console.GetStandardErrorHandle();
 
-        using SafeProcessHandle procHandle = ProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return ProcessHandle.WaitForExit(procHandle, timeout);
+        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
+        return procHandle.WaitForExit(timeout);
     }
 
     /// <summary>
@@ -38,8 +38,8 @@ public static class ChildProcess
         using SafeFileHandle outputHandle = Console.GetStandardOutputHandle();
         using SafeFileHandle errorHandle = Console.GetStandardErrorHandle();
 
-        using SafeProcessHandle procHandle = ProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return await ProcessHandle.WaitForExitAsync(procHandle, cancellationToken);
+        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
+        return await procHandle.WaitForExitAsync(cancellationToken);
     }
 
     /// <summary>
@@ -57,8 +57,8 @@ public static class ChildProcess
         // It's very expensive! We can provide a native way to do it.
         using SafeFileHandle nullHandle = File.OpenNullFileHandle();
 
-        using SafeProcessHandle procHandle = ProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
-        return ProcessHandle.WaitForExit(procHandle, timeout);
+        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
+        return procHandle.WaitForExit(timeout);
     }
 
     /// <summary>
@@ -72,8 +72,8 @@ public static class ChildProcess
 
         using SafeFileHandle nullHandle = File.OpenNullFileHandle();
 
-        using SafeProcessHandle procHandle = ProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
-        return await ProcessHandle.WaitForExitAsync(procHandle, cancellationToken);
+        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
+        return await procHandle.WaitForExitAsync(cancellationToken);
     }
 
     /// <summary>
@@ -98,8 +98,8 @@ public static class ChildProcess
         var handles = OpenFileHandlesForRedirection(inputFile, outputFile, errorFile);
         using SafeFileHandle inputHandle = handles.input, outputHandle = handles.output, errorHandle = handles.error;
 
-        using SafeProcessHandle procHandle = ProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return ProcessHandle.WaitForExit(procHandle, timeout);
+        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
+        return procHandle.WaitForExit(timeout);
     }
 
     /// <summary>
@@ -117,16 +117,16 @@ public static class ChildProcess
         var handles = OpenFileHandlesForRedirection(inputFile, outputFile, errorFile);
         using SafeFileHandle inputHandle = handles.input, outputHandle = handles.output, errorHandle = handles.error;
 
-        using SafeProcessHandle procHandle = ProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return await ProcessHandle.WaitForExitAsync(procHandle, cancellationToken);
+        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
+        return await procHandle.WaitForExitAsync(cancellationToken);
     }
 
     /// <summary>
-    /// Creates an instance of <see cref="CommandLineOutput"/> to stream the output of the process.
+    /// Creates an instance of <see cref="ProcessOutputLines"/> to stream the output of the process.
     /// </summary>
     /// <param name="encoding">The encoding to use when reading the output. If null, the default encoding is used.</param>
-    /// <returns>An instance of <see cref="CommandLineOutput"/> ready to be enumerated.</returns>
-    public static CommandLineOutput ReadOutputAsync(ProcessStartOptions options, Encoding? encoding = null)
+    /// <returns>An instance of <see cref="ProcessOutputLines"/> ready to be enumerated.</returns>
+    public static ProcessOutputLines ReadOutputLinesAsync(ProcessStartOptions options, Encoding? encoding = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 

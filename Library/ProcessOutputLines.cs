@@ -1,18 +1,18 @@
 ﻿using Microsoft.Win32.SafeHandles;
 using System.Text;
 
-namespace Library;
+namespace System.TBA;
 
 /// <summary>
 /// An async enumerable that streams output lines from a command line process.
 /// </summary>
-public class CommandLineOutput : IAsyncEnumerable<OutputLine>
+public class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
 {
     private readonly ProcessStartOptions _options;
     private readonly Encoding? _encoding;
     private int? _exitCode, _processId;
 
-    internal CommandLineOutput(ProcessStartOptions options, Encoding? encoding)
+    internal ProcessOutputLines(ProcessStartOptions options, Encoding? encoding)
     {
         _options = options;
         _encoding = encoding;
@@ -33,7 +33,7 @@ public class CommandLineOutput : IAsyncEnumerable<OutputLine>
     public int ExitCode => _exitCode ?? throw new InvalidOperationException("Process has not exited yet.");
 
     // Design: prevent the deadlocks: the user has to consume output lines, otherwise the process is not even started.
-    public async IAsyncEnumerator<OutputLine> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    public async IAsyncEnumerator<ProcessOutputLine> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         File.CreateAnonymousPipe(out SafeFileHandle parentOutputHandle, out SafeFileHandle childOutputHandle);
         File.CreateAnonymousPipe(out SafeFileHandle parentErrorHandle, out SafeFileHandle childErrorHandle);
@@ -44,8 +44,8 @@ public class CommandLineOutput : IAsyncEnumerable<OutputLine>
         using (childErrorHandle)
         using (parentErrorHandle)
         {
-            using SafeProcessHandle procHandle = ProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
-            _processId = ProcessHandle.GetProcessId(procHandle);
+            using SafeProcessHandle procHandle = SafeProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
+            _processId = procHandle.GetProcessId();
 
             // NOTE: we could get current console Encoding here, it's omitted for the sake of simplicity of the proof of concept.
             Encoding encoding = _encoding ?? Encoding.UTF8;
@@ -117,9 +117,9 @@ public class CommandLineOutput : IAsyncEnumerable<OutputLine>
             }
 
 #if WINDOWS
-            _exitCode = ProcessHandle.GetExitCode(procHandle);
+            _exitCode = procHandle.GetExitCode();
 #else
-            _exitCode = await ProcessHandle.WaitForExitAsync(procHandle, cancellationToken);
+            _exitCode = await procHandle.WaitForExitAsync(cancellationToken);
 #endif
         }
     }

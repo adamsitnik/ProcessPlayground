@@ -1,4 +1,4 @@
-﻿namespace Library;
+﻿namespace System.TBA;
 
 public sealed class ProcessStartOptions
 {

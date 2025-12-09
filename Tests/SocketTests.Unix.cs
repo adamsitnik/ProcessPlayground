@@ -1,4 +1,4 @@
-using Library;
+using System.TBA;
 using Microsoft.Win32.SafeHandles;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -27,7 +27,7 @@ public class SocketTests
             Arguments = { "Hello from socket" }
         };
 
-        using SafeProcessHandle processHandle = ProcessHandle.Start(
+        using SafeProcessHandle processHandle = SafeProcessHandle.Start(
             options,
             input: null,
             output: writeSocket,
@@ -41,7 +41,7 @@ public class SocketTests
         
         string output = await reader.ReadToEndAsync();
 
-        await ProcessHandle.WaitForExitAsync(processHandle);
+        await processHandle.WaitForExitAsync();
 
         Assert.Equal("Hello from socket", output.TrimEnd());
     }

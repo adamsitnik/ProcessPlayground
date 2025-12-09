@@ -1,4 +1,4 @@
-﻿using Library;
+﻿using System.TBA;
 using Microsoft.Win32.SafeHandles;
 
 namespace Tests;
@@ -45,14 +45,14 @@ public class PipingTests
                 expectedOutput = "test line\nanother test\n";
             }
 
-            using SafeProcessHandle producerHandle = ProcessHandle.Start(producer, input: null, output: writePipe, error: null);
+            using SafeProcessHandle producerHandle = SafeProcessHandle.Start(producer, input: null, output: writePipe, error: null);
 
             using (SafeFileHandle outputHandle = File.OpenHandle("output.txt", FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
             {
-                using SafeProcessHandle consumerHandle = ProcessHandle.Start(consumer, readPipe, outputHandle, error: null);
+                using SafeProcessHandle consumerHandle = SafeProcessHandle.Start(consumer, readPipe, outputHandle, error: null);
 
-                await ProcessHandle.WaitForExitAsync(producerHandle);
-                await ProcessHandle.WaitForExitAsync(consumerHandle);
+                await producerHandle.WaitForExitAsync();
+                await consumerHandle.WaitForExitAsync();
             }
 
             string result = await File.ReadAllTextAsync("output.txt");

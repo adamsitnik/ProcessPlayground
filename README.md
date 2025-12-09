@@ -20,14 +20,13 @@ This playground explores a new design that addresses these issues with a layered
 New methods on `System.Console` to access standard input, output, and error handles:
 
 ```csharp
-namespace System
+namespace System;
+
+public static class Console
 {
-    public static class Console
-    {
-        public static SafeFileHandle GetStdInputHandle();
-        public static SafeFileHandle GetStdOutputHandle();
-        public static SafeFileHandle GetStdErrorHandle();
-    }
+    public static SafeFileHandle GetStandardInputHandle();
+    public static SafeFileHandle GetStandardOutputHandle();
+    public static SafeFileHandle GetStandardErrorHandle();
 }
 ```
 
@@ -38,13 +37,12 @@ These APIs provide direct access to the standard handles of the current process,
 New methods on `System.IO.File` for process I/O scenarios:
 
 ```csharp
-namespace System.IO
+namespace System.IO;
+    
+public static class File
 {
-    public static class File
-    {
-        public static SafeFileHandle OpenNullFileHandle();
-        public static void CreateAnonymousPipe(out SafeFileHandle read, out SafeFileHandle write);
-    }
+    public static SafeFileHandle OpenNullFileHandle();
+    public static void CreateAnonymousPipe(out SafeFileHandle read, out SafeFileHandle write);
 }
 ```
 
@@ -56,19 +54,18 @@ namespace System.IO
 An option bag class for configuring process creation. Similar to `ProcessStartInfo`, but simpler:
 
 ```csharp
-namespace System.TBA
-{
-    public sealed class ProcessStartOptions
-    {
-        public string FileName { get; }
-        public IList<string> Arguments { get; }
-        public IDictionary<string, string?> Environment { get; }
-        public DirectoryInfo? WorkingDirectory { get; set; }
-        public bool CreateNoWindow { get; set; }
-        public bool KillOnParentDeath { get; set; }
+namespace System.TBA;
 
-        public ProcessStartOptions(string fileName);
-    }
+public sealed class ProcessStartOptions
+{
+    public string FileName { get; }
+    public IList<string> Arguments { get; }
+    public IDictionary<string, string?> Environment { get; }
+    public DirectoryInfo? WorkingDirectory { get; set; }
+    public bool CreateNoWindow { get; set; }
+    public bool KillOnParentDeath { get; set; }
+
+    public ProcessStartOptions(string fileName);
 }
 ```
 
@@ -83,24 +80,23 @@ namespace System.TBA
 | `CreateNoWindow` | `bool` | Whether to create a console window |
 | `KillOnParentDeath` | `bool` | Whether to kill the process when the parent process exits |
 
-### Low-Level APIs: ProcessHandle
+### Low-Level APIs: SafeProcessHandle
 
 Low-level APIs for advanced process management scenarios:
 
 ```csharp
-namespace System.TBA
+namespace Microsoft.Win32.SafeHandles;
+
+public class SafeProcessHandle
 {
-    public static class ProcessHandle
-    {
-        public static SafeProcessHandle Start(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error);
-        public static int GetProcessId(SafeProcessHandle processHandle);
-        public static int WaitForExit(SafeProcessHandle processHandle, TimeSpan? timeout = default);
-        public static Task<int> WaitForExitAsync(SafeProcessHandle processHandle, CancellationToken cancellationToken = default);
-    }
+    public static SafeProcessHandle Start(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error);
+    public int GetProcessId();
+    public int WaitForExit(TimeSpan? timeout = default);
+    public Task<int> WaitForExitAsync(CancellationToken cancellationToken = default);
 }
 ```
 
-The `ProcessHandle` APIs provide fine-grained control over process creation and lifecycle management. They enable advanced scenarios like piping between processes.
+The new `SafeProcessHandle` APIs provide fine-grained control over process creation and lifecycle management. They enable advanced scenarios like piping between processes.
 
 **Example: Piping between processes**
 
@@ -129,18 +125,15 @@ using (writePipe)
     };
 
     // Start producer with output redirected to the write end of the pipe
-    using SafeProcessHandle producerHandle = ProcessHandle.Start(producer, input: null, output: writePipe, error: null);
-
-    // Close write end in parent so consumer will get EOF
-    writePipe.Close();
+    using SafeProcessHandle producerHandle = SafeProcessHandle.Start(producer, input: null, output: writePipe, error: null);
 
     // Start consumer with input from the read end of the pipe
     using SafeFileHandle outputHandle = File.OpenHandle("output.txt", FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
-    using SafeProcessHandle consumerHandle = ProcessHandle.Start(consumer, readPipe, outputHandle, error: null);
+    using SafeProcessHandle consumerHandle = SafeProcessHandle.Start(consumer, readPipe, outputHandle, error: null);
 
     // Wait for both processes to complete
-    await ProcessHandle.WaitForExitAsync(producerHandle);
-    await ProcessHandle.WaitForExitAsync(consumerHandle);
+    await producerHandle.WaitForExitAsync();
+    await consumerHandle.WaitForExitAsync();
 }
 
 // Read the filtered output
@@ -176,31 +169,37 @@ namespace System.TBA
         public static Task<int> RedirectToFilesAsync(ProcessStartOptions options, string? inputFile, string? outputFile, string? errorFile, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// Creates an instance of <see cref="CommandLineOutput"/> to stream the output of the process.
+        /// Creates an instance of <see cref="ProcessOutputLines"/> to stream the output of the process.
         /// </summary>
-        public static CommandLineOutput ReadOutputAsync(ProcessStartOptions options, Encoding? encoding = null);
+        public static ProcessOutputLines ReadOutputLinesAsync(ProcessStartOptions options, Encoding? encoding = null);
     }
 }
 ```
 
-### CommandLineOutput
+### ProcessOutputLines
 
 An async enumerable that streams output lines from a command-line process:
 
 ```csharp
-public class CommandLineOutput : IAsyncEnumerable<OutputLine>
+namespace System.TBA;
+
+public class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
 {
     public int ProcessId { get; }  // Available after enumeration starts
     public int ExitCode { get; }   // Available after enumeration completes
 }
 ```
 
-### OutputLine
+The `ProcessOutputLines` class allows you to read output lines as they are produced by the process, avoiding deadlocks and excessive memory usage.
+
+### ProcessOutputLine
 
 A readonly struct representing a single line of output:
 
 ```csharp
-public readonly struct OutputLine
+namespace System.TBA;
+
+public readonly struct ProcessOutputLine
 {
     public string Content { get; }      // The text content of the line
     public bool StandardError { get; }  // True if from stderr, false if from stdout
@@ -297,7 +296,7 @@ This is significantly faster than reading output through pipes and writing to fi
 
 ### Stream Output Lines
 
-For streaming output line-by-line as an async enumerable to avoid any deadlocks:
+For streaming output line-by-line as an async enumerable to avoid any deadlocks (the design forces the user to consume the output):
 
 ```csharp
 ProcessStartOptions options = new("dotnet")
@@ -338,9 +337,9 @@ Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
 - **Library/**: Core implementation of the process APIs
   - Low-level handle APIs (`Console`, `File`)
   - `ProcessStartOptions` configuration class
-  - `ProcessHandle` for advanced process control
+  - `SafeProcessHandle` for advanced process control
   - `ChildProcess` high-level convenience methods
-  - `CommandLineOutput` for streaming process output
+  - `ProcessOutputLines` for streaming process output lines
 - **ConsoleApp/**: Sample console application demonstrating usage
 - **Tests/**: Unit tests including piping examples
 - **Benchmarks/**: BenchmarkDotNet benchmarks comparing performance

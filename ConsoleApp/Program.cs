@@ -1,5 +1,5 @@
 ﻿// See https://aka.ms/new-console-template for more information
-using Library;
+using System.TBA;
 using System.Diagnostics;
 
 #pragma warning disable  // Local function is declared but never used
@@ -110,7 +110,7 @@ static async Task StreamAsync()
         Arguments = { "--help" },
     };
 
-    var output = ChildProcess.ReadOutputAsync(info);
+    var output = ChildProcess.ReadOutputLinesAsync(info);
     await foreach (var line in output)
     {
         if (line.StandardError)
@@ -134,7 +134,7 @@ static async Task StreamLongRunningWithTimeoutAsync()
     };
 
     using CancellationTokenSource cts = new(TimeSpan.FromSeconds(3));
-    await foreach (var line in ChildProcess.ReadOutputAsync(info).WithCancellation(cts.Token))
+    await foreach (var line in ChildProcess.ReadOutputLinesAsync(info).WithCancellation(cts.Token))
     {
         Console.WriteLine(line.Content);
     }
