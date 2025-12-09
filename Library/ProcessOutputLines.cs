@@ -1,7 +1,7 @@
 ﻿using Microsoft.Win32.SafeHandles;
 using System.Text;
 
-namespace Library;
+namespace System.TBA;
 
 /// <summary>
 /// An async enumerable that streams output lines from a command line process.

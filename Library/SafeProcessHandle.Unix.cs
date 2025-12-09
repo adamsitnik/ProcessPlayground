@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel;
 using System.Runtime.InteropServices;
-using Library;
+using System.TBA;
 
 namespace Microsoft.Win32.SafeHandles;
 

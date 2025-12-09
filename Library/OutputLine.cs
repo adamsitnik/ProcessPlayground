@@ -1,4 +1,4 @@
-﻿namespace Library;
+﻿namespace System.TBA;
 
 public readonly struct OutputLine : IEquatable<OutputLine>
 {

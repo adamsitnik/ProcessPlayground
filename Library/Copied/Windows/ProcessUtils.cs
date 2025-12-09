@@ -1,6 +1,6 @@
 ﻿using System.Text;
 
-namespace Library;
+namespace System.TBA;
 
 internal static class ProcessUtils
 {
