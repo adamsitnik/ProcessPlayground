@@ -142,15 +142,32 @@ public class NamedPipeTests
             // Give the read task a moment to start
             await Task.Delay(TaskStartDelayMs);
 
-            // Start a process that writes to the FIFO
-            ProcessStartOptions options = new("sh")
+            // Open FIFO for writing (synchronous mode as expected for STD handles)
+            using SafeFileHandle fifoWriteHandle = File.OpenHandle(
+                fifoPath, 
+                FileMode.Open, 
+                FileAccess.Write, 
+                FileShare.ReadWrite,
+                FileOptions.None);
+
+            // Verify it's recognized as a pipe
+            Assert.True(fifoWriteHandle.IsPipe());
+
+            // Start a process that writes to stdout, which is redirected to the FIFO
+            ProcessStartOptions options = new("echo")
             {
-                Arguments = { "-c", $"echo 'Hello from FIFO' > {fifoPath}" }
+                Arguments = { "Hello from FIFO" }
             };
 
-            using SafeProcessHandle processHandle = ProcessHandle.Start(options, input: null, output: null, error: null);
+            using SafeProcessHandle processHandle = ProcessHandle.Start(
+                options, 
+                input: null, 
+                output: fifoWriteHandle, 
+                error: null);
+
             await ProcessHandle.WaitForExitAsync(processHandle);
 
+            // Note: fifoWriteHandle is disposed by ProcessHandle.Start for pipes
             string output = await readTask;
             Assert.Equal("Hello from FIFO", output);
         }
