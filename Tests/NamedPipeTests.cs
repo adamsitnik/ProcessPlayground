@@ -8,6 +8,11 @@ namespace Tests;
 
 public class NamedPipeTests
 {
+    // Unix file mode: 0666 (read/write for user, group, and others)
+    private const int UnixFifoMode = 0x1B6;
+    // Delay to allow async operations to start before proceeding
+    private const int TaskStartDelayMs = 100;
+
     [Fact]
     public async Task CanUseNamedPipeForProcessOutput_Windows()
     {
@@ -114,7 +119,7 @@ public class NamedPipeTests
         try
         {
             // Create FIFO
-            int result = mkfifo(fifoPath, 0x1B6); // 0666 in octal
+            int result = mkfifo(fifoPath, UnixFifoMode);
             Assert.Equal(0, result);
 
             // Start opening the FIFO for reading in a background task to avoid blocking
@@ -126,7 +131,7 @@ public class NamedPipeTests
             });
 
             // Give the read task a moment to start
-            await Task.Delay(100);
+            await Task.Delay(TaskStartDelayMs);
 
             // Start a process that writes to the FIFO
             ProcessStartOptions options = new("sh")
@@ -162,7 +167,7 @@ public class NamedPipeTests
         try
         {
             // Create FIFO
-            int result = mkfifo(fifoPath, 0x1B6); // 0666 in octal
+            int result = mkfifo(fifoPath, UnixFifoMode);
             Assert.Equal(0, result);
 
             // Start reading from the FIFO in a background task
@@ -174,7 +179,7 @@ public class NamedPipeTests
             });
 
             // Give the read task a moment to start
-            await Task.Delay(100);
+            await Task.Delay(TaskStartDelayMs);
 
             // Open FIFO for writing (synchronous mode as expected for STD handles)
             using SafeFileHandle fifoWriteHandle = File.OpenHandle(
