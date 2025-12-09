@@ -54,11 +54,12 @@ public class CommandLineOutput : IAsyncEnumerable<OutputLine>
 
             Task<string?> readOutput = outputReader.ReadLineAsync(cancellationToken).AsTask();
             Task<string?> readError = errorReader.ReadLineAsync(cancellationToken).AsTask();
+            bool isError;
 
             while (true)
             {
                 Task completedTask = await Task.WhenAny(readOutput, readError);
-                bool isError = completedTask == readError;
+                isError = completedTask == readError;
 
                 // Read the first completed line
                 string? line = await (isError ? readError : readOutput);
@@ -101,10 +102,18 @@ public class CommandLineOutput : IAsyncEnumerable<OutputLine>
 
                 if (line is null)
                 {
-                    // This stream ended, wait for the other
-                    await (isError ? readOutput : readError);
                     break;
                 }
+            }
+
+            // We got here because one of the streams ended, drain the remaining data from the other stream.
+            string? moreData = await (isError ? readOutput : readError);
+            StreamReader remaining = isError ? outputReader : errorReader;
+            while (moreData is not null)
+            {
+                yield return new(moreData, !isError);
+
+                moreData = await remaining.ReadLineAsync(cancellationToken);
             }
 
 #if WINDOWS
