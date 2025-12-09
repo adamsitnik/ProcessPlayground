@@ -1,5 +1,4 @@
-﻿using Library;
-using Microsoft.Win32.SafeHandles;
+﻿using Microsoft.Win32.SafeHandles;
 
 namespace Tests;
 

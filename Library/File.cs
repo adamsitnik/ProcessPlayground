@@ -1,6 +1,6 @@
 ﻿using Microsoft.Win32.SafeHandles;
 
-namespace Library;
+namespace System.IO;
 
 // All the new methods would go directly to File in dotnet/runtime,
 // but here the best I can do is extension members.

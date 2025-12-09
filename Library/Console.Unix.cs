@@ -1,6 +1,6 @@
 ﻿using Microsoft.Win32.SafeHandles;
 
-namespace Library;
+namespace System;
 
 public static partial class ConsoleExtensions
 {

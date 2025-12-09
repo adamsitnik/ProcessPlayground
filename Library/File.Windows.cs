@@ -2,7 +2,7 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 
-namespace Library;
+namespace System.IO;
 
 public static partial class FileExtensions
 {
