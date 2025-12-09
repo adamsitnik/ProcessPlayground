@@ -10,11 +10,16 @@ public static partial class ProcessHandle
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        bool disposeInput = input is null, disposeOutput = output is null, disposeError = error is null;
+        SafeFileHandle? nullHandle = null;
 
-        input ??= File.OpenNullFileHandle();
-        output ??= File.OpenNullFileHandle();
-        error ??= File.OpenNullFileHandle();
+        if (input is null || output is null || error is null)
+        {
+            nullHandle = File.OpenNullFileHandle();
+
+            input ??= nullHandle;
+            output ??= nullHandle;
+            error ??= nullHandle;
+        }
 
         try
         {
@@ -22,9 +27,7 @@ public static partial class ProcessHandle
         }
         finally
         {
-            if (disposeInput) input.Dispose();
-            if (disposeOutput) output.Dispose();
-            if (disposeError) error.Dispose();
+            nullHandle?.Dispose();
         }
     }
 

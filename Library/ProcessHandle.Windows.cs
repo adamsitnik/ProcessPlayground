@@ -40,9 +40,16 @@ public static partial class ProcessHandle
         // into multiple child processes.
         lock (s_createProcessLock)
         {
+            // In certain scenarios, the same handle may be passed for multiple stdio streams:
+            // - NUL file for all three
+            // - A single pipe for both stdout and stderr
             using SafeFileHandle duplicatedInput = Duplicate(inputHandle, currentProcHandle);
-            using SafeFileHandle duplicatedOutput = Duplicate(outputHandle, currentProcHandle);
-            using SafeFileHandle duplicatedError = Duplicate(errorHandle, currentProcHandle);
+            using SafeFileHandle duplicatedOutput = inputHandle.DangerousGetHandle() == outputHandle.DangerousGetHandle()
+                ? duplicatedInput
+                : Duplicate(outputHandle, currentProcHandle);
+            using SafeFileHandle duplicatedError = outputHandle.DangerousGetHandle() == errorHandle.DangerousGetHandle()
+                ? duplicatedOutput
+                : Duplicate(errorHandle, currentProcHandle);
 
             try
             {
