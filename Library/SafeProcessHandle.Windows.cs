@@ -105,6 +105,10 @@ public static partial class SafeProcessHandleExtensions
 
                 throw;
             }
+            finally
+            {
+                Interop.Kernel32.CloseHandle(currentProcHandle);
+            }
         }
 
         return procSH;
