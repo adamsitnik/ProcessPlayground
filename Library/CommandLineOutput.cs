@@ -47,11 +47,6 @@ public class CommandLineOutput : IAsyncEnumerable<OutputLine>
             using SafeProcessHandle procHandle = ProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
             _processId = ProcessHandle.GetProcessId(procHandle);
 
-            // CRITICAL: Close the child handles in the parent process
-            // so the pipe will signal EOF when the child exits
-            childOutputHandle.Close();
-            childErrorHandle.Close();
-
             // NOTE: we could get current console Encoding here, it's ommited for the sake of simplicity of the proof of concept.
             Encoding encoding = _encoding ?? Encoding.UTF8;
             using StreamReader outputReader = new(new FileStream(parentOutputHandle, FileAccess.Read, bufferSize: 0), encoding);

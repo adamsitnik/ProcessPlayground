@@ -27,6 +27,19 @@ public static partial class ProcessHandle
         }
         finally
         {
+            // DESIGN: avoid deadlocks and the need of users being aware of how pipes work by closing the child handles in the parent process.
+            // Close the child handles in the parent process, so the pipe will signal EOF when the child exits.
+            // Otherwise, the parent process will keep the write end of the pipe open, and any read operations will hang.
+            if (output.IsPipe())
+            {
+                output.Dispose();
+            }
+
+            if (error.IsPipe())
+            {
+                error.Dispose();
+            }
+
             nullHandle?.Dispose();
         }
     }
