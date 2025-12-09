@@ -6,7 +6,7 @@ namespace System.TBA;
 /// <summary>
 /// An async enumerable that streams output lines from a command line process.
 /// </summary>
-public class ProcessOutputLines : IAsyncEnumerable<OutputLine>
+public class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
 {
     private readonly ProcessStartOptions _options;
     private readonly Encoding? _encoding;
@@ -33,7 +33,7 @@ public class ProcessOutputLines : IAsyncEnumerable<OutputLine>
     public int ExitCode => _exitCode ?? throw new InvalidOperationException("Process has not exited yet.");
 
     // Design: prevent the deadlocks: the user has to consume output lines, otherwise the process is not even started.
-    public async IAsyncEnumerator<OutputLine> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    public async IAsyncEnumerator<ProcessOutputLine> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         File.CreateAnonymousPipe(out SafeFileHandle parentOutputHandle, out SafeFileHandle childOutputHandle);
         File.CreateAnonymousPipe(out SafeFileHandle parentErrorHandle, out SafeFileHandle childErrorHandle);

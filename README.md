@@ -183,7 +183,7 @@ An async enumerable that streams output lines from a command-line process:
 ```csharp
 namespace System.TBA;
 
-public class ProcessOutputLines : IAsyncEnumerable<OutputLine>
+public class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
 {
     public int ProcessId { get; }  // Available after enumeration starts
     public int ExitCode { get; }   // Available after enumeration completes
@@ -192,14 +192,14 @@ public class ProcessOutputLines : IAsyncEnumerable<OutputLine>
 
 The `ProcessOutputLines` class allows you to read output lines as they are produced by the process, avoiding deadlocks and excessive memory usage.
 
-### OutputLine
+### ProcessOutputLine
 
 A readonly struct representing a single line of output:
 
 ```csharp
 namespace System.TBA;
 
-public readonly struct OutputLine
+public readonly struct ProcessOutputLine
 {
     public string Content { get; }      // The text content of the line
     public bool StandardError { get; }  // True if from stderr, false if from stdout
@@ -339,7 +339,7 @@ Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
   - `ProcessStartOptions` configuration class
   - `SafeProcessHandle` for advanced process control
   - `ChildProcess` high-level convenience methods
-  - `ProcessOutputLines` for streaming process output
+  - `ProcessOutputLines` for streaming process output lines
 - **ConsoleApp/**: Sample console application demonstrating usage
 - **Tests/**: Unit tests including piping examples
 - **Benchmarks/**: BenchmarkDotNet benchmarks comparing performance
