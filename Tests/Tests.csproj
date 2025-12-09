@@ -22,4 +22,17 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+    <Compile Remove="**/*.Unix.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
+    <Compile Remove="**/*.Windows.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Workaround https://github.com/dotnet/project-system/issues/935 -->
+    <None Include="**/*.cs" />
+  </ItemGroup>
+
 </Project>

@@ -10,15 +10,9 @@ public class SocketTests
     [Fact]
     public async Task CanUseSocketPairForProcessOutput_Unix()
     {
-        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
-        {
-            return; // Skip on non-Unix
-        }
-
         // Create a socket pair
         int[] fds = new int[2];
-        int result = socketpair(AF_UNIX, SOCK_STREAM, 0, fds);
-        Assert.Equal(0, result);
+        Assert.Equal(0, socketpair(AF_UNIX, SOCK_STREAM, 0, fds));
 
         using SafeFileHandle readSocket = new(fds[0], ownsHandle: true);
         using SafeFileHandle writeSocket = new(fds[1], ownsHandle: true);

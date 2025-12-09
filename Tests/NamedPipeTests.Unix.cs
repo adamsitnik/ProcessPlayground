@@ -14,19 +14,11 @@ public class NamedPipeTests
     [Fact]
     public async Task CanUseFifoForProcessOutput_Unix()
     {
-        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
-        {
-            return; // Skip on non-Unix
-        }
-
         string fifoPath = Path.Combine(Path.GetTempPath(), $"test_fifo_{Guid.NewGuid()}");
+        Assert.Equal(0, mkfifo(fifoPath, UnixFifoMode));
 
         try
         {
-            // Create FIFO
-            int result = mkfifo(fifoPath, UnixFifoMode);
-            Assert.Equal(0, result);
-
             // Start opening the FIFO for reading in a background task to avoid blocking
             var readTask = Task.Run(async () =>
             {
@@ -40,13 +32,8 @@ public class NamedPipeTests
 
             // Open FIFO for writing (synchronous mode as expected for STD handles)
             using SafeFileHandle fifoWriteHandle = File.OpenHandle(
-                fifoPath, 
-                FileMode.Open, 
-                FileAccess.Write, 
-                FileShare.ReadWrite,
-                FileOptions.None);
+                fifoPath, FileMode.Open, FileAccess.Write, FileShare.ReadWrite, FileOptions.None);
 
-            // Verify it's recognized as a pipe
             Assert.True(fifoWriteHandle.IsPipe());
 
             // Start a process that writes to stdout, which is redirected to the FIFO
@@ -69,10 +56,7 @@ public class NamedPipeTests
         }
         finally
         {
-            if (File.Exists(fifoPath))
-            {
-                File.Delete(fifoPath);
-            }
+            File.Delete(fifoPath);
         }
     }
 
