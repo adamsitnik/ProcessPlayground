@@ -8,10 +8,10 @@ public static partial class ConsoleExtensions
 {
     extension(Console)
     {
-        public static SafeFileHandle GetStdInputHandle() => GetStdHandle(Interop.Kernel32.HandleTypes.STD_INPUT_HANDLE);
+        public static SafeFileHandle GetStandardInputHandle() => GetStdHandle(Interop.Kernel32.HandleTypes.STD_INPUT_HANDLE);
 
-        public static SafeFileHandle GetStdOutputHandle() => GetStdHandle(Interop.Kernel32.HandleTypes.STD_OUTPUT_HANDLE);
+        public static SafeFileHandle GetStandardOutputHandle() => GetStdHandle(Interop.Kernel32.HandleTypes.STD_OUTPUT_HANDLE);
 
-        public static SafeFileHandle GetStdErrorHandle() => GetStdHandle(Interop.Kernel32.HandleTypes.STD_ERROR_HANDLE);
+        public static SafeFileHandle GetStandardErrorHandle() => GetStdHandle(Interop.Kernel32.HandleTypes.STD_ERROR_HANDLE);
     }
 }

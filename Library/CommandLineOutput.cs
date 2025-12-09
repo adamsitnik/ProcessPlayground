@@ -38,7 +38,7 @@ public class CommandLineOutput : IAsyncEnumerable<OutputLine>
         File.CreateAnonymousPipe(out SafeFileHandle parentOutputHandle, out SafeFileHandle childOutputHandle);
         File.CreateAnonymousPipe(out SafeFileHandle parentErrorHandle, out SafeFileHandle childErrorHandle);
 
-        using SafeFileHandle inputHandle = Console.GetStdInputHandle();
+        using SafeFileHandle inputHandle = Console.GetStandardInputHandle();
         using (parentOutputHandle)
         using (childOutputHandle)
         using (childErrorHandle)

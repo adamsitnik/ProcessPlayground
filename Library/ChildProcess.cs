@@ -17,9 +17,9 @@ public static class ChildProcess
 
         // Design: this is exactly what ProcessStartInfo does when RedirectStandard{Input,Output,Error} are false (default).
         // We allow specifying a timeout and killing the process if it exceeds it.
-        using SafeFileHandle inputHandle = Console.GetStdInputHandle();
-        using SafeFileHandle outputHandle = Console.GetStdOutputHandle();
-        using SafeFileHandle errorHandle = Console.GetStdErrorHandle();
+        using SafeFileHandle inputHandle = Console.GetStandardInputHandle();
+        using SafeFileHandle outputHandle = Console.GetStandardOutputHandle();
+        using SafeFileHandle errorHandle = Console.GetStandardErrorHandle();
 
         using SafeProcessHandle procHandle = ProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
         return ProcessHandle.WaitForExit(procHandle, timeout);
@@ -34,9 +34,9 @@ public static class ChildProcess
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        using SafeFileHandle inputHandle = Console.GetStdInputHandle();
-        using SafeFileHandle outputHandle = Console.GetStdOutputHandle();
-        using SafeFileHandle errorHandle = Console.GetStdErrorHandle();
+        using SafeFileHandle inputHandle = Console.GetStandardInputHandle();
+        using SafeFileHandle outputHandle = Console.GetStandardOutputHandle();
+        using SafeFileHandle errorHandle = Console.GetStandardErrorHandle();
 
         using SafeProcessHandle procHandle = ProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
         return await ProcessHandle.WaitForExitAsync(procHandle, cancellationToken);
