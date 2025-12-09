@@ -102,7 +102,12 @@ public class CommandLineOutput : IAsyncEnumerable<OutputLine>
                 if (line is null)
                 {
                     // This stream ended, wait for the other
-                    await (isError ? readOutput : readError);
+                    string? assumption = await (isError ? readOutput : readError);
+                    if (assumption is not null)
+                    {
+                        throw new Exception("Unexpected state: one stream ended while the other still has data.");
+                    }
+
                     break;
                 }
             }
