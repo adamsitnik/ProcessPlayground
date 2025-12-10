@@ -4,7 +4,8 @@ using System.Diagnostics;
 
 #pragma warning disable  // Local function is declared but never used
 
-await StreamAsync();
+StreamSync();
+StreamSync();
 
 static void LongRunningWithTimeout()
 {
@@ -112,6 +113,28 @@ static async Task StreamAsync()
 
     var output = ChildProcess.ReadOutputLinesAsync(info);
     await foreach (var line in output)
+    {
+        if (line.StandardError)
+        {
+            Console.Error.WriteLine($"ERR: {line.Content}");
+        }
+        else
+        {
+            Console.WriteLine($"OUT: {line.Content}");
+        }
+    }
+    Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
+}
+
+static void StreamSync()
+{
+    ProcessStartOptions info = new("dotnet")
+    {
+        Arguments = { "--help" },
+    };
+
+    var output = ChildProcess.ReadOutputLinesAsync(info);
+    foreach (var line in output.ReadLines())
     {
         if (line.StandardError)
         {

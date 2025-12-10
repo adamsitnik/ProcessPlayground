@@ -6,7 +6,7 @@ namespace System.TBA;
 /// <summary>
 /// An async enumerable that streams output lines from a command line process.
 /// </summary>
-public class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
+public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
 {
     private readonly ProcessStartOptions _options;
     private readonly Encoding? _encoding;

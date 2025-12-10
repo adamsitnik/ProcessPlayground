@@ -7,6 +7,31 @@ namespace Benchmarks;
 public class RedirectToPipe
 {
     [Benchmark(Baseline = true)]
+    public int Old()
+    {
+        using (Process process = new())
+        {
+            process.StartInfo.FileName = "dotnet";
+            process.StartInfo.Arguments = "--help";
+            process.StartInfo.CreateNoWindow = true;
+            process.StartInfo.RedirectStandardOutput = true;
+            process.StartInfo.RedirectStandardError = true;
+
+            process.OutputDataReceived += (sender, e) => { };
+            process.ErrorDataReceived += (sender, e) => { };
+
+            process.Start();
+
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            process.WaitForExit();
+
+            return process.ExitCode;
+        }
+    }
+
+    [Benchmark]
     public async Task OldAsync()
     {
         ProcessStartInfo info = new()
@@ -44,6 +69,23 @@ public class RedirectToPipe
                 readOutput = process.StandardOutput.ReadLineAsync();
             }
         }
+    }
+
+    [Benchmark]
+    public int New()
+    {
+        ProcessStartOptions info = new("dotnet")
+        {
+            Arguments = { "--help" },
+        };
+
+        var lines = ChildProcess.ReadOutputLinesAsync(info);
+        foreach (var line in lines.ReadLines())
+        {
+            // We don't re-print, so the benchmark focuses on reading only.
+            _ = line;
+        }
+        return lines.ExitCode;
     }
 
     [Benchmark]
