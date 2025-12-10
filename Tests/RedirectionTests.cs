@@ -6,19 +6,30 @@ namespace Tests;
 
 public class RedirectionTests
 {
-    [Fact]
-    public async Task StandardOutputAndErrorCanPointToTheSameHandle()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task StandardOutputAndErrorCanPointToTheSameHandle(bool useNamedPipes)
     {
         ProcessStartOptions info = new("dotnet")
         {
             Arguments = { "--help", "--invalid-argument-to-produce-error" },
         };
 
-        File.CreateAnonymousPipe(out SafeFileHandle read, out SafeFileHandle write);
+        SafeFileHandle read, write;
+        if (useNamedPipes)
+        {
+            File.CreateNamedPipe(out read, out write);
+        }
+        else
+        {
+            File.CreateAnonymousPipe(out read, out write);
+        }
+
         // Start the process with both standard output and error redirected to the same handle.
         using SafeProcessHandle processHandle = SafeProcessHandle.Start(info, input: null, output: write, error: write);
 
-        using StreamReader reader = new(new FileStream(read, FileAccess.Read, bufferSize: 0, isAsync: false), Encoding.UTF8);
+        using StreamReader reader = new(new FileStream(read, FileAccess.Read, bufferSize: 0, isAsync: useNamedPipes), Encoding.UTF8);
         string allOutput = await reader.ReadToEndAsync();
         int exitCode = await processHandle.WaitForExitAsync();
         Assert.NotEmpty(allOutput);
