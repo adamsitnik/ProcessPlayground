@@ -26,9 +26,13 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
         byte[] errorBuffer = ArrayPool<byte>.Shared.Rent(4096 * 8);
         int outputStartIndex = 0, outputEndIndex = 0;
         int errorStartIndex = 0, errorEndIndex = 0;
+        int outBytesRead = int.MaxValue, errBytesRead = int.MaxValue;
 
         // NOTE: we could get current console Encoding here, it's omitted for the sake of simplicity of the proof of concept.
         Encoding encoding = _encoding ?? Encoding.UTF8;
+
+        MemoryHandle outputPin = outputBuffer.AsMemory().Pin();
+        MemoryHandle errorPin = errorBuffer.AsMemory().Pin();
 
         try
         {
@@ -49,25 +53,18 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
 
             while (true)
             {
-                (bool isError, int bytesRead) = ReadBytes(
+                ReadBytes(
                     timeoutInMilliseconds,
                     parentOutputHandle, parentErrorHandle,
                     outputBuffer.AsSpan(outputEndIndex), errorBuffer.AsSpan(errorEndIndex),
                     outputThreadPoolHandle, errorThreadPoolHandle,
                     outputResetEvent, errorResetEvent,
-                    waitHandles);
+                    waitHandles,
+                    ref outBytesRead, ref errBytesRead);
 
-                if (bytesRead == 0)
+                if (errBytesRead == 0)
                 {
-                    _exitCode = processHandle.GetExitCode();
-
-                    if (outputStartIndex != outputEndIndex)
-                    {
-                        yield return new ProcessOutputLine(
-                            encoding.GetString(outputBuffer, outputStartIndex, outputEndIndex - outputStartIndex),
-                            standardError: false);
-                    }
-
+                    // EOF on STD ERR: return remaining characters
                     if (errorStartIndex != errorEndIndex)
                     {
                         yield return new ProcessOutputLine(
@@ -75,53 +72,88 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
                             standardError: true);
                     }
 
+                    errorStartIndex = errorEndIndex = 0;
+                    parentErrorHandle.Close();
+                }
+
+                if (outBytesRead == 0)
+                {
+                    // EOF on STD OUT: return remaining characters
+                    if (outputStartIndex != outputEndIndex)
+                    {
+                        yield return new ProcessOutputLine(
+                            encoding.GetString(outputBuffer, outputStartIndex, outputEndIndex - outputStartIndex),
+                            standardError: false);
+                    }
+
+                    outputStartIndex = outputEndIndex = 0;
+                    parentOutputHandle.Close();
+                }
+
+                if (outBytesRead ==  0 && errBytesRead == 0)
+                {
+                    _exitCode = processHandle.GetExitCode();
                     yield break;
                 }
 
-                int remaining = bytesRead;
-
-                // Consume the reminder from previous read
-                if (isError)
+                if (errBytesRead > 0)
                 {
-                    remaining += (errorEndIndex - errorStartIndex);
-                }
-                else
-                {
-                    remaining += (outputEndIndex - outputStartIndex);
-                }
-
-                int startIndex = isError ? errorStartIndex : outputStartIndex;
-                byte[] buffer = isError ? errorBuffer : outputBuffer;
-                do
-                {
-                    int lineEnd = buffer.AsSpan(startIndex, remaining).IndexOf((byte)'\n');
-                    if (lineEnd == -1)
+                    int remaining = errBytesRead + errorEndIndex - errorStartIndex;
+                    int startIndex = errorStartIndex;
+                    byte[] buffer = errorBuffer;
+                    do
                     {
-                        break;
-                    }
+                        int lineEnd = buffer.AsSpan(startIndex, remaining).IndexOf((byte)'\n');
+                        if (lineEnd == -1)
+                        {
+                            break;
+                        }
 
-                    yield return new ProcessOutputLine(
-                        encoding.GetString(buffer.AsSpan(startIndex, lineEnd - 1)), // Exclude '\r'
-                        isError);
+                        yield return new ProcessOutputLine(
+                            encoding.GetString(buffer.AsSpan(startIndex, lineEnd - 1)), // Exclude '\r'
+                            standardError: true);
 
-                    startIndex += lineEnd + 1;
-                    remaining -= lineEnd + 1;
-                } while (remaining > 0);
+                        startIndex += lineEnd + 1;
+                        remaining -= lineEnd + 1;
+                    } while (remaining > 0);
 
-                if (isError)
-                {
                     errorStartIndex = startIndex;
                     errorEndIndex = errorStartIndex + remaining;
                 }
-                else
+
+                if (outBytesRead > 0)
                 {
+                    int remaining = outBytesRead + outputEndIndex - outputStartIndex;
+                    int startIndex = outputStartIndex;
+                    byte[] buffer = outputBuffer;
+                    do
+                    {
+                        int lineEnd = buffer.AsSpan(startIndex, remaining).IndexOf((byte)'\n');
+                        if (lineEnd == -1)
+                        {
+                            break;
+                        }
+
+                        yield return new ProcessOutputLine(
+                            encoding.GetString(buffer.AsSpan(startIndex, lineEnd - 1)), // Exclude '\r'
+                            standardError: false);
+
+                        startIndex += lineEnd + 1;
+                        remaining -= lineEnd + 1;
+                    } while (remaining > 0);
+
                     outputStartIndex = startIndex;
                     outputEndIndex = outputStartIndex + remaining;
                 }
+
+                // TODO: decide if we want to move remaining bytes to the beginning of the buffer
             }
         }
         finally
         {
+            outputPin.Dispose();
+            errorPin.Dispose();
+
             parentOutputHandle.Close();
             childOutputHandle.Close();
             childErrorHandle.Close();
@@ -132,7 +164,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
         }
     }
 
-    private static unsafe (bool isError, int bytesRead) ReadBytes(
+    private static unsafe void ReadBytes(
         int timeoutInMilliseconds,
         SafeFileHandle outputHandle,
         SafeFileHandle errorHandle,
@@ -142,78 +174,71 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
         ThreadPoolBoundHandle errorThreadPoolHandle,
         CallbackResetEvent outputResetEvent,
         CallbackResetEvent errorResetEvent,
-        WaitHandle[] waitHandles)
+        WaitHandle[] waitHandles,
+        ref int outBytesRead,
+        ref int errBytesRead)
     {
         NativeOverlapped* overlappedOutput = null, overlappedError = null;
-        int waitResult = -1;
 
         try
         {
-            overlappedOutput = GetNativeOverlappedForAsyncHandle(outputThreadPoolHandle, outputResetEvent);
-            overlappedError = GetNativeOverlappedForAsyncHandle(errorThreadPoolHandle, errorResetEvent);
-
-            fixed (byte* pinnedOutput = outputBuffer)
-            fixed (byte* pinnedError = errorBuffer)
+            if (outBytesRead > 0 && !outputHandle.IsClosed)
             {
-                Interop.Kernel32.ReadFile(outputHandle, pinnedOutput, outputBuffer.Length, IntPtr.Zero, overlappedOutput);
-                int errorCode = GetLastWin32ErrorAndDisposeHandleIfInvalid(outputHandle);
-                if (errorCode == Interop.Errors.ERROR_SUCCESS)
+                overlappedOutput = GetNativeOverlappedForAsyncHandle(outputThreadPoolHandle, outputResetEvent);
+
+                // The caller is pinning the buffer whole time, so we don't need to worry about unpinning it here.
+                fixed (byte* pinnedByTheCaller = outputBuffer)
                 {
-                    waitResult = 0;
-                    goto Ready;
-                }
-                else if (errorCode == Interop.Errors.ERROR_IO_PENDING)
-                {
-                    errorCode = Interop.Errors.ERROR_SUCCESS;
+                    Interop.Kernel32.ReadFile(outputHandle, pinnedByTheCaller, outputBuffer.Length, IntPtr.Zero, overlappedOutput);
                 }
 
-                Interop.Kernel32.ReadFile(errorHandle, pinnedError, errorBuffer.Length, IntPtr.Zero, overlappedError);
-                errorCode = GetLastWin32ErrorAndDisposeHandleIfInvalid(errorHandle);
-                if (errorCode == Interop.Errors.ERROR_SUCCESS)
+                // Even when data was ready to be consumed, we need to issue STD ERR read in order to avoid blocking the producer.
+                outBytesRead = GetLastWin32ErrorAndDisposeHandleIfInvalid(outputHandle) == Interop.Errors.ERROR_SUCCESS
+                    ? GetOverlappedResult(outputHandle, overlappedOutput, outputResetEvent)
+                    : -1;
+            }
+
+            if (errBytesRead > 0 && !errorHandle.IsClosed)
+            {
+                overlappedError = GetNativeOverlappedForAsyncHandle(errorThreadPoolHandle, errorResetEvent);
+
+                // The caller is pinning the buffer whole time, so we don't need to worry about unpinning it here.
+                fixed (byte* pinnedByTheCaller = outputBuffer)
                 {
-                    waitResult = 1;
-                    goto Ready;
-                }
-                else if (errorCode == Interop.Errors.ERROR_IO_PENDING)
-                {
-                    errorCode = Interop.Errors.ERROR_SUCCESS;
+                    Interop.Kernel32.ReadFile(errorHandle, pinnedByTheCaller, errorBuffer.Length, IntPtr.Zero, overlappedError);
                 }
 
-                waitResult = WaitHandle.WaitAny(waitHandles, timeoutInMilliseconds);
+                errBytesRead = GetLastWin32ErrorAndDisposeHandleIfInvalid(errorHandle) == Interop.Errors.ERROR_SUCCESS
+                    ? GetOverlappedResult(errorHandle, overlappedError, errorResetEvent)
+                    : -1;
+            }
 
-            Ready:
-                switch (waitResult)
-                {
-                    case WaitHandle.WaitTimeout:
-                        throw new TimeoutException("Timed out waiting for process output.");
-                    case 0:
-                    case 1:
-                        int bytesRead = 0;
-                        bool isError = waitResult == 1;
+            if ((outBytesRead >= 0 && !outputHandle.IsClosed) || 
+                (errBytesRead >= 0 && !errorHandle.IsClosed))
+            {
+                return;
+            }
 
-                        if (!Interop.Kernel32.GetOverlappedResult(
-                            isError ? errorHandle : outputHandle,
-                            isError ? overlappedError : overlappedOutput,
-                            ref bytesRead, bWait: false))
-                        {
-                            errorCode = GetLastWin32ErrorAndDisposeHandleIfInvalid(errorHandle);
-                            if (IsEndOfFile(errorCode))
-                            {
-                                return (isError, 0);
-                            }
-
-                            throw new Win32Exception(errorCode);
-                        }
-
-                        return (isError, bytesRead);
-                    case 2: // Process exited
-                        return (false, 0);
-                    default:
-                        throw new InvalidOperationException($"Unexpected wait handle result: {waitResult}.");
-                }
+            int waitResult = WaitHandle.WaitAny(waitHandles, timeoutInMilliseconds);
+            switch (waitResult)
+            {
+                case WaitHandle.WaitTimeout:
+                    throw new TimeoutException("Timed out waiting for process output.");
+                case 0: // OUT has data
+                    outBytesRead = GetOverlappedResult(outputHandle, overlappedOutput, outputResetEvent);
+                    return;
+                case 1: // ERR has data
+                    errBytesRead = GetOverlappedResult(errorHandle, overlappedError, errorResetEvent);
+                    return;
+                case 2: // Process exited
+                    errBytesRead = outBytesRead = 0;
+                    // TODO: ReleaseRefCount reset events
+                    return;
+                default:
+                    throw new InvalidOperationException($"Unexpected wait handle result: {waitResult}.");
             }
         }
-        finally
+        catch
         {
             if (overlappedOutput is not null)
             {
@@ -223,6 +248,32 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
             if (overlappedError is not null)
             {
                 errorResetEvent.ReleaseRefCount(overlappedError);
+            }
+
+            throw;
+        }
+
+        static int GetOverlappedResult(SafeFileHandle handle, NativeOverlapped* overlapped, CallbackResetEvent callbackResetEvent)
+        {
+            try
+            {
+                int bytesRead = 0;
+                if (!Interop.Kernel32.GetOverlappedResult(handle, overlapped, ref bytesRead, bWait: false))
+                {
+                    int errorCode = GetLastWin32ErrorAndDisposeHandleIfInvalid(handle);
+                    if (IsEndOfFile(errorCode))
+                    {
+                        return 0;
+                    }
+
+                    throw new Win32Exception(errorCode);
+                }
+
+                return bytesRead;
+            }
+            finally
+            {
+                callbackResetEvent.ReleaseRefCount(overlapped);
             }
         }
     }

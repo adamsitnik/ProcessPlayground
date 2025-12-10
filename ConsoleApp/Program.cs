@@ -6,6 +6,7 @@ using System.Diagnostics;
 
 StreamSync();
 StreamSync();
+StreamSync();
 
 static void LongRunningWithTimeout()
 {
@@ -124,6 +125,28 @@ static async Task StreamAsync()
         }
     }
     Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
+}
+
+static void OldReprint()
+{
+    using (Process process = new())
+    {
+        process.StartInfo.FileName = "dotnet";
+        process.StartInfo.Arguments = "--help";
+        process.StartInfo.CreateNoWindow = true;
+        process.StartInfo.RedirectStandardOutput = true;
+        process.StartInfo.RedirectStandardError = true;
+
+        process.OutputDataReceived += static (sender, e) => Console.WriteLine($"OUT: {e.Data}");
+        process.ErrorDataReceived += static (sender, e) => Console.Error.WriteLine($"ERR: {e.Data}");
+
+        process.Start();
+
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        process.WaitForExit();
+    }
 }
 
 static void StreamSync()
