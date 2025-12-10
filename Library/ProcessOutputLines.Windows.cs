@@ -46,8 +46,8 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
             ThreadPoolBoundHandle outputThreadPoolHandle = GetThreadPoolBinding(parentOutputHandle);
             ThreadPoolBoundHandle errorThreadPoolHandle = GetThreadPoolBinding(parentErrorHandle);
 
-            using CallbackResetEvent outputResetEvent = new(outputThreadPoolHandle);
-            using CallbackResetEvent errorResetEvent = new(errorThreadPoolHandle);
+            CallbackResetEvent outputResetEvent = new(outputThreadPoolHandle);
+            CallbackResetEvent errorResetEvent = new(errorThreadPoolHandle);
             OverlappedContext overlappedContext = new(outputThreadPoolHandle, errorThreadPoolHandle,
                 outputResetEvent, errorResetEvent);
 
@@ -232,10 +232,6 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
                     int errorCode = GetLastWin32ErrorAndDisposeHandleIfInvalid(handle);
                     if (IsEndOfFile(errorCode))
                     {
-                        //// EOF on a pipe. Callback will not be called.
-                        //// We clear the overlapped status bit for this special case (failure
-                        //// to do so looks like we are freeing a pending overlapped later).
-                        //overlapped->InternalLow = IntPtr.Zero;
                         return 0;
                     }
 
@@ -311,7 +307,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
     [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_ThreadPoolBinding")]
     extern static ThreadPoolBoundHandle GetThreadPoolBinding(SafeFileHandle @this);
 
-    private sealed unsafe class OverlappedContext : IDisposable
+    private sealed unsafe class OverlappedContext
     {
         private readonly ThreadPoolBoundHandle _outputThreadPoolHandle;
         private readonly ThreadPoolBoundHandle _errorThreadPoolHandle;
@@ -330,24 +326,9 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
             _errorResetEvent = errorResetEvent;
         }
 
-        public void Dispose()
-        {
-            if (_overlappedOutput is not null)
-            {
-                _outputResetEvent.ReleaseRefCount(_overlappedOutput);
-                _overlappedOutput = null;
-            }
+        internal void ResetOuputEvent() => _outputResetEvent.ResetBoth();
 
-            if (_overlappedError is not null)
-            {
-                _errorResetEvent.ReleaseRefCount(_overlappedError);
-                _overlappedError = null;
-            }
-        }
-
-        internal void ResetOuputEvent() => _outputResetEvent.Reset();
-
-        internal void ResetErrorEvent() => _errorResetEvent.Reset();
+        internal void ResetErrorEvent() => _errorResetEvent.ResetBoth();
 
         internal NativeOverlapped* CreateOverlappedForOutput()
         {

@@ -30,4 +30,15 @@ internal sealed class CallbackResetEvent : EventWaitHandle
             _threadPoolBoundHandle.FreeNativeOverlapped(pOverlapped);
         }
     }
+
+    internal void ResetBoth()
+    {
+        while (Volatile.Read(ref _freeWhenZero) != 0)
+        {
+            // TODO: Find a way to avoid the race condition while still being able to reuse the reset event.
+        }
+
+        Volatile.Write(ref _freeWhenZero, 2);
+        Reset();
+    }
 }

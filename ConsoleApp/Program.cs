@@ -5,8 +5,6 @@ using System.Diagnostics;
 #pragma warning disable  // Local function is declared but never used
 
 StreamSync();
-StreamSync();
-StreamSync();
 
 static void LongRunningWithTimeout()
 {
