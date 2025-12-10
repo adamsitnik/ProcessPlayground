@@ -35,8 +35,14 @@ public class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
     // Design: prevent the deadlocks: the user has to consume output lines, otherwise the process is not even started.
     public async IAsyncEnumerator<ProcessOutputLine> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
+#if WINDOWS
+        // On Windows, we prefer named pipes to anonymous pipes to allow for 100% async reads.
         File.CreateNamedPipe(out SafeFileHandle parentOutputHandle, out SafeFileHandle childOutputHandle);
         File.CreateNamedPipe(out SafeFileHandle parentErrorHandle, out SafeFileHandle childErrorHandle);
+#else
+        File.CreateAnonymousPipe(out SafeFileHandle parentOutputHandle, out SafeFileHandle childOutputHandle);
+        File.CreateAnonymousPipe(out SafeFileHandle parentErrorHandle, out SafeFileHandle childErrorHandle);
+#endif
 
         using SafeFileHandle inputHandle = Console.GetStandardInputHandle();
         using (parentOutputHandle)
