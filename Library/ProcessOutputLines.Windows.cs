@@ -27,7 +27,6 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
         byte[] errorBuffer = ArrayPool<byte>.Shared.Rent(4096 * 8);
         int outputStartIndex = 0, outputEndIndex = 0;
         int errorStartIndex = 0, errorEndIndex = 0;
-        int outBytesRead = int.MaxValue, errBytesRead = int.MaxValue;
 
         // NOTE: we could get current console Encoding here, it's omitted for the sake of simplicity of the proof of concept.
         Encoding encoding = _encoding ?? Encoding.UTF8;
@@ -38,7 +37,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
         try
         {
             using SafeProcessHandle processHandle = SafeProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
-            using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(processHandle);
+            //using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(processHandle);
             _processId = processHandle.GetProcessId();
 
             EnsureThreadPoolBindingInitialized(parentOutputHandle);
@@ -49,23 +48,27 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
 
             using CallbackResetEvent outputResetEvent = new(outputThreadPoolHandle);
             using CallbackResetEvent errorResetEvent = new(errorThreadPoolHandle);
-            using OverlappedContext overlappedContext = new(outputThreadPoolHandle, errorThreadPoolHandle,
+            OverlappedContext overlappedContext = new(outputThreadPoolHandle, errorThreadPoolHandle,
                 outputResetEvent, errorResetEvent);
 
-            WaitHandle[] waitHandles = [processWaitHandle, outputResetEvent, errorResetEvent];
+            WaitHandle[] waitHandles = [/*processWaitHandle, */ outputResetEvent, errorResetEvent];
+
+            unsafe
+            {
+                // Issue first reads.
+                Interop.Kernel32.ReadFile(parentOutputHandle, (byte*)outputPin.Pointer, outputBuffer.Length, IntPtr.Zero, overlappedContext.CreateOverlappedForOutput());
+                Interop.Kernel32.ReadFile(parentErrorHandle, (byte*)errorPin.Pointer, errorBuffer.Length, IntPtr.Zero, overlappedContext.CreateOverlappedForError());
+            }
 
             while (true)
             {
-                //Debug($"Entering {outBytesRead}, {errBytesRead}");
-                ReadBytes(
+                (int outBytesRead, int errBytesRead) = ReadBytes(
                     timeoutInMilliseconds,
                     parentOutputHandle, parentErrorHandle,
                     outputBuffer.AsSpan(outputEndIndex), errorBuffer.AsSpan(errorEndIndex),
                     outputResetEvent, errorResetEvent,
                     overlappedContext,
-                    waitHandles,
-                    ref outBytesRead, ref errBytesRead);
-                //Debug($"Returned {outBytesRead}, {errBytesRead}");
+                    waitHandles);
 
                 if (errBytesRead == 0)
                 {
@@ -81,18 +84,6 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
                     {
                         errorStartIndex = errorEndIndex = 0;
                         parentErrorHandle.Close();
-
-                        switch (waitHandles.Length)
-                        {
-                            case 3:
-                                // OUT, ERR and PRC, we keep only OUT and PRC
-                                waitHandles = [processWaitHandle, outputResetEvent];
-                                break;
-                            case 2:
-                                // ERR AND PRC, we don't need to use PRC here
-                                Debug("one!");
-                                break;
-                        }
                     }
                 }
 
@@ -106,24 +97,16 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
                             standardError: false);
                     }
 
-                    outputStartIndex = outputEndIndex = 0;
-                    parentOutputHandle.Close();
-
-                    switch (waitHandles.Length)
+                    if (!parentOutputHandle.IsClosed)
                     {
-                        case 3:
-                            // OUT, ERR and PRC, we keep only ERR and PRC
-                            waitHandles = [processWaitHandle, errorResetEvent];
-                            break;
-                        case 2:
-                            // OUT AND PRC, we don't need to use PRC here
-                            break;
+                        outputStartIndex = outputEndIndex = 0;
+                        parentOutputHandle.Close();
                     }
                 }
 
-                if (outBytesRead ==  0 && errBytesRead == 0)
+                if (outBytesRead <=  0 && errBytesRead <= 0)
                 {
-                    _exitCode = processHandle.GetExitCode();
+                    _exitCode = processHandle.WaitForExit(timeout);
                     yield break;
                 }
 
@@ -195,7 +178,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
         }
     }
 
-    private static unsafe void ReadBytes(
+    private static unsafe (int outBytesRead, int errBytesRead) ReadBytes(
         int timeoutInMilliseconds,
         SafeFileHandle outputHandle,
         SafeFileHandle errorHandle,
@@ -204,77 +187,39 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
         CallbackResetEvent outputResetEvent,
         CallbackResetEvent errorResetEvent,
         OverlappedContext overlappedContext,
-        WaitHandle[] waitHandles,
-        ref int outBytesRead,
-        ref int errBytesRead)
+        WaitHandle[] waitHandles)
     {
-        try
+        int waitResult = WaitHandle.WaitAny(waitHandles, timeoutInMilliseconds);
+        switch (waitResult)
         {
-            if (outBytesRead > 0 && !outputHandle.IsClosed)
-            {
-                // The caller is pinning the buffer whole time, so we don't need to worry about unpinning it here.
-                fixed (byte* pinnedByTheCaller = outputBuffer)
+            case WaitHandle.WaitTimeout:
+                throw new TimeoutException("Timed out waiting for process output.");
+            case 0:
+                int outBytesRead = GetOverlappedResult(outputHandle, overlappedContext.GetOverlappedForOutput(), outputResetEvent);
+                if (outBytesRead > 0)
                 {
-                    var overlappedOutput = overlappedContext.CreateNativeOverlappedForOutput();
-                    Interop.Kernel32.ReadFile(outputHandle, pinnedByTheCaller, outputBuffer.Length, IntPtr.Zero, overlappedOutput);
+                    overlappedContext.ResetOuputEvent();
+                    fixed (byte* pinnedByTheCaller = outputBuffer)
+                    {
+                        var overlappedOutput = overlappedContext.CreateOverlappedForOutput();
+                        Interop.Kernel32.ReadFile(outputHandle, pinnedByTheCaller, outputBuffer.Length, IntPtr.Zero, overlappedOutput);
+                    }
                 }
-
-                // Even when data was ready to be consumed, we need to issue STD ERR read in order to avoid blocking the producer.
-                outBytesRead = GetLastWin32ErrorAndDisposeHandleIfInvalid(outputHandle) == Interop.Errors.ERROR_SUCCESS
-                    ? GetOverlappedResult(outputHandle, overlappedContext.GetNativeOverlappedForOutput(), outputResetEvent)
-                    : -1;
-            }
-
-            if (errBytesRead > 0 && !errorHandle.IsClosed)
-            {
-                // The caller is pinning the buffer whole time, so we don't need to worry about unpinning it here.
-                fixed (byte* pinnedByTheCaller = outputBuffer)
+                return (outBytesRead, -1);
+            case 1:
+                int errBytesRead = GetOverlappedResult(errorHandle, overlappedContext.GetOverlappedForError(), errorResetEvent);
+                if (errBytesRead > 0)
                 {
-                    var overlappedError = overlappedContext.CreateNativeOverlappedForError();
-                    Interop.Kernel32.ReadFile(errorHandle, pinnedByTheCaller, errorBuffer.Length, IntPtr.Zero, overlappedError);
+                    overlappedContext.ResetErrorEvent();
+                    fixed (byte* pinnedByTheCaller = errorBuffer)
+                    {
+                        var overlappedError = overlappedContext.CreateOverlappedForError();
+                        Interop.Kernel32.ReadFile(errorHandle, pinnedByTheCaller, errorBuffer.Length, IntPtr.Zero, overlappedError);
+                    }
                 }
-
-                errBytesRead = GetLastWin32ErrorAndDisposeHandleIfInvalid(errorHandle) == Interop.Errors.ERROR_SUCCESS
-                    ? GetOverlappedResult(errorHandle, overlappedContext.GetNativeOverlappedForError(), errorResetEvent)
-                    : -1;
-            }
-
-            if ((outBytesRead >= 0 && !outputHandle.IsClosed) || 
-                (errBytesRead >= 0 && !errorHandle.IsClosed))
-            {
-                return;
-            }
-
-            int waitResult = WaitHandle.WaitAny(waitHandles, timeoutInMilliseconds);
-            switch (waitResult)
-            {
-                case WaitHandle.WaitTimeout:
-                    throw new TimeoutException("Timed out waiting for process output.");
-                case 0: // Process exited
-                    Debug("EXIT!");
-                    overlappedContext.Dispose();
-                    errBytesRead = outBytesRead = 0;
-                    // TODO: ReleaseRefCount reset events
-                    return;
-                case 1 when !outputHandle.IsClosed: // OUT has data
-                    outBytesRead = GetOverlappedResult(outputHandle, overlappedContext.GetNativeOverlappedForOutput(), outputResetEvent);
-                    if (outBytesRead == 0)
-                        Debug($"OUT HAS DATA! {outBytesRead}");
-                    return;
-                case 1 when outputHandle.IsClosed:
-                case 2: // ERR has data
-                    errBytesRead = GetOverlappedResult(errorHandle, overlappedContext.GetNativeOverlappedForError(), errorResetEvent);
-                    Debug($"ERR HAS DATA! {errBytesRead}");
-                    return;
-                default:
-                    throw new InvalidOperationException($"Unexpected wait handle result: {waitResult}.");
-            }
-        }
-        catch
-        {
-            overlappedContext.Dispose();
-
-            throw;
+                return (-1, errBytesRead);
+            default:
+                throw new InvalidOperationException($"Unexpected wait handle result: {waitResult}.");
         }
 
         static int GetOverlappedResult(SafeFileHandle handle, NativeOverlapped* overlapped, CallbackResetEvent callbackResetEvent)
@@ -287,10 +232,10 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
                     int errorCode = GetLastWin32ErrorAndDisposeHandleIfInvalid(handle);
                     if (IsEndOfFile(errorCode))
                     {
-                        // EOF on a pipe. Callback will not be called.
-                        // We clear the overlapped status bit for this special case (failure
-                        // to do so looks like we are freeing a pending overlapped later).
-                        overlapped->InternalLow = IntPtr.Zero;
+                        //// EOF on a pipe. Callback will not be called.
+                        //// We clear the overlapped status bit for this special case (failure
+                        //// to do so looks like we are freeing a pending overlapped later).
+                        //overlapped->InternalLow = IntPtr.Zero;
                         return 0;
                     }
 
@@ -400,7 +345,11 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
             }
         }
 
-        internal NativeOverlapped* CreateNativeOverlappedForOutput()
+        internal void ResetOuputEvent() => _outputResetEvent.Reset();
+
+        internal void ResetErrorEvent() => _errorResetEvent.Reset();
+
+        internal NativeOverlapped* CreateOverlappedForOutput()
         {
             if (_overlappedOutput is not null)
             {
@@ -410,7 +359,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
             return _overlappedOutput = GetNativeOverlappedForAsyncHandle(_outputThreadPoolHandle, _outputResetEvent);
         }
 
-        internal NativeOverlapped* GetNativeOverlappedForOutput()
+        internal NativeOverlapped* GetOverlappedForOutput()
         {
             if (_overlappedOutput is null)
             {
@@ -422,7 +371,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
             return result;
         }
 
-        internal NativeOverlapped* CreateNativeOverlappedForError()
+        internal NativeOverlapped* CreateOverlappedForError()
         {
             if (_overlappedError is not null)
             {
@@ -432,7 +381,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
             return _overlappedError = GetNativeOverlappedForAsyncHandle(_errorThreadPoolHandle, _errorResetEvent);
         }
 
-        internal NativeOverlapped* GetNativeOverlappedForError()
+        internal NativeOverlapped* GetOverlappedForError()
         {
             if (_overlappedError is null)
             {
