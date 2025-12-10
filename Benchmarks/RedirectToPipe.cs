@@ -17,8 +17,8 @@ public class RedirectToPipe
             process.StartInfo.RedirectStandardOutput = true;
             process.StartInfo.RedirectStandardError = true;
 
-            process.OutputDataReceived += (sender, e) => { };
-            process.ErrorDataReceived += (sender, e) => { };
+            process.OutputDataReceived += static (sender, e) => { };
+            process.ErrorDataReceived += static (sender, e) => { };
 
             process.Start();
 
@@ -83,7 +83,7 @@ public class RedirectToPipe
         foreach (var line in lines.ReadLines())
         {
             // We don't re-print, so the benchmark focuses on reading only.
-            _ = line;
+            _ = line.Content;
         }
         return lines.ExitCode;
     }
@@ -100,7 +100,7 @@ public class RedirectToPipe
         await foreach (var line in lines)
         {
             // We don't re-print, so the benchmark focuses on reading only.
-            _ = line;
+            _ = line.Content;
         }
         return lines.ExitCode;
     }

@@ -37,7 +37,6 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
         try
         {
             using SafeProcessHandle processHandle = SafeProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
-            //using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(processHandle);
             _processId = processHandle.GetProcessId();
 
             EnsureThreadPoolBindingInitialized(parentOutputHandle);
@@ -51,7 +50,9 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
             OverlappedContext overlappedContext = new(outputThreadPoolHandle, errorThreadPoolHandle,
                 outputResetEvent, errorResetEvent);
 
-            WaitHandle[] waitHandles = [/*processWaitHandle, */ outputResetEvent, errorResetEvent];
+            // We don't await on ProcessWaitHandle as we have to read all output anyway
+            // (process can report exit, but we need to drain all output).
+            WaitHandle[] waitHandles = [outputResetEvent, errorResetEvent];
 
             unsafe
             {
@@ -106,7 +107,18 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
 
                 if (outBytesRead <=  0 && errBytesRead <= 0)
                 {
-                    _exitCode = processHandle.WaitForExit(timeout);
+                    // It's possible for the process to close STD OUT and ERR keep running.
+                    // We optimize for hot path: process already exited and exit code is available.
+                    if (Interop.Kernel32.GetExitCodeProcess(processHandle, out int exitCode)
+                        && exitCode != Interop.Kernel32.HandleOptions.STILL_ACTIVE)
+                    {
+                        _exitCode = exitCode;
+                    }
+                    else
+                    {
+                        _exitCode = processHandle.WaitForExit(timeout);
+                    }
+
                     yield break;
                 }
 
