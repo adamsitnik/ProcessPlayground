@@ -234,29 +234,42 @@ go test -bench="." -benchtime=1s
 
 #### Exporting Benchmark Results
 
-Since some benchmarks in this project write to standard output (e.g., NoRedirection benchmarks), redirecting all output can mix benchmark results with process output. Here are clean ways to export results:
+**Important**: Go's `go test` does not have a native flag like `--export` to save benchmark results to a separate file. Since some benchmarks in this project write to standard output (e.g., NoRedirection benchmarks), any output redirection will mix benchmark results with process output.
 
-**Method 1: Use JSON output (recommended)**
+**Best solution: Run only benchmarks that don't print to stdout**
 ```bash
-go test -bench="." -benchmem -json > results.json
-```
-The `-json` flag outputs structured JSON data that separates benchmark results from other output.
-
-**Method 2: Filter benchmark lines only**
-```bash
-go test -bench="." -benchmem | grep "^Benchmark" > results.txt
-```
-This captures only the benchmark result lines.
-
-**Method 3: Run benchmarks that don't print to stdout**
-```bash
-# Run only benchmarks that redirect or discard output
+# Run only benchmarks that redirect or discard output (cleanest results)
 go test -bench="Discard|RedirectToFile|RedirectToPipe" -benchmem > results.txt
 ```
 
-**Method 4: Use benchstat with explicit file output**
+**Alternative solutions if you need to run all benchmarks:**
+
+**Method 1: Redirect stderr separately (Unix/Linux/macOS)**
 ```bash
-go test -bench="." -benchmem -count=10 | tee results.txt
+# Benchmark results go to stdout, process output goes to stderr
+go test -bench="." -benchmem > results.txt 2> process_output.txt
+```
+Note: This doesn't fully separate them since benchmark framework also writes to stderr.
+
+**Method 2: Filter benchmark lines after the fact**
+```bash
+go test -bench="." -benchmem 2>&1 | grep "^Benchmark" > results.txt
+```
+This captures only lines starting with "Benchmark", but loses context (goos, goarch, pkg info).
+
+**Method 3: Save everything and parse later**
+```bash
+# Save all output
+go test -bench="." -benchmem > full_output.txt 2>&1
+
+# Extract benchmark lines manually or use benchstat
+grep "^Benchmark" full_output.txt > results.txt
+```
+
+**For analysis with benchstat:**
+```bash
+# Run multiple times for statistical analysis
+go test -bench="Discard|RedirectToFile|RedirectToPipe" -benchmem -count=10 > results.txt
 benchstat results.txt
 ```
 
