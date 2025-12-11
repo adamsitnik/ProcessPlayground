@@ -1,14 +1,2 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+// This library crate is used by the benchmark binaries in benches/.
+// Currently, benchmarks are self-contained and don't require shared utilities.

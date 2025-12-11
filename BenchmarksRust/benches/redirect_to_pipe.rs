@@ -4,7 +4,7 @@ use std::process::{Command, Stdio};
 use std::thread;
 
 /// Benchmarks reading process output line-by-line using BufReader.
-/// This is the most common pattern for reading process output in Rust.
+/// This reads stdout and stderr concurrently to avoid potential deadlocks.
 fn redirect_to_pipe_lines(c: &mut Criterion) {
     c.bench_function("redirect_to_pipe_lines", |b| {
         b.iter(|| {
@@ -18,22 +18,27 @@ fn redirect_to_pipe_lines(c: &mut Criterion) {
             let stdout = child.stdout.take().expect("Failed to open stdout");
             let stderr = child.stderr.take().expect("Failed to open stderr");
             
-            let stdout_reader = BufReader::new(stdout);
-            let stderr_reader = BufReader::new(stderr);
-            
-            // Read stdout
-            for line in stdout_reader.lines() {
-                if let Ok(line) = line {
-                    black_box(line);
+            // Read both streams concurrently to avoid deadlocks
+            let stdout_handle = thread::spawn(move || {
+                let reader = BufReader::new(stdout);
+                for line in reader.lines() {
+                    if let Ok(line) = line {
+                        black_box(line);
+                    }
                 }
-            }
+            });
             
-            // Read stderr
-            for line in stderr_reader.lines() {
-                if let Ok(line) = line {
-                    black_box(line);
+            let stderr_handle = thread::spawn(move || {
+                let reader = BufReader::new(stderr);
+                for line in reader.lines() {
+                    if let Ok(line) = line {
+                        black_box(line);
+                    }
                 }
-            }
+            });
+            
+            stdout_handle.join().expect("Failed to join stdout thread");
+            stderr_handle.join().expect("Failed to join stderr thread");
             
             let status = child.wait().expect("Failed to wait for command");
             black_box(status.code());
