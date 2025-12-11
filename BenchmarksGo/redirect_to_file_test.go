@@ -14,13 +14,14 @@ func BenchmarkRedirectToFile_Direct(b *testing.B) {
 	tmpDir := b.TempDir()
 	filePath := filepath.Join(tmpDir, "output.txt")
 
+	var exitCode int
 	for i := 0; i < b.N; i++ {
 		file, err := os.Create(filePath)
 		if err != nil {
 			b.Fatalf("Failed to create file: %v", err)
 		}
 
-		cmd := exec.Command("go", "version")
+		cmd := exec.Command("dotnet", "--help")
 		cmd.Stdout = file
 		cmd.Stderr = file
 
@@ -29,10 +30,14 @@ func BenchmarkRedirectToFile_Direct(b *testing.B) {
 		if err != nil {
 			b.Fatalf("Failed to run command: %v", err)
 		}
+		exitCode = cmd.ProcessState.ExitCode()
 
-		// Clean up for next iteration
+		// Stop the timer during cleanup
+		b.StopTimer()
 		os.Remove(filePath)
+		b.StartTimer()
 	}
+	_ = exitCode
 }
 
 // BenchmarkRedirectToFile_ThroughPipe benchmarks reading from a pipe and writing to a file.
@@ -41,13 +46,14 @@ func BenchmarkRedirectToFile_ThroughPipe(b *testing.B) {
 	tmpDir := b.TempDir()
 	filePath := filepath.Join(tmpDir, "output.txt")
 
+	var exitCode int
 	for i := 0; i < b.N; i++ {
 		file, err := os.Create(filePath)
 		if err != nil {
 			b.Fatalf("Failed to create file: %v", err)
 		}
 
-		cmd := exec.Command("go", "version")
+		cmd := exec.Command("dotnet", "--help")
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
 			b.Fatalf("Failed to create stdout pipe: %v", err)
@@ -70,10 +76,14 @@ func BenchmarkRedirectToFile_ThroughPipe(b *testing.B) {
 		if err != nil {
 			b.Fatalf("Failed to wait for command: %v", err)
 		}
+		exitCode = cmd.ProcessState.ExitCode()
 
-		// Clean up for next iteration
+		// Stop the timer during cleanup
+		b.StopTimer()
 		os.Remove(filePath)
+		b.StartTimer()
 	}
+	_ = exitCode
 }
 
 // BenchmarkRedirectToFile_Shell benchmarks using shell redirection.
@@ -82,14 +92,26 @@ func BenchmarkRedirectToFile_Shell(b *testing.B) {
 	tmpDir := b.TempDir()
 	filePath := filepath.Join(tmpDir, "output.txt")
 
+	var exitCode int
 	for i := 0; i < b.N; i++ {
-		cmd := exec.Command("sh", "-c", "go version > "+filePath)
+		var cmd *exec.Cmd
+		if os.PathSeparator == '\\' {
+			// Windows
+			cmd = exec.Command("cmd", "/c", "dotnet --help > "+filePath)
+		} else {
+			// Unix/Linux/macOS
+			cmd = exec.Command("sh", "-c", "dotnet --help > "+filePath)
+		}
 		err := cmd.Run()
 		if err != nil {
 			b.Fatalf("Failed to run command: %v", err)
 		}
+		exitCode = cmd.ProcessState.ExitCode()
 
-		// Clean up for next iteration
+		// Stop the timer during cleanup
+		b.StopTimer()
 		os.Remove(filePath)
+		b.StartTimer()
 	}
+	_ = exitCode
 }
