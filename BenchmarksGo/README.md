@@ -60,7 +60,7 @@ To run all benchmarks:
 
 ```bash
 cd BenchmarksGo
-go test -bench=. -benchmem
+go test -bench="." -benchmem
 ```
 
 ### Running Specific Benchmark Categories
@@ -96,13 +96,25 @@ go test -bench=BenchmarkNoRedirection_Sync -benchmem
 
 The `-bench` flag accepts Go regular expressions to filter benchmarks by name. The pattern matches against the full benchmark name.
 
-**Important**: The `.` (dot) is a regex wildcard that matches any character, so `-bench=.` matches all benchmarks. This works the same on Windows, Linux, and macOS.
+**Important**: The `.` (dot) is a regex wildcard that matches any character, so `-bench=.` matches all benchmarks.
+
+**Platform-specific note**: On Windows (cmd.exe or PowerShell), the dot needs to be quoted:
+```cmd
+go test -bench="." -benchmem
+```
+
+On Unix/Linux/macOS, quotes are optional but harmless:
+```bash
+go test -bench=. -benchmem
+# or
+go test -bench="." -benchmem
+```
 
 **Common filtering patterns:**
 
 ```bash
 # Run all benchmarks (dot matches any character)
-go test -bench=. -benchmem
+go test -bench="." -benchmem
 
 # Run all Discard benchmarks (any benchmark with "Discard" in the name)
 go test -bench=Discard -benchmem
@@ -123,7 +135,7 @@ go test -bench="Discard_Sync|NoRedirection_Sync" -benchmem
 go test -bench=^BenchmarkDiscard -benchmem
 
 # Exclude benchmarks (run everything except Shell benchmarks)
-go test -bench=. -run=^$ | grep -v Shell
+go test -bench="." -run=^$ | grep -v Shell
 ```
 
 **Regex special characters:**
@@ -139,7 +151,7 @@ go test -bench=. -run=^$ | grep -v Shell
 By default, Go's benchmark framework will run benchmarks until it has enough data for statistical significance. You can control the minimum time:
 
 ```bash
-go test -bench=. -benchtime=5s
+go test -bench="." -benchtime=5s
 ```
 
 This runs each benchmark for at least 5 seconds.
@@ -152,7 +164,7 @@ For more consistent results on Linux:
 sudo cpupower frequency-set --governor performance
 
 # Run benchmarks
-go test -bench=. -benchmem
+go test -bench="." -benchmem
 
 # Re-enable (optional)
 sudo cpupower frequency-set --governor powersave
@@ -169,7 +181,7 @@ Run benchmarks multiple times and compare results using `benchstat`:
 go install golang.org/x/perf/cmd/benchstat@latest
 
 # Run benchmarks multiple times
-go test -bench=. -benchmem -count=10 > results.txt
+go test -bench="." -benchmem -count=10 > results.txt
 
 # Analyze results
 benchstat results.txt
@@ -180,12 +192,12 @@ To compare performance changes:
 
 ```bash
 # Baseline
-go test -bench=. -benchmem -count=10 > old.txt
+go test -bench="." -benchmem -count=10 > old.txt
 
 # Make changes...
 
 # New results
-go test -bench=. -benchmem -count=10 > new.txt
+go test -bench="." -benchmem -count=10 > new.txt
 
 # Compare
 benchstat old.txt new.txt
@@ -217,7 +229,35 @@ benchstat results.txt
 
 For the process benchmarks in this project (which typically run for ~200-300ms), the output will usually show times in nanoseconds when each operation takes millions of nanoseconds. You can verify this by running:
 ```bash
-go test -bench=. -benchtime=1s
+go test -bench="." -benchtime=1s
+```
+
+#### Exporting Benchmark Results
+
+Since some benchmarks in this project write to standard output (e.g., NoRedirection benchmarks), redirecting all output can mix benchmark results with process output. Here are clean ways to export results:
+
+**Method 1: Use JSON output (recommended)**
+```bash
+go test -bench="." -benchmem -json > results.json
+```
+The `-json` flag outputs structured JSON data that separates benchmark results from other output.
+
+**Method 2: Filter benchmark lines only**
+```bash
+go test -bench="." -benchmem | grep "^Benchmark" > results.txt
+```
+This captures only the benchmark result lines.
+
+**Method 3: Run benchmarks that don't print to stdout**
+```bash
+# Run only benchmarks that redirect or discard output
+go test -bench="Discard|RedirectToFile|RedirectToPipe" -benchmem > results.txt
+```
+
+**Method 4: Use benchstat with explicit file output**
+```bash
+go test -bench="." -benchmem -count=10 | tee results.txt
+benchstat results.txt
 ```
 
 ### Command-Line Options
@@ -226,31 +266,31 @@ Common flags for `go test`:
 
 | Flag | Description | Example |
 |------|-------------|---------|
-| `-bench=.` | Run all benchmarks | `go test -bench=.` |
+| `-bench="."` | Run all benchmarks | `go test -bench="."` |
 | `-bench=Pattern` | Run benchmarks matching pattern | `go test -bench=NoRedirection` |
-| `-benchmem` | Show memory allocation statistics | `go test -bench=. -benchmem` |
-| `-benchtime=Xs` | Run each benchmark for X seconds | `go test -bench=. -benchtime=5s` |
-| `-count=N` | Run each benchmark N times | `go test -bench=. -count=10` |
-| `-cpu=1,2,4` | Run benchmarks with different GOMAXPROCS | `go test -bench=. -cpu=1,2,4` |
-| `-timeout=Xm` | Set overall timeout | `go test -bench=. -timeout=30m` |
+| `-benchmem` | Show memory allocation statistics | `go test -bench="." -benchmem` |
+| `-benchtime=Xs` | Run each benchmark for X seconds | `go test -bench="." -benchtime=5s` |
+| `-count=N` | Run each benchmark N times | `go test -bench="." -count=10` |
+| `-cpu=1,2,4` | Run benchmarks with different GOMAXPROCS | `go test -bench="." -cpu=1,2,4` |
+| `-timeout=Xm` | Set overall timeout | `go test -bench="." -timeout=30m` |
 
 ### Profiling Benchmarks
 
 #### CPU Profile
 ```bash
-go test -bench=. -cpuprofile=cpu.prof
+go test -bench="." -cpuprofile=cpu.prof
 go tool pprof cpu.prof
 ```
 
 #### Memory Profile
 ```bash
-go test -bench=. -memprofile=mem.prof
+go test -bench="." -memprofile=mem.prof
 go tool pprof mem.prof
 ```
 
 #### Trace
 ```bash
-go test -bench=. -trace=trace.out
+go test -bench="." -trace=trace.out
 go tool trace trace.out
 ```
 
@@ -279,7 +319,7 @@ Install Go from https://go.dev/dl/ and ensure it's in your PATH.
 ### Benchmarks run too quickly
 Increase benchmark time:
 ```bash
-go test -bench=. -benchtime=10s
+go test -bench="." -benchtime=10s
 ```
 
 ### High variance in results
