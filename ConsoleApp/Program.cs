@@ -4,7 +4,13 @@ using System.Diagnostics;
 
 #pragma warning disable  // Local function is declared but never used
 
-StreamSync();
+ProcessStartOptions info = new("dotnet")
+{
+    Arguments = { "--help" },
+};
+
+CombinedOutput output = ChildProcess.GetCombinedOutput(info, timeout: TimeSpan.FromSeconds(2));
+Console.WriteLine(output.ExitCode);
 
 static void LongRunningWithTimeout()
 {

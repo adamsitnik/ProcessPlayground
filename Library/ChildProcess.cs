@@ -1,9 +1,10 @@
 ﻿using Microsoft.Win32.SafeHandles;
+using System.Buffers;
 using System.Text;
 
 namespace System.TBA;
 
-public static class ChildProcess
+public static partial class ChildProcess
 {
     /// <summary>
     /// Executes the process with STD IN/OUT/ERR redirected to current process. Waits for its completion.
@@ -133,6 +134,174 @@ public static class ChildProcess
         return new(options, encoding);
     }
 
+    /// <summary>
+    /// Starts a process with the specified options and returns the combined output, including both standard output and
+    /// standard error streams.
+    /// </summary>
+    /// <param name="options">The configuration options used to start the process. Cannot be null.</param>
+    /// <param name="input">An optional handle to a file that provides input to the process's standard input stream. If null, no input is provided.</param>
+    /// <param name="timeout">An optional timeout that specifies the maximum duration to wait for the process to complete. If null, the
+    /// process will wait indefinitely.</param>
+    /// <returns>A <see cref="CombinedOutput" /> object containing the process's exit code, id, standard output and standard error data.</returns>
+    /// <remarks>Use <see cref="Console.OpenStandardInput()"/> to provide input of the process.</remarks>
+    public static CombinedOutput GetCombinedOutput(ProcessStartOptions options, SafeFileHandle? input = null, TimeSpan? timeout = null)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        SafeFileHandle? read = null;
+        SafeFileHandle? write = null;
+
+#if WINDOWS
+        if (timeout is not null)
+        {
+            // We open ASYNC read handle and sync write handle to allow for cancellation for timeout.
+            File.CreateNamedPipe(out read, out write);
+        }
+        else
+        {
+            File.CreateAnonymousPipe(out read, out write);
+        }
+#else
+        File.CreateAnonymousPipe(out read, out write);
+#endif
+
+        using (read)
+        using (write)
+        using (SafeFileHandle inputHandle = input ?? File.OpenNullFileHandle())
+        using (SafeProcessHandle processHandle = SafeProcessHandle.Start(options, inputHandle, output: write, error: write))
+        {
+            int processId = processHandle.GetProcessId();
+
+#if WINDOWS
+            // If timeout was specified, we need to use a different code path to read with timeout.
+            // We can also implement in on Unix, but for now, we only do it on Windows.
+            if (timeout is not null)
+            {
+                return ReadAllBytesWithTimeout(read, processHandle, processId, timeout);
+            }
+#endif
+            using FileStream outputStream = new(read, FileAccess.Read, bufferSize: 1, isAsync: false);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(4096 * 8);
+            int totalBytesRead = 0;
+
+            try
+            {
+                while (true)
+                {
+                    int bytesRead = outputStream.Read(buffer.AsSpan(totalBytesRead));
+                    if (bytesRead <= 0)
+                    {
+                        break;
+                    }
+
+                    totalBytesRead += bytesRead;
+                    if (totalBytesRead == buffer.Length)
+                    {
+                        // Resize the buffer
+                        GrowBuffer(ref buffer);
+                    }
+                }
+
+                byte[] resultBuffer = CreateCopy(buffer, totalBytesRead);
+#if WINDOWS
+                // It's possible for the process to close STD OUT and ERR keep running.
+                // We optimize for hot path: process already exited and exit code is available.
+                if (Interop.Kernel32.GetExitCodeProcess(processHandle, out int fasPathExitCode)
+                    && fasPathExitCode != Interop.Kernel32.HandleOptions.STILL_ACTIVE)
+                {
+                    return new(fasPathExitCode, resultBuffer, processId);
+                }
+#endif
+                int exitCode = processHandle.WaitForExit(timeout);
+                return new(exitCode, resultBuffer, processId);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Starts a process with the specified options and returns the combined output, including both standard output and
+    /// standard error streams.
+    /// </summary>
+    /// <param name="options">The configuration options used to start the process. Cannot be null.</param>
+    /// <param name="input">An optional handle to a file that provides input to the process's standard input stream. If null, no input is provided.</param>
+    /// <param name="cancellationToken">A cancellation token to cancel the operation.</param>
+    /// <returns>A <see cref="CombinedOutput" /> object containing the process's exit code, id, standard output and standard error data.</returns>
+    /// <remarks>Use <see cref="Console.OpenStandardInput()"/> to provide input of the process.</remarks>
+    public static async Task<CombinedOutput> GetCombinedOutputAsync(ProcessStartOptions options, SafeFileHandle? input = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        SafeFileHandle? read = null;
+        SafeFileHandle? write = null;
+
+        bool isAsyncReadHandle = false;
+#if WINDOWS
+        if (cancellationToken.CanBeCanceled)
+        {
+            // We open ASYNC read handle and sync write handle to allow for cancellation.
+            File.CreateNamedPipe(out read, out write);
+            isAsyncReadHandle = true;
+        }
+        else
+        {
+            File.CreateAnonymousPipe(out read, out write);
+        }
+#else
+        File.CreateAnonymousPipe(out read, out write);
+#endif
+
+        using (read)
+        using (write)
+        using (SafeFileHandle inputHandle = input ?? File.OpenNullFileHandle())
+        using (SafeProcessHandle processHandle = SafeProcessHandle.Start(options, inputHandle, output: write, error: write))
+        using (FileStream outputStream = new(read, FileAccess.Read, bufferSize: 1, isAsync: isAsyncReadHandle))
+        {
+            int processId = processHandle.GetProcessId();
+
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(4096 * 8);
+            int totalBytesRead = 0;
+
+            try
+            {
+                while (true)
+                {
+                    int bytesRead = await outputStream.ReadAsync(buffer.AsMemory(totalBytesRead), cancellationToken);
+                    if (bytesRead <= 0)
+                    {
+                        break;
+                    }
+
+                    totalBytesRead += bytesRead;
+                    if (totalBytesRead == buffer.Length)
+                    {
+                        GrowBuffer(ref buffer);
+                    }
+                }
+
+                byte[] resultBuffer = CreateCopy(buffer, totalBytesRead);
+#if WINDOWS
+                // It's possible for the process to close STD OUT and ERR keep running.
+                // We optimize for hot path: process already exited and exit code is available.
+                if (Interop.Kernel32.GetExitCodeProcess(processHandle, out int fasPathExitCode)
+                    && fasPathExitCode != Interop.Kernel32.HandleOptions.STILL_ACTIVE)
+                {
+                    return new(fasPathExitCode, resultBuffer, processId);
+                }
+#endif
+                int exitCode = await processHandle.WaitForExitAsync(cancellationToken);
+                return new(exitCode, resultBuffer, processId);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buffer);
+            }
+        }
+    }
+
     private static (SafeFileHandle input, SafeFileHandle output, SafeFileHandle error) OpenFileHandlesForRedirection(string? inputFile, string? outputFile, string? errorFile)
     {
         SafeFileHandle inputHandle = inputFile switch
@@ -154,5 +323,28 @@ public static class ChildProcess
         };
 
         return (inputHandle, outputHandle, errorHandle);
+    }
+
+    private static byte[] CreateCopy(byte[] buffer, int totalBytesRead)
+    {
+        byte[] resultBuffer = GC.AllocateUninitializedArray<byte>(totalBytesRead);
+        Buffer.BlockCopy(buffer, 0, resultBuffer, 0, totalBytesRead);
+        return resultBuffer;
+    }
+
+
+    private static void GrowBuffer(ref byte[] buffer)
+    {
+        byte[] oldBuffer = buffer;
+        buffer = ArrayPool<byte>.Shared.Rent(Math.Min(buffer.Length * 2, Array.MaxLength));
+
+        try
+        {
+            Buffer.BlockCopy(oldBuffer, 0, buffer, 0, oldBuffer.Length);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(oldBuffer);
+        }
     }
 }

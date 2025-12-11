@@ -7,13 +7,12 @@ namespace Benchmarks;
 public class RedirectToPipe
 {
     [Benchmark(Baseline = true)]
-    public int Old()
+    public int OldSyncEvents()
     {
         using (Process process = new())
         {
             process.StartInfo.FileName = "dotnet";
             process.StartInfo.Arguments = "--help";
-            process.StartInfo.CreateNoWindow = true;
             process.StartInfo.RedirectStandardOutput = true;
             process.StartInfo.RedirectStandardError = true;
 
@@ -32,7 +31,7 @@ public class RedirectToPipe
     }
 
     [Benchmark]
-    public async Task OldAsync()
+    public async Task<int> OldReadLinesAsync()
     {
         ProcessStartInfo info = new()
         {
@@ -55,6 +54,12 @@ public class RedirectToPipe
             string? line = await(isError ? readError : readOutput);
             if (line is null)
             {
+                // Reached end of stream, let's consume the other stream fully
+                line = await (isError ? readOutput : readError);
+                while (line is not null)
+                {
+                    line = await (isError ? readOutput : readError);
+                }
                 break;
             }
 
@@ -69,10 +74,33 @@ public class RedirectToPipe
                 readOutput = process.StandardOutput.ReadLineAsync();
             }
         }
+
+        return process.ExitCode;
     }
 
     [Benchmark]
-    public int New()
+    public async Task<int> OldReadToEndAsync()
+    {
+        ProcessStartInfo info = new()
+        {
+            FileName = "dotnet",
+            ArgumentList = { "--help" },
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+
+        using Process process = Process.Start(info)!;
+
+        Task<string> readOutput = process.StandardOutput.ReadToEndAsync();
+        Task<string> readError = process.StandardError.ReadToEndAsync();
+
+        await Task.WhenAll(readOutput, readError, process.WaitForExitAsync());
+
+        return process.ExitCode;
+    }
+
+    [Benchmark]
+    public int NewReadLines()
     {
         ProcessStartOptions info = new("dotnet")
         {
@@ -89,7 +117,43 @@ public class RedirectToPipe
     }
 
     [Benchmark]
-    public async Task<int> NewAsync()
+    public int NewCombinedOutput()
+    {
+        ProcessStartOptions info = new("dotnet")
+        {
+            Arguments = { "--help" },
+        };
+
+        CombinedOutput output = ChildProcess.GetCombinedOutput(info);
+        return output.ExitCode;
+    }
+
+    [Benchmark]
+    public int NewCombinedOutputTimeout()
+    {
+        ProcessStartOptions info = new("dotnet")
+        {
+            Arguments = { "--help" },
+        };
+
+        CombinedOutput output = ChildProcess.GetCombinedOutput(info, timeout: TimeSpan.FromSeconds(3));
+        return output.ExitCode;
+    }
+
+    [Benchmark]
+    public async Task<int> NewCombinedOutputAsync()
+    {
+        ProcessStartOptions info = new("dotnet")
+        {
+            Arguments = { "--help" },
+        };
+
+        CombinedOutput output = await ChildProcess.GetCombinedOutputAsync(info);
+        return output.ExitCode;
+    }
+
+    [Benchmark]
+    public async Task<int> NewReadLinesAsync()
     {
         ProcessStartOptions info = new("dotnet")
         {
