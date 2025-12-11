@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"os/exec"
+	"sync"
 	"testing"
 )
 
@@ -57,13 +58,22 @@ func BenchmarkDiscard_ReadAndDiscard(b *testing.B) {
 			b.Fatalf("Failed to start command: %v", err)
 		}
 
-		// Read and discard output
-		go io.Copy(io.Discard, stdout)
-		go io.Copy(io.Discard, stderr)
+		// Read and discard output with proper synchronization
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			io.Copy(io.Discard, stdout)
+		}()
+		go func() {
+			defer wg.Done()
+			io.Copy(io.Discard, stderr)
+		}()
 
 		err = cmd.Wait()
 		if err != nil {
 			b.Fatalf("Failed to wait for command: %v", err)
 		}
+		wg.Wait()
 	}
 }
