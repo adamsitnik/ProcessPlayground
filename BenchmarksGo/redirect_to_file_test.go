@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -95,12 +96,12 @@ func BenchmarkRedirectToFile_Shell(b *testing.B) {
 	var exitCode int
 	for i := 0; i < b.N; i++ {
 		var cmd *exec.Cmd
-		if os.PathSeparator == '\\' {
-			// Windows
-			cmd = exec.Command("cmd", "/c", "dotnet --help > "+filePath)
+		if runtime.GOOS == "windows" {
+			// Windows: Use cmd.exe with proper quoting
+			cmd = exec.Command("cmd", "/c", "dotnet --help > \""+filePath+"\"")
 		} else {
-			// Unix/Linux/macOS
-			cmd = exec.Command("sh", "-c", "dotnet --help > "+filePath)
+			// Unix/Linux/macOS: Use sh with proper quoting
+			cmd = exec.Command("sh", "-c", "dotnet --help > '"+filePath+"'")
 		}
 		err := cmd.Run()
 		if err != nil {
