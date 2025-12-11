@@ -92,6 +92,47 @@ Run a single benchmark by its full name:
 go test -bench=BenchmarkNoRedirection_Sync -benchmem
 ```
 
+### Benchmark Name Filtering with Regular Expressions
+
+The `-bench` flag accepts Go regular expressions to filter benchmarks by name. The pattern matches against the full benchmark name.
+
+**Important**: The `.` (dot) is a regex wildcard that matches any character, so `-bench=.` matches all benchmarks. This works the same on Windows, Linux, and macOS.
+
+**Common filtering patterns:**
+
+```bash
+# Run all benchmarks (dot matches any character)
+go test -bench=. -benchmem
+
+# Run all Discard benchmarks (any benchmark with "Discard" in the name)
+go test -bench=Discard -benchmem
+
+# Run only synchronous benchmarks (those ending with "_Sync")
+go test -bench=_Sync$ -benchmem
+
+# Run all "Redirect" benchmarks (RedirectToFile and RedirectToPipe)
+go test -bench=Redirect -benchmem
+
+# Run benchmarks that use pipes (contains "Pipe" in the name)
+go test -bench=Pipe -benchmem
+
+# Run multiple specific benchmarks using alternation
+go test -bench="Discard_Sync|NoRedirection_Sync" -benchmem
+
+# Run benchmarks starting with a specific prefix
+go test -bench=^BenchmarkDiscard -benchmem
+
+# Exclude benchmarks (run everything except Shell benchmarks)
+go test -bench=. -run=^$ | grep -v Shell
+```
+
+**Regex special characters:**
+- `.` - Matches any single character
+- `^` - Matches the beginning of the name
+- `$` - Matches the end of the name
+- `|` - Alternation (OR)
+- `.*` - Matches any sequence of characters
+
 ### Best Practices for Accurate Benchmarking
 
 #### 1. Run with Sufficient Iterations
@@ -168,15 +209,11 @@ BenchmarkNoRedirection_Sync-8     1000  1234567 ns/op  12345 B/op  123 allocs/op
 
 Go's benchmark framework automatically chooses the time unit (ns, μs, ms, s) based on the magnitude of the benchmark duration. The framework will display times in the most readable unit. However, the raw output is always in nanoseconds.
 
-To view results in different time units:
-
-1. **Let the framework choose** (recommended): The output automatically adjusts the unit for readability
-2. **Use benchstat for better formatting**: The `benchstat` tool formats output with appropriate units
-   ```bash
-   go test -bench=. -count=10 > results.txt
-   benchstat results.txt
-   ```
-3. **Convert manually**: Since 1 ms = 1,000,000 ns, you can convert nanoseconds to milliseconds by dividing by 1,000,000
+To view results in different time units, use `benchstat` for better formatted output with appropriate units:
+```bash
+go test -bench=. -count=10 > results.txt
+benchstat results.txt
+```
 
 For the process benchmarks in this project (which typically run for ~200-300ms), the output will usually show times in nanoseconds when each operation takes millions of nanoseconds. You can verify this by running:
 ```bash
