@@ -1,0 +1,25 @@
+[package]
+name = "benchmarks_rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "no_redirection"
+harness = false
+
+[[bench]]
+name = "discard"
+harness = false
+
+[[bench]]
+name = "redirect_to_file"
+harness = false
+
+[[bench]]
+name = "redirect_to_pipe"
+harness = false

@@ -344,6 +344,7 @@ Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
 - **Tests/**: Unit tests including piping examples
 - **Benchmarks/**: BenchmarkDotNet benchmarks comparing performance (C#)
 - **BenchmarksGo/**: Go benchmarks for process execution patterns
+- **BenchmarksRust/**: Rust benchmarks for process execution patterns
 
 ## Building
 
@@ -382,6 +383,15 @@ go test -bench=. -benchmem
 ```
 
 See [BenchmarksGo/README.md](BenchmarksGo/README.md) for detailed instructions on running Go benchmarks.
+
+### Rust Benchmarks
+
+```bash
+cd BenchmarksRust
+cargo bench
+```
+
+See [BenchmarksRust/README.md](BenchmarksRust/README.md) for detailed instructions on running Rust benchmarks.
 
 ## License
 
