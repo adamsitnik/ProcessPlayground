@@ -342,7 +342,8 @@ Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
   - `ProcessOutputLines` for streaming process output lines
 - **ConsoleApp/**: Sample console application demonstrating usage
 - **Tests/**: Unit tests including piping examples
-- **Benchmarks/**: BenchmarkDotNet benchmarks comparing performance
+- **Benchmarks/**: BenchmarkDotNet benchmarks comparing performance (C#)
+- **BenchmarksGo/**: Go benchmarks for process execution patterns
 
 ## Building
 
@@ -366,10 +367,21 @@ dotnet test
 
 ## Running Benchmarks
 
+### C# Benchmarks
+
 ```bash
 cd Benchmarks
 dotnet run -c Release --filter *
 ```
+
+### Go Benchmarks
+
+```bash
+cd BenchmarksGo
+go test -bench=. -benchmem
+```
+
+See [BenchmarksGo/README.md](BenchmarksGo/README.md) for detailed instructions on running Go benchmarks.
 
 ## License
 
