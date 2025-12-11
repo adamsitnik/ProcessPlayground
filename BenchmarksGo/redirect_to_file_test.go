@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -103,8 +104,11 @@ func BenchmarkRedirectToFile_Shell(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		var cmd *exec.Cmd
 		if runtime.GOOS == "windows" {
-			// Windows: Use cmd.exe with proper quoting
-			cmd = exec.Command("cmd", "/c", "dotnet --help > \""+filePath+"\"")
+			// Windows: Use cmd.exe with proper redirection syntax
+			// Convert backslashes to forward slashes for better compatibility
+			windowsPath := strings.ReplaceAll(filePath, "\\", "/")
+			cmdStr := "dotnet --help > \"" + windowsPath + "\""
+			cmd = exec.Command("cmd", "/c", cmdStr)
 		} else {
 			// Unix/Linux/macOS: Use sh with proper quoting
 			cmd = exec.Command("sh", "-c", "dotnet --help > '"+filePath+"'")
