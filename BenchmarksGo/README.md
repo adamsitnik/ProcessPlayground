@@ -164,6 +164,25 @@ BenchmarkNoRedirection_Sync-8     1000  1234567 ns/op  12345 B/op  123 allocs/op
 - `12345 B/op` - Average bytes allocated per operation
 - `123 allocs/op` - Average number of allocations per operation
 
+#### Time Units
+
+Go's benchmark framework automatically chooses the time unit (ns, μs, ms, s) based on the magnitude of the benchmark duration. The framework will display times in the most readable unit. However, the raw output is always in nanoseconds.
+
+To view results in different time units:
+
+1. **Let the framework choose** (recommended): The output automatically adjusts the unit for readability
+2. **Use benchstat for better formatting**: The `benchstat` tool formats output with appropriate units
+   ```bash
+   go test -bench=. -count=10 > results.txt
+   benchstat results.txt
+   ```
+3. **Convert manually**: Since 1 ms = 1,000,000 ns, you can convert nanoseconds to milliseconds by dividing by 1,000,000
+
+For the process benchmarks in this project (which typically run for ~200-300ms), the output will usually show times in nanoseconds when each operation takes millions of nanoseconds. You can verify this by running:
+```bash
+go test -bench=. -benchtime=1s
+```
+
 ### Command-Line Options
 
 Common flags for `go test`:
