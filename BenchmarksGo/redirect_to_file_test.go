@@ -12,8 +12,10 @@ import (
 // BenchmarkRedirectToFile_Direct benchmarks redirecting output directly to a file.
 // This is the most efficient method as the OS handles the redirection.
 func BenchmarkRedirectToFile_Direct(b *testing.B) {
+	b.StopTimer()
 	tmpDir := b.TempDir()
 	filePath := filepath.Join(tmpDir, "output.txt")
+	b.StartTimer()
 
 	var exitCode int
 	for i := 0; i < b.N; i++ {
@@ -44,8 +46,10 @@ func BenchmarkRedirectToFile_Direct(b *testing.B) {
 // BenchmarkRedirectToFile_ThroughPipe benchmarks reading from a pipe and writing to a file.
 // This is less efficient as it requires reading through Go and then writing.
 func BenchmarkRedirectToFile_ThroughPipe(b *testing.B) {
+	b.StopTimer()
 	tmpDir := b.TempDir()
 	filePath := filepath.Join(tmpDir, "output.txt")
+	b.StartTimer()
 
 	var exitCode int
 	for i := 0; i < b.N; i++ {
@@ -90,8 +94,10 @@ func BenchmarkRedirectToFile_ThroughPipe(b *testing.B) {
 // BenchmarkRedirectToFile_Shell benchmarks using shell redirection.
 // This spawns a shell which then handles the redirection.
 func BenchmarkRedirectToFile_Shell(b *testing.B) {
+	b.StopTimer()
 	tmpDir := b.TempDir()
 	filePath := filepath.Join(tmpDir, "output.txt")
+	b.StartTimer()
 
 	var exitCode int
 	for i := 0; i < b.N; i++ {
