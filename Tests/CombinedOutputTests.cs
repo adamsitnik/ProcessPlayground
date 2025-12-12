@@ -142,6 +142,13 @@ public class CombinedOutputTests
     [Fact]
     public void CombinedOutput_WithTimeout_ThrowsOnTimeout()
     {
+        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
+        {
+            // On Windows, if standard input is redirected, the test cannot proceed
+            // because timeout utility requires it.
+            return;
+        }
+
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "timeout /t 10 /nobreak" } }
             : new("sh") { Arguments = { "-c", "sleep 10" } };
@@ -155,6 +162,13 @@ public class CombinedOutputTests
     [Fact]
     public async Task CombinedOutputAsync_WithCancellation_ThrowsOperationCanceled()
     {
+        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
+        {
+            // On Windows, if standard input is redirected, the test cannot proceed
+            // because timeout utility requires it.
+            return;
+        }
+
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "timeout /t 10 /nobreak" } }
             : new("sh") { Arguments = { "-c", "sleep 10" } };
@@ -169,6 +183,13 @@ public class CombinedOutputTests
     [Fact]
     public void CombinedOutput_WithInfiniteTimeout_Waits()
     {
+        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
+        {
+            // On Windows, if standard input is redirected, the test cannot proceed
+            // because timeout utility requires it.
+            return;
+        }
+
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "timeout /t 3 /nobreak" } }
             : new("sh") { Arguments = { "-c", "sleep 3 && echo 'Waiting done'" } };
