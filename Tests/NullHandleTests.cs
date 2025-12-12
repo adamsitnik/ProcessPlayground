@@ -26,10 +26,20 @@ public class NullHandleTests
         using SafeFileHandle handle = File.OpenNullFileHandle();
         using FileStream stream = new(handle, FileAccess.Read, bufferSize: 0);
 
+#if NET48
+        byte[] buffer = new byte[10];
+        int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
+#else
         int bytesRead = await stream.ReadAsync(new byte[10]);
+#endif
         Assert.Equal(0, bytesRead);
 
+#if NET48
+        byte[] buffer2 = new byte[10];
+        bytesRead = stream.Read(buffer2, 0, buffer2.Length);
+#else
         bytesRead = stream.Read(new byte[10]);
+#endif
         Assert.Equal(0, bytesRead);
     }
 
@@ -39,7 +49,11 @@ public class NullHandleTests
         using SafeFileHandle handle = File.OpenNullFileHandle();
         using FileStream stream = new(handle, FileAccess.Write, bufferSize: 0);
 
+#if NET48
+        await stream.WriteAsync(new byte[100], 0, 100);
+#else
         await stream.WriteAsync(new byte[100]);
+#endif
         stream.Write(new byte[100], 0, 100);
     }
 

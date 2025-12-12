@@ -34,11 +34,19 @@ public class AnonymousPipeTests
         using (FileStream readStream = new(readHandle, FileAccess.Read, bufferSize: 0, isAsync: false))
         using (FileStream writeStream = new(writeHandle, FileAccess.Write, bufferSize: 0, isAsync: false))
         {
+#if NET48
+            await writeStream.WriteAsync(message, 0, message.Length);
+#else
             await writeStream.WriteAsync(message);
+#endif
             await writeStream.FlushAsync();
 
             byte[] buffer = new byte[message.Length];
+#if NET48
+            int bytesRead = await readStream.ReadAsync(buffer, 0, buffer.Length);
+#else
             int bytesRead = await readStream.ReadAsync(buffer);
+#endif
 
             Assert.Equal(message.Length, bytesRead);
             Assert.Equal(message, buffer);
