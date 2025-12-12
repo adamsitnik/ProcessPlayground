@@ -15,8 +15,9 @@ public class ReadOutputLinesTests
 #if NET48
     private static bool IsWindows() => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
 #else
-    private static bool IsWindows() => IsWindows();
+    private static bool IsWindows() => OperatingSystem.IsWindows();
 #endif
+
 
     [Theory]
     [InlineData(true)]

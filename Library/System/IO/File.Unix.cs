@@ -42,8 +42,8 @@ public static partial class FileExtensions
     private static int GetLastPInvokeError() => Marshal.GetLastWin32Error();
     private static bool IsMacOS() => RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
 #else
-    private static int GetLastPInvokeError() => GetLastPInvokeError();
-    private static bool IsMacOS() => IsMacOS();
+    private static int GetLastPInvokeError() => Marshal.GetLastPInvokeError();
+    private static bool IsMacOS() => OperatingSystem.IsMacOS();
 #endif
 
     private static SafeFileHandle OpenNullFileHandleCore()

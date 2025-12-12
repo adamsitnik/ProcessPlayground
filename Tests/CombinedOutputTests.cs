@@ -226,11 +226,7 @@ public class CombinedOutputTests
         // Verify all completed successfully
         foreach (var result in results)
         {
-#if NET48
             string output = result.GetText();
-#else
-            string output = result.GetText();
-#endif
             Assert.Contains("Concurrent test", output);
             Assert.Equal(0, result.ExitCode);
         }
