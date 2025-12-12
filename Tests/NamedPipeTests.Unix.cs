@@ -1,10 +1,3 @@
-using System.Text;
-using System.IO;
-using System.Threading;
-using System.Linq;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.TBA;
 using Microsoft.Win32.SafeHandles;
 using System.Runtime.InteropServices;
@@ -38,12 +31,8 @@ public class NamedPipeTests
             await Task.Delay(TaskStartDelayMs);
 
             // Open FIFO for writing (synchronous mode as expected for STD handles)
-#if NET48
-            using SafeFileHandle fifoWriteHandle = new FileStream(fifoPath, FileMode.Open, FileAccess.Write, FileShare.ReadWrite).SafeFileHandle;
-#else
             using SafeFileHandle fifoWriteHandle = File.OpenHandle(
                 fifoPath, FileMode.Open, FileAccess.Write, FileShare.ReadWrite, FileOptions.None);
-#endif
 
             Assert.True(fifoWriteHandle.IsPipe());
 

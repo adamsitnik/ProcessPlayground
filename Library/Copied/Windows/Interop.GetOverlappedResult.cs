@@ -9,6 +9,15 @@ internal static partial class Interop
 {
     internal static partial class Kernel32
     {
+#if NET48
+        [DllImport(Libraries.Kernel32, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static unsafe extern bool GetOverlappedResult(
+            SafeFileHandle hFile,
+            NativeOverlapped* lpOverlapped,
+            ref int lpNumberOfBytesTransferred,
+            [MarshalAs(UnmanagedType.Bool)] bool bWait);
+#else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static unsafe partial bool GetOverlappedResult(
@@ -16,5 +25,6 @@ internal static partial class Interop
             NativeOverlapped* lpOverlapped,
             ref int lpNumberOfBytesTransferred,
             [MarshalAs(UnmanagedType.Bool)] bool bWait);
+#endif
     }
 }

@@ -8,10 +8,15 @@ internal static partial class Interop
 {
     internal static partial class Kernel32
     {
+#if NET48
+        [DllImport(Libraries.Kernel32)]
+        internal static extern IntPtr GetStdHandle(int nStdHandle);  // param is NOT a handle, but it returns one!
+#else
         [LibraryImport(Libraries.Kernel32)]
 #if !NO_SUPPRESS_GC_TRANSITION
         [SuppressGCTransition]
 #endif
         internal static partial IntPtr GetStdHandle(int nStdHandle);  // param is NOT a handle, but it returns one!
+#endif
     }
 }

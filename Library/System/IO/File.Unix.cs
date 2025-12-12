@@ -1,5 +1,4 @@
-﻿using System;
-using Microsoft.Win32.SafeHandles;
+﻿using Microsoft.Win32.SafeHandles;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -27,24 +26,12 @@ public static partial class FileExtensions
     private static extern int fcntl(int fd, int cmd, int arg);
 
     private const int O_RDONLY = 0x0000, O_WRONLY = 0x0001, O_RDWR = 0x0002;
-#if NET48
-    private static readonly int O_CLOEXEC = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? 0x1000000 : 0x80000;
-#else
-    private static readonly int O_CLOEXEC = IsMacOS() ? 0x1000000 : 0x80000;
-#endif
+    private static readonly int O_CLOEXEC = OperatingSystem.IsMacOS() ? 0x1000000 : 0x80000;
     private const int F_SETFD = 2;
     private const int FD_CLOEXEC = 1;
     private const int O_NONBLOCK = 0x0004;
     // Unix file mode: 0666 (read/write for user, group, and others)
     private const int UnixFifoMode = 0x1B6;
-
-#if NET48
-    private static int GetLastPInvokeError() => Marshal.GetLastWin32Error();
-    private static bool IsMacOS() => RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
-#else
-    private static int GetLastPInvokeError() => Marshal.GetLastPInvokeError();
-    private static bool IsMacOS() => OperatingSystem.IsMacOS();
-#endif
 
     private static SafeFileHandle OpenNullFileHandleCore()
     {
@@ -58,10 +45,10 @@ public static partial class FileExtensions
                 int result = open(devNullPtr, O_RDWR | O_CLOEXEC);
                 if (result < 0)
                 {
-                    throw new ComponentModel.Win32Exception(GetLastPInvokeError());
+                    throw new ComponentModel.Win32Exception(Marshal.GetLastPInvokeError());
                 }
 
-                return new SafeFileHandle((IntPtr)result, ownsHandle: true);
+                return new SafeFileHandle(result, ownsHandle: true);
             }
         }
     }
@@ -70,18 +57,18 @@ public static partial class FileExtensions
     {
         int* fds = stackalloc int[2];
 
-        if (IsMacOS())
+        if (OperatingSystem.IsMacOS())
         {
             // macOS doesn't have pipe2, use pipe + fcntl
             if (pipe(fds) < 0)
             {
-                throw new ComponentModel.Win32Exception(GetLastPInvokeError());
+                throw new ComponentModel.Win32Exception(Marshal.GetLastPInvokeError());
             }
 
             // Set FD_CLOEXEC on both file descriptors
             if (fcntl(fds[0], F_SETFD, FD_CLOEXEC) < 0 || fcntl(fds[1], F_SETFD, FD_CLOEXEC) < 0)
             {
-                int errno = GetLastPInvokeError();
+                int errno = Marshal.GetLastPInvokeError();
 
                 close(fds[0]);
                 close(fds[1]);
@@ -94,12 +81,12 @@ public static partial class FileExtensions
             // Linux has pipe2 (atomic creation with O_CLOEXEC)
             if (pipe2(fds, O_CLOEXEC) < 0)
             {
-                throw new ComponentModel.Win32Exception(GetLastPInvokeError());
+                throw new ComponentModel.Win32Exception(Marshal.GetLastPInvokeError());
             }
         }
 
-        read = new SafeFileHandle((IntPtr)fds[0], ownsHandle: true);
-        write = new SafeFileHandle((IntPtr)fds[1], ownsHandle: true);
+        read = new SafeFileHandle(fds[0], ownsHandle: true);
+        write = new SafeFileHandle(fds[1], ownsHandle: true);
     }
 
     private static void CreateNamedPipeCore(out SafeFileHandle read, out SafeFileHandle write, string? name)
@@ -107,7 +94,7 @@ public static partial class FileExtensions
         string fifoPath = name ?? Path.Combine(Path.GetTempPath(), $"fifo_{Guid.NewGuid()}\0");
         if (mkfifo(fifoPath, UnixFifoMode) != 0) // Unix file mode: 0666
         {
-            throw new ComponentModel.Win32Exception(GetLastPInvokeError());
+            throw new ComponentModel.Win32Exception(Marshal.GetLastPInvokeError());
         }
 
         byte[] encoded = Encoding.UTF8.GetBytes(fifoPath);
@@ -121,7 +108,7 @@ public static partial class FileExtensions
                 int writeEndResult = open(pEncoded, O_WRONLY | O_CLOEXEC);
                 if (readEndResult < 0 || writeEndResult < 0)
                 {
-                    int lastError = GetLastPInvokeError();
+                    int lastError = Marshal.GetLastPInvokeError();
 
                     close(readEndResult);
                     close(writeEndResult);
@@ -132,8 +119,8 @@ public static partial class FileExtensions
                 // Design! Lack of ability to specify FileOptions.DeleteOnClose.
                 // It's possible with File.OpenHandle, but AFAIK it does not support O_NONBLOCK flag.
                 // TODO!!: make sure it's possible to delete the FIFO file after both ends are closed.
-                read = new SafeFileHandle((IntPtr)readEndResult, ownsHandle: true);
-                write = new SafeFileHandle((IntPtr)writeEndResult, ownsHandle: true);
+                read = new SafeFileHandle(readEndResult, ownsHandle: true);
+                write = new SafeFileHandle(writeEndResult, ownsHandle: true);
             }
         }
     }

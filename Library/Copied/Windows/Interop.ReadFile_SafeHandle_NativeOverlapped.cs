@@ -9,6 +9,15 @@ internal static partial class Interop
 {
     internal static partial class Kernel32
     {
+#if NET48
+        [DllImport(Libraries.Kernel32, SetLastError = true)]
+        internal static unsafe extern int ReadFile(
+            SafeHandle handle,
+            byte* bytes,
+            int numBytesToRead,
+            IntPtr numBytesRead_mustBeZero,
+            NativeOverlapped* overlapped);
+#else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
         internal static unsafe partial int ReadFile(
             SafeHandle handle,
@@ -16,7 +25,17 @@ internal static partial class Interop
             int numBytesToRead,
             IntPtr numBytesRead_mustBeZero,
             NativeOverlapped* overlapped);
+#endif
 
+#if NET48
+        [DllImport(Libraries.Kernel32, SetLastError = true)]
+        internal static unsafe extern int ReadFile(
+            SafeHandle handle,
+            byte* bytes,
+            int numBytesToRead,
+            out int numBytesRead,
+            NativeOverlapped* overlapped);
+#else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
         internal static unsafe partial int ReadFile(
             SafeHandle handle,
@@ -24,5 +43,6 @@ internal static partial class Interop
             int numBytesToRead,
             out int numBytesRead,
             NativeOverlapped* overlapped);
+#endif
     }
 }

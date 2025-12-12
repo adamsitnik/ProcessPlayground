@@ -1,9 +1,3 @@
-using System.IO;
-using System.Threading;
-using System.Linq;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
 using System.TBA;
 using Microsoft.Win32.SafeHandles;
 using System.Runtime.InteropServices;
@@ -20,8 +14,8 @@ public class SocketTests
         int[] fds = new int[2];
         Assert.Equal(0, socketpair(AF_UNIX, SOCK_STREAM, 0, fds));
 
-        using SafeFileHandle readSocket = new((IntPtr)fds[0], ownsHandle: true);
-        using SafeFileHandle writeSocket = new((IntPtr)fds[1], ownsHandle: true);
+        using SafeFileHandle readSocket = new(fds[0], ownsHandle: true);
+        using SafeFileHandle writeSocket = new(fds[1], ownsHandle: true);
 
         // Verify they're recognized as pipes (sockets are treated as pipes)
         Assert.True(readSocket.IsPipe());

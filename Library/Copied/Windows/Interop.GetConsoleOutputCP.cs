@@ -7,7 +7,12 @@ internal static partial class Interop
 {
     internal static partial class Kernel32
     {
+#if NET48
+        [DllImport(Libraries.Kernel32)]
+        internal static extern uint GetConsoleOutputCP();
+#else
         [LibraryImport(Libraries.Kernel32)]
         internal static partial uint GetConsoleOutputCP();
+#endif
     }
 }

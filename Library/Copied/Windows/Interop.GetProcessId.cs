@@ -8,7 +8,12 @@ internal static partial class Interop
 {
     internal static partial class Kernel32
     {
+#if NET48
+        [DllImport(Libraries.Kernel32)]
+        public static extern int GetProcessId(SafeProcessHandle nativeHandle);
+#else
         [LibraryImport(Libraries.Kernel32)]
         public static partial int GetProcessId(SafeProcessHandle nativeHandle);
+#endif
     }
 }

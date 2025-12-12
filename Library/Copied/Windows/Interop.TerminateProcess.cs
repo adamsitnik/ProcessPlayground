@@ -9,8 +9,14 @@ internal static partial class Interop
 {
     internal static partial class Kernel32
     {
+#if NET48
+        [DllImport(Libraries.Kernel32, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool TerminateProcess(SafeProcessHandle processHandle, int exitCode);
+#else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool TerminateProcess(SafeProcessHandle processHandle, int exitCode);
+#endif
     }
 }

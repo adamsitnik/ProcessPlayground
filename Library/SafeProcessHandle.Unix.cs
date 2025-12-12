@@ -1,10 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.IO;
+﻿using System.ComponentModel;
 using System.Runtime.InteropServices;
-using System.Threading;
-using System.Threading.Tasks;
 using System.TBA;
 
 namespace Microsoft.Win32.SafeHandles;
@@ -48,14 +43,6 @@ public static partial class SafeProcessHandleExtensions
     private const int SIGKILL = 9;
     private const int EINTR = 4;
     private const int ECHILD = 10;
-    
-#if NET48
-    private static int GetLastPInvokeError() => Marshal.GetLastWin32Error();
-    private static long GetTickCount64() => (long)(System.Diagnostics.Stopwatch.GetTimestamp() * (1000.0 / System.Diagnostics.Stopwatch.Frequency));
-#else
-    private static int GetLastPInvokeError() => Marshal.GetLastPInvokeError();
-    private static long GetTickCount64() => Environment.TickCount64;
-#endif
     
     private static unsafe SafeProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
@@ -145,7 +132,7 @@ public static partial class SafeProcessHandleExtensions
             // Initialize file actions
             if (posix_spawn_file_actions_init(fileActions) != 0)
             {
-                throw new Win32Exception(GetLastPInvokeError(), "posix_spawn_file_actions_init failed");
+                throw new Win32Exception(Marshal.GetLastPInvokeError(), "posix_spawn_file_actions_init failed");
             }
             fileActionsInitialized = true;
             
@@ -201,7 +188,7 @@ public static partial class SafeProcessHandleExtensions
             // If working directory couldn't be set via file actions, we'll have to accept it
             // The child process will inherit the parent's working directory
             
-            return new SafeProcessHandle((IntPtr)pid, ownsHandle: true);
+            return new SafeProcessHandle(pid, ownsHandle: true);
         }
         finally
         {
@@ -257,7 +244,7 @@ public static partial class SafeProcessHandleExtensions
                 }
                 else if (result == -1)
                 {
-                    int errno = GetLastPInvokeError();
+                    int errno = Marshal.GetLastPInvokeError();
                     if (errno == EINTR) // interrupted system call, retry
                     {
                         continue;
@@ -269,7 +256,7 @@ public static partial class SafeProcessHandleExtensions
         else
         {
             // Wait with timeout using polling
-            long startTime = GetTickCount64();
+            long startTime = Environment.TickCount64;
             long endTime = startTime + milliseconds;
             
             while (true)
@@ -282,7 +269,7 @@ public static partial class SafeProcessHandleExtensions
                 }
                 else if (result == -1)
                 {
-                    int errno = GetLastPInvokeError();
+                    int errno = Marshal.GetLastPInvokeError();
                     if (errno == EINTR)
                     {
                         continue;
@@ -292,7 +279,7 @@ public static partial class SafeProcessHandleExtensions
                 else if (result == 0)
                 {
                     // Process still running
-                    long now = GetTickCount64();
+                    long now = Environment.TickCount64;
                     if (now >= endTime)
                     {
                         // Timeout - terminate the process
@@ -308,7 +295,7 @@ public static partial class SafeProcessHandleExtensions
                             }
                             else if (result == -1)
                             {
-                                int errno = GetLastPInvokeError();
+                                int errno = Marshal.GetLastPInvokeError();
                                 if (errno != EINTR)
                                 {
                                     throw new Win32Exception(errno, "waitpid() failed after timeout");
@@ -355,7 +342,7 @@ public static partial class SafeProcessHandleExtensions
             }
             else if (result == -1)
             {
-                int errno = GetLastPInvokeError();
+                int errno = Marshal.GetLastPInvokeError();
                 if (errno == EINTR)
                 {
                     continue;
@@ -410,7 +397,7 @@ public static partial class SafeProcessHandleExtensions
         }
         
         // If it contains a path separator, treat it as relative
-        if (fileName.Contains("/"))
+        if (fileName.Contains('/'))
         {
             string fullPath = Path.GetFullPath(fileName);
             return System.IO.File.Exists(fullPath) ? fullPath : null;
@@ -423,7 +410,7 @@ public static partial class SafeProcessHandleExtensions
             return null;
         }
         
-        foreach (string dir in pathEnv.Split(new[] { ':' }, StringSplitOptions.None))
+        foreach (string dir in pathEnv.Split(':'))
         {
             if (string.IsNullOrWhiteSpace(dir))
             {

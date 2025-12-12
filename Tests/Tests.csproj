@@ -10,9 +10,16 @@
   <PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>preview</LangVersion>
+    <!-- net48 only runs on Windows, so always use Windows define -->
+    <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
+  <!-- Exclude Unix test files for net48 since Full Framework only runs on Windows -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <Compile Remove="**/*.Unix.cs" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(OS)' == 'Windows_NT' AND '$(TargetFramework)' != 'net48'">
     <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
   </PropertyGroup>
 
@@ -31,11 +38,11 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+  <ItemGroup Condition="'$(OS)' == 'Windows_NT' AND '$(TargetFramework)' != 'net48'">
     <Compile Remove="**/*.Unix.cs" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
+  <ItemGroup Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFramework)' != 'net48'">
     <Compile Remove="**/*.Windows.cs" />
   </ItemGroup>
 

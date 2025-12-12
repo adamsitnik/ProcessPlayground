@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Win32.SafeHandles;
+﻿using Microsoft.Win32.SafeHandles;
 using System.Buffers;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
@@ -32,12 +27,6 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 
     [DllImport("libc", SetLastError = true)]
     private static extern unsafe nint read(int fd, byte* buf, nuint count);
-
-#if NET48
-    private static int GetLastPInvokeError() => Marshal.GetLastWin32Error();
-#else
-    private static int GetLastPInvokeError() => Marshal.GetLastPInvokeError();
-#endif
 
     public IEnumerator<ProcessOutputLine> GetEnumerator()
     {
@@ -102,7 +91,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 
                 if (pollResult < 0)
                 {
-                    int errno = GetLastPInvokeError();
+                    int errno = Marshal.GetLastPInvokeError();
                     if (errno == EINTR)
                     {
                         continue;
@@ -141,7 +130,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 
                     if (bytesRead < 0)
                     {
-                        int errno = GetLastPInvokeError();
+                        int errno = Marshal.GetLastPInvokeError();
                         if (errno == EINTR)
                         {
                             continue;
@@ -170,11 +159,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                             }
 
                             yield return new ProcessOutputLine(
-#if NET48
-                                encoding.GetString(currentBuffer, startIndex, contentLength),
-#else
                                 encoding.GetString(currentBuffer.AsSpan(startIndex, contentLength)),
-#endif
                                 standardError: isError);
 
                             startIndex += lineEnd + 1;

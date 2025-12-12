@@ -11,23 +11,28 @@
   <PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
     <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>preview</LangVersion>
+    <!-- net48 only runs on Windows, so always use Windows define -->
+    <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
     <PackageReference Include="System.Memory" Version="4.5.5" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="8.0.0" />
-  </ItemGroup>
-
-  <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
-    <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
-  </PropertyGroup>
-
-  <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+    <!-- Exclude Unix files for net48 since Full Framework only runs on Windows -->
     <Compile Remove="Copied/Unix/*.cs" />
     <Compile Remove="**/*.Unix.cs" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
+  <PropertyGroup Condition="'$(OS)' == 'Windows_NT' AND '$(TargetFramework)' != 'net48'">
+    <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(OS)' == 'Windows_NT' AND '$(TargetFramework)' != 'net48'">
+    <Compile Remove="Copied/Unix/*.cs" />
+    <Compile Remove="**/*.Unix.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFramework)' != 'net48'">
     <Compile Remove="Copied/Windows/*.cs" />
     <Compile Remove="**/*.Windows.cs" />
   </ItemGroup>
