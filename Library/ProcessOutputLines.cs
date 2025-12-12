@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
 using System.Text;
 
@@ -64,8 +66,13 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             using StreamReader outputReader = new(new FileStream(parentOutputHandle, FileAccess.Read, bufferSize: 0), encoding);
             using StreamReader errorReader = new(new FileStream(parentErrorHandle, FileAccess.Read, bufferSize: 0), encoding);
 
+#if NET48
+            Task<string?> readOutput = outputReader.ReadLineAsync();
+            Task<string?> readError = errorReader.ReadLineAsync();
+#else
             Task<string?> readOutput = outputReader.ReadLineAsync(cancellationToken).AsTask();
             Task<string?> readError = errorReader.ReadLineAsync(cancellationToken).AsTask();
+#endif
             bool isError;
 
             while (true)
@@ -83,7 +90,11 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                     StreamReader activeReader = isError ? errorReader : outputReader;
                     while (true)
                     {
+#if NET48
+                        ValueTask<string?> nextRead = new ValueTask<string?>(activeReader.ReadLineAsync());
+#else
                         ValueTask<string?> nextRead = activeReader.ReadLineAsync(cancellationToken);
+#endif
 
                         // Check if the read completes immediately (data already available)
                         if (nextRead.IsCompleted)
@@ -125,7 +136,11 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             {
                 yield return new(moreData, !isError);
 
+#if NET48
+                moreData = await remaining.ReadLineAsync();
+#else
                 moreData = await remaining.ReadLineAsync(cancellationToken);
+#endif
             }
 
 #if WINDOWS

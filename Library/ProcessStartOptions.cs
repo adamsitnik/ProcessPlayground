@@ -22,7 +22,11 @@ public sealed class ProcessStartOptions
 
     public ProcessStartOptions(string fileName)
     {
+#if NET48
+        ThrowHelper.ThrowIfNullOrEmpty(fileName, nameof(fileName));
+#else
         ArgumentException.ThrowIfNullOrEmpty(fileName);
+#endif
 
         _fileName = fileName;
     }

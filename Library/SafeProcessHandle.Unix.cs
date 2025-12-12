@@ -6,10 +6,6 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.TBA;
-#if NET48
-using static System.MarshalPolyfill;
-using static System.EnvironmentPolyfill;
-#endif
 
 namespace Microsoft.Win32.SafeHandles;
 
@@ -205,7 +201,7 @@ public static partial class SafeProcessHandleExtensions
             // If working directory couldn't be set via file actions, we'll have to accept it
             // The child process will inherit the parent's working directory
             
-            return new SafeProcessHandle(pid, ownsHandle: true);
+            return new SafeProcessHandle((IntPtr)pid, ownsHandle: true);
         }
         finally
         {
@@ -414,7 +410,7 @@ public static partial class SafeProcessHandleExtensions
         }
         
         // If it contains a path separator, treat it as relative
-        if (fileName.Contains('/'))
+        if (fileName.Contains("/"))
         {
             string fullPath = Path.GetFullPath(fileName);
             return System.IO.File.Exists(fullPath) ? fullPath : null;
@@ -427,7 +423,7 @@ public static partial class SafeProcessHandleExtensions
             return null;
         }
         
-        foreach (string dir in pathEnv.Split(':'))
+        foreach (string dir in pathEnv.Split(new[] { ':' }, StringSplitOptions.None))
         {
             if (string.IsNullOrWhiteSpace(dir))
             {

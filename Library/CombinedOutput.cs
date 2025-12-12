@@ -31,6 +31,16 @@ public readonly struct CombinedOutput
     public string GetText(Encoding? encoding = null)
     {
         encoding ??= Encoding.UTF8;
+#if NET48
+        // For NET48, we need to convert to array since GetString doesn't support Span
+        if (Bytes.Length == 0)
+        {
+            return string.Empty;
+        }
+        byte[] array = Bytes.ToArray();
+        return encoding.GetString(array);
+#else
         return encoding.GetString(Bytes.Span);
+#endif
     }
 }

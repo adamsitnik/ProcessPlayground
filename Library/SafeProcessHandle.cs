@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.TBA;
@@ -13,7 +14,11 @@ public static partial class SafeProcessHandleExtensions
     {
         public static SafeProcessHandle Start(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error)
         {
+#if NET48
+            ThrowHelper.ThrowIfNull(options, nameof(options));
+#else
             ArgumentNullException.ThrowIfNull(options);
+#endif
 
             SafeFileHandle? nullHandle = null;
 
@@ -76,7 +81,11 @@ public static partial class SafeProcessHandleExtensions
 
     private static void Validate(SafeProcessHandle processHandle)
     {
+#if NET48
+        ThrowHelper.ThrowIfNull(processHandle, nameof(processHandle));
+#else
         ArgumentNullException.ThrowIfNull(processHandle);
+#endif
         if (processHandle.IsInvalid)
         {
             throw new ArgumentException("Invalid process handle.", nameof(processHandle));

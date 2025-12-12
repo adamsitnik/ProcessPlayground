@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
@@ -7,9 +8,6 @@ using System.Buffers;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
-#if NET48
-using static System.MarshalPolyfill;
-#endif
 
 namespace System.TBA;
 
@@ -172,7 +170,11 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                             }
 
                             yield return new ProcessOutputLine(
+#if NET48
+                                encoding.GetString(currentBuffer, startIndex, contentLength),
+#else
                                 encoding.GetString(currentBuffer.AsSpan(startIndex, contentLength)),
+#endif
                                 standardError: isError);
 
                             startIndex += lineEnd + 1;

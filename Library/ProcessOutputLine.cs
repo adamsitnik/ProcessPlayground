@@ -11,7 +11,11 @@ public readonly struct ProcessOutputLine : IEquatable<ProcessOutputLine>
     public ProcessOutputLine(string content, bool standardError)
     {
         // Empty lines are OK, nulls are not (EOF).
+#if NET48
+        ThrowHelper.ThrowIfNull(content, nameof(content));
+#else
         ArgumentNullException.ThrowIfNull(content);
+#endif
 
         Content = content;
         StandardError = standardError;

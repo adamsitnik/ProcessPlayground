@@ -1,3 +1,10 @@
+using System.Runtime.InteropServices;
+using System.IO;
+using System.Threading;
+using System.Linq;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 ﻿using System.TBA;
 using Microsoft.Win32.SafeHandles;
 using System.Text;
@@ -13,7 +20,7 @@ public class RedirectionTests
     [InlineData(false)]
     public async Task StandardOutputAndErrorCanPointToTheSameHandle(bool useNamedPipes)
     {
-        bool isAsync = useNamedPipes && OperatingSystem.IsWindows();
+        bool isAsync = useNamedPipes && RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
         ProcessStartOptions info = new("dotnet")
         {
             Arguments = { "--help", "--invalid-argument-to-produce-error" },

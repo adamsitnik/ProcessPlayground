@@ -1,3 +1,10 @@
+using System.Text;
+using System.IO;
+using System.Threading;
+using System.Linq;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 ﻿using Microsoft.Win32.SafeHandles;
 
 namespace Tests;

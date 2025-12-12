@@ -9,7 +9,7 @@
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
     <ImplicitUsings>disable</ImplicitUsings>
-    <LangVersion>9.0</LangVersion>
+    <LangVersion>preview</LangVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">

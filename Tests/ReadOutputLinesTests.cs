@@ -1,15 +1,29 @@
+using System.Text;
+using System.IO;
+using System.Threading;
+using System.Linq;
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.TBA;
 
 namespace Tests;
 
 public class ReadOutputLinesTests
 {
+#if NET48
+    private static bool IsWindows() => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+#else
+    private static bool IsWindows() => IsWindows();
+#endif
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public async Task ReadOutputLines_ReturnsStdOutAndStdErr(bool useAsync)
     {
-        ProcessStartOptions options = OperatingSystem.IsWindows()
+        ProcessStartOptions options = IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Hello from stdout && echo Error from stderr 1>&2" } }
             : new("sh") { Arguments = { "-c", "echo 'Hello from stdout' && echo 'Error from stderr' >&2" } };
 
@@ -43,7 +57,7 @@ public class ReadOutputLinesTests
     [InlineData(false)]
     public async Task ReadOutputLines_DistinguishesStdOutAndStdErr(bool useAsync)
     {
-        ProcessStartOptions options = OperatingSystem.IsWindows()
+        ProcessStartOptions options = IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo OUT1 && echo ERR1 1>&2 && echo OUT2 && echo ERR2 1>&2" } }
             : new("sh") { Arguments = { "-c", "echo OUT1 && echo ERR1 >&2 && echo OUT2 && echo ERR2 >&2" } };
 
@@ -81,7 +95,7 @@ public class ReadOutputLinesTests
     [InlineData(false)]
     public async Task ReadOutputLines_HandlesEmptyOutput(bool useAsync)
     {
-        ProcessStartOptions options = OperatingSystem.IsWindows()
+        ProcessStartOptions options = IsWindows()
             ? new("cmd") { Arguments = { "/c", "" } }
             : new("sh") { Arguments = { "-c", "" } };
 
@@ -110,7 +124,7 @@ public class ReadOutputLinesTests
     [InlineData(false)]
     public async Task ReadOutputLines_HandlesLargeOutput(bool useAsync)
     {
-        ProcessStartOptions options = OperatingSystem.IsWindows()
+        ProcessStartOptions options = IsWindows()
             ? new("cmd") { Arguments = { "/c", "for /L %i in (1,1,1000) do @echo Line %i" } }
             : new("sh") { Arguments = { "-c", "for i in $(seq 1 1000); do echo \"Line $i\"; done" } };
 
@@ -144,7 +158,7 @@ public class ReadOutputLinesTests
     [InlineData(false)]
     public async Task ReadOutputLines_HandlesInterleavedOutput(bool useAsync)
     {
-        ProcessStartOptions options = OperatingSystem.IsWindows()
+        ProcessStartOptions options = IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo A && echo B 1>&2 && echo C && echo D 1>&2 && echo E" } }
             : new("sh") { Arguments = { "-c", "echo A && echo B >&2 && echo C && echo D >&2 && echo E" } };
 
@@ -189,7 +203,7 @@ public class ReadOutputLinesTests
     [InlineData(false)]
     public async Task ReadOutputLines_HandlesOnlyStdOut(bool useAsync)
     {
-        ProcessStartOptions options = OperatingSystem.IsWindows()
+        ProcessStartOptions options = IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Line1 && echo Line2 && echo Line3" } }
             : new("sh") { Arguments = { "-c", "echo Line1 && echo Line2 && echo Line3" } };
 
@@ -222,7 +236,7 @@ public class ReadOutputLinesTests
     [InlineData(false)]
     public async Task ReadOutputLines_HandlesOnlyStdErr(bool useAsync)
     {
-        ProcessStartOptions options = OperatingSystem.IsWindows()
+        ProcessStartOptions options = IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Error1 1>&2 && echo Error2 1>&2 && echo Error3 1>&2" } }
             : new("sh") { Arguments = { "-c", "echo Error1 >&2 && echo Error2 >&2 && echo Error3 >&2" } };
 
@@ -253,7 +267,7 @@ public class ReadOutputLinesTests
     [Fact]
     public void ReadOutputLines_WithTimeout_CompletesBeforeTimeout()
     {
-        ProcessStartOptions options = OperatingSystem.IsWindows()
+        ProcessStartOptions options = IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Quick output" } }
             : new("sh") { Arguments = { "-c", "echo 'Quick output'" } };
 
@@ -271,14 +285,14 @@ public class ReadOutputLinesTests
     [Fact]
     public void ReadOutputLines_WithTimeout_ThrowsOnTimeout()
     {
-        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
+        if (IsWindows() && Console.IsInputRedirected)
         {
             // On Windows, if standard input is redirected, the test cannot proceed
             // because timeout utility requires it.
             return;
         }
 
-        ProcessStartOptions options = OperatingSystem.IsWindows()
+        ProcessStartOptions options = IsWindows()
             ? new("cmd") { Arguments = { "/c", "timeout /t 10 /nobreak" } }
             : new("sh") { Arguments = { "-c", "sleep 10" } };
 
@@ -294,14 +308,14 @@ public class ReadOutputLinesTests
     [Fact]
     public async Task ReadOutputLinesAsync_WithCancellation_ThrowsOperationCanceled()
     {
-        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
+        if (IsWindows() && Console.IsInputRedirected)
         {
             // On Windows, if standard input is redirected, the test cannot proceed
             // because timeout utility requires it.
             return;
         }
 
-        ProcessStartOptions options = OperatingSystem.IsWindows()
+        ProcessStartOptions options = IsWindows()
             ? new("cmd") { Arguments = { "/c", "timeout /t 10 /nobreak" } }
             : new("sh") { Arguments = { "-c", "sleep 10" } };
 
@@ -319,7 +333,7 @@ public class ReadOutputLinesTests
     [Fact]
     public async Task ReadOutputLinesAsync_MultipleConcurrentCalls()
     {
-        ProcessStartOptions options = OperatingSystem.IsWindows()
+        ProcessStartOptions options = IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Concurrent test" } }
             : new("sh") { Arguments = { "-c", "echo 'Concurrent test'" } };
 
@@ -354,7 +368,7 @@ public class ReadOutputLinesTests
     [InlineData(false)]
     public async Task ReadOutputLines_PreservesLineOrder(bool useAsync)
     {
-        ProcessStartOptions options = OperatingSystem.IsWindows()
+        ProcessStartOptions options = IsWindows()
             ? new("cmd") { Arguments = { "/c", "for /L %i in (1,1,100) do @echo Line %i" } }
             : new("sh") { Arguments = { "-c", "for i in $(seq 1 100); do echo \"Line $i\"; done" } };
 
@@ -392,7 +406,7 @@ public class ReadOutputLinesTests
     {
         // Create a very long line (1KB)
         string longString = new('X', 1000);
-        ProcessStartOptions options = OperatingSystem.IsWindows()
+        ProcessStartOptions options = IsWindows()
             ? new("cmd") { Arguments = { "/c", $"echo {longString}" } }
             : new("sh") { Arguments = { "-c", $"echo '{longString}'" } };
 
@@ -422,7 +436,7 @@ public class ReadOutputLinesTests
     [InlineData(false)]
     public async Task ReadOutputLines_CanProcessLineByLine(bool useAsync)
     {
-        ProcessStartOptions options = OperatingSystem.IsWindows()
+        ProcessStartOptions options = IsWindows()
             ? new("cmd") { Arguments = { "/c", "for /L %i in (1,1,10) do @echo Line %i" } }
             : new("sh") { Arguments = { "-c", "for i in $(seq 1 10); do echo \"Line $i\"; done" } };
 

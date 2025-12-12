@@ -1,3 +1,11 @@
+using System.Runtime.InteropServices;
+using System.Text;
+using System.IO;
+using System.Threading;
+using System.Linq;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 ﻿using System.TBA;
 using Microsoft.Win32.SafeHandles;
 
@@ -17,7 +25,7 @@ public class PipingTests
             ProcessStartOptions consumer;
             string expectedOutput;
 
-            if (OperatingSystem.IsWindows())
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 producer = new("cmd")
                 {
@@ -47,7 +55,11 @@ public class PipingTests
 
             using SafeProcessHandle producerHandle = SafeProcessHandle.Start(producer, input: null, output: writePipe, error: null);
 
+#if NET48
+            using (SafeFileHandle outputHandle = new FileStream("output.txt", FileMode.Create, FileAccess.Write, FileShare.ReadWrite).SafeFileHandle)
+#else
             using (SafeFileHandle outputHandle = File.OpenHandle("output.txt", FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
+#endif
             {
                 using SafeProcessHandle consumerHandle = SafeProcessHandle.Start(consumer, readPipe, outputHandle, error: null);
 
@@ -55,7 +67,11 @@ public class PipingTests
                 await consumerHandle.WaitForExitAsync();
             }
 
+#if NET48
+            string result = File.ReadAllText("output.txt");
+#else
             string result = await File.ReadAllTextAsync("output.txt");
+#endif
             Assert.Equal(expectedOutput, result, ignoreLineEndingDifferences: true);
         }
     }
