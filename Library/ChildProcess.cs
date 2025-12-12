@@ -125,13 +125,14 @@ public static partial class ChildProcess
     /// <summary>
     /// Creates an instance of <see cref="ProcessOutputLines"/> to stream the output of the process.
     /// </summary>
+    /// <param name="timeout">The timeout to use when reading the output. If null, no timeout is applied.</param>
     /// <param name="encoding">The encoding to use when reading the output. If null, the default encoding is used.</param>
     /// <returns>An instance of <see cref="ProcessOutputLines"/> ready to be enumerated.</returns>
-    public static ProcessOutputLines ReadOutputLines(ProcessStartOptions options, Encoding? encoding = null)
+    public static ProcessOutputLines ReadOutputLines(ProcessStartOptions options, TimeSpan? timeout = null, Encoding? encoding = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        return new(options, encoding);
+        return new(options, timeout, encoding);
     }
 
     /// <summary>

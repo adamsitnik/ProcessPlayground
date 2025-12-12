@@ -26,7 +26,7 @@ public class ReadOutputLinesTests
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options).ReadLines())
+            foreach (var line in ChildProcess.ReadOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -62,7 +62,7 @@ public class ReadOutputLinesTests
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options).ReadLines())
+            foreach (var line in ChildProcess.ReadOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -102,7 +102,7 @@ public class ReadOutputLinesTests
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options).ReadLines())
+            foreach (var line in ChildProcess.ReadOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -133,7 +133,7 @@ public class ReadOutputLinesTests
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options).ReadLines())
+            foreach (var line in ChildProcess.ReadOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -169,7 +169,7 @@ public class ReadOutputLinesTests
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options).ReadLines())
+            foreach (var line in ChildProcess.ReadOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -216,7 +216,7 @@ public class ReadOutputLinesTests
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options).ReadLines())
+            foreach (var line in ChildProcess.ReadOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -251,7 +251,7 @@ public class ReadOutputLinesTests
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options).ReadLines())
+            foreach (var line in ChildProcess.ReadOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -274,7 +274,7 @@ public class ReadOutputLinesTests
             : new("sh") { Arguments = { "-c", "echo 'Quick output'" } };
 
         List<ProcessOutputLine> lines = [];
-        foreach (var line in ChildProcess.ReadOutputLines(options).ReadLines(timeout: TimeSpan.FromSeconds(5)))
+        foreach (var line in ChildProcess.ReadOutputLines(options, timeout: TimeSpan.FromSeconds(5)))
         {
             lines.Add(line);
         }
@@ -302,7 +302,7 @@ public class ReadOutputLinesTests
 
         Assert.Throws<TimeoutException>(() =>
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options).ReadLines(timeout: TimeSpan.FromMilliseconds(500)))
+            foreach (var line in ChildProcess.ReadOutputLines(options, timeout: TimeSpan.FromMilliseconds(500)))
             {
                 _ = line;
             }
@@ -391,7 +391,7 @@ public class ReadOutputLinesTests
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options).ReadLines())
+            foreach (var line in ChildProcess.ReadOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -431,7 +431,7 @@ public class ReadOutputLinesTests
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options).ReadLines())
+            foreach (var line in ChildProcess.ReadOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -464,7 +464,7 @@ public class ReadOutputLinesTests
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options).ReadLines())
+            foreach (var line in ChildProcess.ReadOutputLines(options))
             {
                 lineCount++;
                 Assert.Equal($"Line {lineCount}", line.Content.TrimEnd(' '));

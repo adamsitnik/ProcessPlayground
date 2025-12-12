@@ -1,4 +1,5 @@
 ﻿using Microsoft.Win32.SafeHandles;
+using System.Collections;
 using System.Text;
 
 namespace System.TBA;
@@ -6,15 +7,17 @@ namespace System.TBA;
 /// <summary>
 /// An async enumerable that streams output lines from a command line process.
 /// </summary>
-public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
+public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, IEnumerable<ProcessOutputLine>
 {
     private readonly ProcessStartOptions _options;
+    private readonly TimeSpan? _timeout;
     private readonly Encoding? _encoding;
     private int? _exitCode, _processId;
 
-    internal ProcessOutputLines(ProcessStartOptions options, Encoding? encoding)
+    internal ProcessOutputLines(ProcessStartOptions options, TimeSpan? timeout, Encoding? encoding)
     {
         _options = options;
+        _timeout = timeout;
         _encoding = encoding;
     }
 
@@ -129,4 +132,6 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
 #endif
         }
     }
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }

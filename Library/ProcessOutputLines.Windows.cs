@@ -6,14 +6,13 @@ namespace System.TBA;
 
 #pragma warning disable CA1416 // Validate platform compatibility
 
-public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
+public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, IEnumerable<ProcessOutputLine>
 {
-    public IEnumerable<ProcessOutputLine> ReadLines(TimeSpan? timeout = default)
+    public IEnumerator<ProcessOutputLine> GetEnumerator()
     {
         // NOTE: we could get current console Encoding here, it's omitted for the sake of simplicity of the proof of concept.
         Encoding encoding = _encoding ?? Encoding.UTF8;
-
-        TimeoutHelper timeoutHelper = TimeoutHelper.Start(timeout);
+        TimeoutHelper timeoutHelper = TimeoutHelper.Start(_timeout);
 
         byte[] outputBuffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
         byte[] errorBuffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
@@ -175,7 +174,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
             }
             else
             {
-                _exitCode = processHandle.WaitForExit(timeout);
+                _exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow());
             }
 
             yield break;

@@ -108,7 +108,7 @@ public class RedirectToPipe
         };
 
         var lines = ChildProcess.ReadOutputLines(info);
-        foreach (var line in lines.ReadLines())
+        foreach (var line in lines)
         {
             // We don't re-print, so the benchmark focuses on reading only.
             _ = line.Content;

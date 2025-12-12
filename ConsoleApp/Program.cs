@@ -161,7 +161,7 @@ static void StreamSync()
     };
 
     var output = ChildProcess.ReadOutputLines(info);
-    foreach (var line in output.ReadLines())
+    foreach (var line in output)
     {
         if (line.StandardError)
         {
