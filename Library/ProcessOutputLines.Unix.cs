@@ -50,10 +50,6 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 
             _processId = processHandle.GetProcessId();
 
-            // Close child handles in parent process - they are now owned by the child
-            childOutputHandle.Dispose();
-            childErrorHandle.Dispose();
-
             int outputFd = (int)parentOutputHandle.DangerousGetHandle();
             int errorFd = (int)parentErrorHandle.DangerousGetHandle();
             bool outputClosed = false;
@@ -202,13 +198,11 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                         {
                             errorStartIndex = currentStartIndex;
                             errorEndIndex = currentEndIndex;
-                            errorBuffer = currentBuffer;
                         }
                         else
                         {
                             outputStartIndex = currentStartIndex;
                             outputEndIndex = currentEndIndex;
-                            outputBuffer = currentBuffer;
                         }
                     }
                     else // EOF on this stream
