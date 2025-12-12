@@ -25,6 +25,18 @@ public static partial class FileExtensions
         /// <remarks>
         /// <para>The read end of the pipe can be used to read data written to the write end.</para>
         /// </remarks>
-        public static void CreateAnonymousPipe(out SafeFileHandle read, out SafeFileHandle write) => CreateAnonymousPipeCore(out read, out write);
+        public static void CreateAnonymousPipe(out SafeFileHandle read, out SafeFileHandle write)
+            => CreateAnonymousPipeCore(out read, out write);
+
+        /// <summary>
+        /// Creates a named pipe for inter-process communication.
+        /// </summary>
+        /// <remarks>
+        /// <para>The read end of the pipe can be used to read data written to the write end.</para>
+        /// <para>The read end is a async and write end is sync.</para>
+        /// </remarks>
+        // DESIGN: this method may be too specific to make it public in general File API!
+        public static void CreateNamedPipe(out SafeFileHandle read, out SafeFileHandle write, string? name = null)
+            => CreateNamedPipeCore(out read, out write, name);
     }
 }

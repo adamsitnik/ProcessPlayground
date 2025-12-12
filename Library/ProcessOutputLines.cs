@@ -1,4 +1,5 @@
 ﻿using Microsoft.Win32.SafeHandles;
+using System.Collections;
 using System.Text;
 
 namespace System.TBA;
@@ -6,15 +7,17 @@ namespace System.TBA;
 /// <summary>
 /// An async enumerable that streams output lines from a command line process.
 /// </summary>
-public class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
+public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, IEnumerable<ProcessOutputLine>
 {
     private readonly ProcessStartOptions _options;
+    private readonly TimeSpan? _timeout;
     private readonly Encoding? _encoding;
     private int? _exitCode, _processId;
 
-    internal ProcessOutputLines(ProcessStartOptions options, Encoding? encoding)
+    internal ProcessOutputLines(ProcessStartOptions options, TimeSpan? timeout, Encoding? encoding)
     {
         _options = options;
+        _timeout = timeout;
         _encoding = encoding;
     }
 
@@ -35,10 +38,16 @@ public class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
     // Design: prevent the deadlocks: the user has to consume output lines, otherwise the process is not even started.
     public async IAsyncEnumerator<ProcessOutputLine> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
+#if WINDOWS
+        // On Windows, we prefer named pipes to anonymous pipes to allow for 100% async reads.
+        File.CreateNamedPipe(out SafeFileHandle parentOutputHandle, out SafeFileHandle childOutputHandle);
+        File.CreateNamedPipe(out SafeFileHandle parentErrorHandle, out SafeFileHandle childErrorHandle);
+#else
         File.CreateAnonymousPipe(out SafeFileHandle parentOutputHandle, out SafeFileHandle childOutputHandle);
         File.CreateAnonymousPipe(out SafeFileHandle parentErrorHandle, out SafeFileHandle childErrorHandle);
+#endif
 
-        using SafeFileHandle inputHandle = Console.GetStandardInputHandle();
+        using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
         using (parentOutputHandle)
         using (childOutputHandle)
         using (childErrorHandle)
@@ -123,4 +132,6 @@ public class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
 #endif
         }
     }
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }

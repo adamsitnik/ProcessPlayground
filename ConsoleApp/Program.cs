@@ -4,7 +4,13 @@ using System.Diagnostics;
 
 #pragma warning disable  // Local function is declared but never used
 
-await StreamAsync();
+ProcessStartOptions info = new("dotnet")
+{
+    Arguments = { "--help" },
+};
+
+CombinedOutput output = ChildProcess.GetCombinedOutput(info, timeout: TimeSpan.FromSeconds(2));
+Console.WriteLine(output.ExitCode);
 
 static void LongRunningWithTimeout()
 {
@@ -110,8 +116,52 @@ static async Task StreamAsync()
         Arguments = { "--help" },
     };
 
-    var output = ChildProcess.ReadOutputLinesAsync(info);
+    var output = ChildProcess.ReadOutputLines(info);
     await foreach (var line in output)
+    {
+        if (line.StandardError)
+        {
+            Console.Error.WriteLine($"ERR: {line.Content}");
+        }
+        else
+        {
+            Console.WriteLine($"OUT: {line.Content}");
+        }
+    }
+    Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
+}
+
+static void OldReprint()
+{
+    using (Process process = new())
+    {
+        process.StartInfo.FileName = "dotnet";
+        process.StartInfo.Arguments = "--help";
+        process.StartInfo.CreateNoWindow = true;
+        process.StartInfo.RedirectStandardOutput = true;
+        process.StartInfo.RedirectStandardError = true;
+
+        process.OutputDataReceived += static (sender, e) => Console.WriteLine($"OUT: {e.Data}");
+        process.ErrorDataReceived += static (sender, e) => Console.Error.WriteLine($"ERR: {e.Data}");
+
+        process.Start();
+
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        process.WaitForExit();
+    }
+}
+
+static void StreamSync()
+{
+    ProcessStartOptions info = new("dotnet")
+    {
+        Arguments = { "--help" },
+    };
+
+    var output = ChildProcess.ReadOutputLines(info);
+    foreach (var line in output)
     {
         if (line.StandardError)
         {
@@ -134,7 +184,7 @@ static async Task StreamLongRunningWithTimeoutAsync()
     };
 
     using CancellationTokenSource cts = new(TimeSpan.FromSeconds(3));
-    await foreach (var line in ChildProcess.ReadOutputLinesAsync(info).WithCancellation(cts.Token))
+    await foreach (var line in ChildProcess.ReadOutputLines(info).WithCancellation(cts.Token))
     {
         Console.WriteLine(line.Content);
     }

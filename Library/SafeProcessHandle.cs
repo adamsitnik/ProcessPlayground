@@ -80,7 +80,7 @@ public static partial class SafeProcessHandleExtensions
         }
     }
 
-    private static int GetTimeoutInMilliseconds(TimeSpan? timeout)
+    internal static int GetTimeoutInMilliseconds(this TimeSpan? timeout)
         => timeout switch
         {
             null => Timeout.Infinite,

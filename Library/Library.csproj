@@ -24,7 +24,8 @@
 
   <ItemGroup>
     <!-- Workaround https://github.com/dotnet/project-system/issues/935 -->
-    <None Include="**/*.cs" />
+    <None Include="Copied/**/*.cs" />
+    <None Include="*.cs" />
   </ItemGroup>
 
 </Project>
