@@ -8,21 +8,11 @@ namespace System.TBA;
 
 public static partial class ChildProcess
 {
-    private static unsafe CombinedOutput ReadAllBytesWithTimeout(SafeFileHandle fileHandle, SafeProcessHandle processHandle, int processId, TimeSpan? timeout)
+    private static unsafe CombinedOutput ReadAllBytesWithTimeout(SafeFileHandle fileHandle, SafeProcessHandle processHandle, int processId, TimeoutHelper timeout)
     {
-        int totalMilliseconds = timeout.GetTimeoutInMilliseconds();
         int totalBytesRead = 0;
 
-        // We use different initial buffer sizes in debug vs release builds
-        // to ensure the unit tests cover buffer growth logic every time.
-        const int InitialBufferSize =
-#if !RELEASE // in dotnet/runtime it's both DEBUG and CHECKED
-            512;
-#else
-            4096 * 8;
-#endif
-
-        byte[] array = ArrayPool<byte>.Shared.Rent(InitialBufferSize);
+        byte[] array = ArrayPool<byte>.Shared.Rent(BufferHelpers.InitialRentedBufferSize);
         try
         {
             using OverlappedContext overlappedContext = OverlappedContext.Allocate();
@@ -36,18 +26,12 @@ public static partial class ChildProcess
                     int errorCode = fileHandle.GetLastWin32ErrorAndDisposeHandleIfInvalid();
                     if (errorCode == Interop.Errors.ERROR_IO_PENDING)
                     {
-                        // TODO: monitor the time and reduce the timeout for each read
-                        if (!overlappedContext.WaitHandle.WaitOne(totalMilliseconds))
+                        if (timeout.HasExpired || !overlappedContext.WaitHandle.WaitOne(timeout.GetRemainingMillisecondsOrThrow()))
                         {
                             HandleTimeout(processHandle, fileHandle, overlappedContext.GetOverlapped());
                         }
 
                         errorCode = Interop.Errors.ERROR_SUCCESS;
-                    }
-
-                    if (errorCode != Interop.Errors.ERROR_SUCCESS)
-                    {
-                        throw new Win32Exception(errorCode);
                     }
 
                     int bytesRead = overlappedContext.GetOverlappedResult(fileHandle);
@@ -59,7 +43,7 @@ public static partial class ChildProcess
                     totalBytesRead += bytesRead;
                     if (array.Length == totalBytesRead)
                     {
-                        GrowBuffer(ref array);
+                        BufferHelpers.RentLargerBuffer(ref array);
                     }
                 }
             }
@@ -67,8 +51,7 @@ public static partial class ChildProcess
             if (!Interop.Kernel32.GetExitCodeProcess(processHandle, out int exitCode)
                 || exitCode == Interop.Kernel32.HandleOptions.STILL_ACTIVE)
             {
-                // TODO: modify the timeout based on the time already spent reading
-                exitCode = processHandle.WaitForExit(timeout);
+                exitCode = processHandle.WaitForExit(timeout.GetRemainingOrThrow());
             }
 
             return new(exitCode, CreateCopy(array, totalBytesRead), processId);

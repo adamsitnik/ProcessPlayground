@@ -44,7 +44,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
         File.CreateAnonymousPipe(out SafeFileHandle parentErrorHandle, out SafeFileHandle childErrorHandle);
 #endif
 
-        using SafeFileHandle inputHandle = Console.GetStandardInputHandle();
+        using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
         using (parentOutputHandle)
         using (childOutputHandle)
         using (childErrorHandle)

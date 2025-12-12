@@ -116,7 +116,7 @@ static async Task StreamAsync()
         Arguments = { "--help" },
     };
 
-    var output = ChildProcess.ReadOutputLinesAsync(info);
+    var output = ChildProcess.ReadOutputLines(info);
     await foreach (var line in output)
     {
         if (line.StandardError)
@@ -160,7 +160,7 @@ static void StreamSync()
         Arguments = { "--help" },
     };
 
-    var output = ChildProcess.ReadOutputLinesAsync(info);
+    var output = ChildProcess.ReadOutputLines(info);
     foreach (var line in output.ReadLines())
     {
         if (line.StandardError)
@@ -184,7 +184,7 @@ static async Task StreamLongRunningWithTimeoutAsync()
     };
 
     using CancellationTokenSource cts = new(TimeSpan.FromSeconds(3));
-    await foreach (var line in ChildProcess.ReadOutputLinesAsync(info).WithCancellation(cts.Token))
+    await foreach (var line in ChildProcess.ReadOutputLines(info).WithCancellation(cts.Token))
     {
         Console.WriteLine(line.Content);
     }

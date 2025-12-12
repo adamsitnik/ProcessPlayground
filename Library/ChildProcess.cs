@@ -18,9 +18,9 @@ public static partial class ChildProcess
 
         // Design: this is exactly what ProcessStartInfo does when RedirectStandard{Input,Output,Error} are false (default).
         // We allow specifying a timeout and killing the process if it exceeds it.
-        using SafeFileHandle inputHandle = Console.GetStandardInputHandle();
-        using SafeFileHandle outputHandle = Console.GetStandardOutputHandle();
-        using SafeFileHandle errorHandle = Console.GetStandardErrorHandle();
+        using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
+        using SafeFileHandle outputHandle = Console.OpenStandardOutputHandle();
+        using SafeFileHandle errorHandle = Console.OpenStandardErrorHandle();
 
         using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
         return procHandle.WaitForExit(timeout);
@@ -35,9 +35,9 @@ public static partial class ChildProcess
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        using SafeFileHandle inputHandle = Console.GetStandardInputHandle();
-        using SafeFileHandle outputHandle = Console.GetStandardOutputHandle();
-        using SafeFileHandle errorHandle = Console.GetStandardErrorHandle();
+        using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
+        using SafeFileHandle outputHandle = Console.OpenStandardOutputHandle();
+        using SafeFileHandle errorHandle = Console.OpenStandardErrorHandle();
 
         using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
         return await procHandle.WaitForExitAsync(cancellationToken);
@@ -127,7 +127,7 @@ public static partial class ChildProcess
     /// </summary>
     /// <param name="encoding">The encoding to use when reading the output. If null, the default encoding is used.</param>
     /// <returns>An instance of <see cref="ProcessOutputLines"/> ready to be enumerated.</returns>
-    public static ProcessOutputLines ReadOutputLinesAsync(ProcessStartOptions options, Encoding? encoding = null)
+    public static ProcessOutputLines ReadOutputLines(ProcessStartOptions options, Encoding? encoding = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -150,9 +150,10 @@ public static partial class ChildProcess
 
         SafeFileHandle? read = null;
         SafeFileHandle? write = null;
+        TimeoutHelper timeoutHelper = TimeoutHelper.Start(timeout);
 
 #if WINDOWS
-        if (timeout is not null)
+        if (timeoutHelper.CanExpire)
         {
             // We open ASYNC read handle and sync write handle to allow for cancellation for timeout.
             File.CreateNamedPipe(out read, out write);
@@ -177,11 +178,11 @@ public static partial class ChildProcess
             // We can also implement in on Unix, but for now, we only do it on Windows.
             if (timeout is not null)
             {
-                return ReadAllBytesWithTimeout(read, processHandle, processId, timeout);
+                return ReadAllBytesWithTimeout(read, processHandle, processId, timeoutHelper);
             }
 #endif
             using FileStream outputStream = new(read, FileAccess.Read, bufferSize: 1, isAsync: false);
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(4096 * 8);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferHelpers.InitialRentedBufferSize);
             int totalBytesRead = 0;
 
             try
@@ -198,7 +199,7 @@ public static partial class ChildProcess
                     if (totalBytesRead == buffer.Length)
                     {
                         // Resize the buffer
-                        GrowBuffer(ref buffer);
+                        BufferHelpers.RentLargerBuffer(ref buffer);
                     }
                 }
 
@@ -212,7 +213,7 @@ public static partial class ChildProcess
                     return new(fasPathExitCode, resultBuffer, processId);
                 }
 #endif
-                int exitCode = processHandle.WaitForExit(timeout);
+                int exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow());
                 return new(exitCode, resultBuffer, processId);
             }
             finally
@@ -262,7 +263,7 @@ public static partial class ChildProcess
         {
             int processId = processHandle.GetProcessId();
 
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(4096 * 8);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferHelpers.InitialRentedBufferSize);
             int totalBytesRead = 0;
 
             try
@@ -278,7 +279,7 @@ public static partial class ChildProcess
                     totalBytesRead += bytesRead;
                     if (totalBytesRead == buffer.Length)
                     {
-                        GrowBuffer(ref buffer);
+                        BufferHelpers.RentLargerBuffer(ref buffer);
                     }
                 }
 
@@ -330,21 +331,5 @@ public static partial class ChildProcess
         byte[] resultBuffer = GC.AllocateUninitializedArray<byte>(totalBytesRead);
         Buffer.BlockCopy(buffer, 0, resultBuffer, 0, totalBytesRead);
         return resultBuffer;
-    }
-
-
-    private static void GrowBuffer(ref byte[] buffer)
-    {
-        byte[] oldBuffer = buffer;
-        buffer = ArrayPool<byte>.Shared.Rent(Math.Min(buffer.Length * 2, Array.MaxLength));
-
-        try
-        {
-            Buffer.BlockCopy(oldBuffer, 0, buffer, 0, oldBuffer.Length);
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(oldBuffer);
-        }
     }
 }
