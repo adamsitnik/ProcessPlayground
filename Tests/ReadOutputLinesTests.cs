@@ -6,9 +6,7 @@ public class ReadOutputLinesTests
 {
     [Theory]
     [InlineData(true)]
-#if WINDOWS // not implemented on Unix yet
     [InlineData(false)]
-#endif
     public async Task ReadOutputLines_ReturnsStdOutAndStdErr(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -42,9 +40,7 @@ public class ReadOutputLinesTests
 
     [Theory]
     [InlineData(true)]
-#if WINDOWS
     [InlineData(false)]
-#endif
     public async Task ReadOutputLines_DistinguishesStdOutAndStdErr(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -82,9 +78,7 @@ public class ReadOutputLinesTests
 
     [Theory]
     [InlineData(true)]
-#if WINDOWS
     [InlineData(false)]
-#endif
     public async Task ReadOutputLines_HandlesEmptyOutput(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -113,9 +107,7 @@ public class ReadOutputLinesTests
 
     [Theory]
     [InlineData(true)]
-#if WINDOWS
     [InlineData(false)]
-#endif
     public async Task ReadOutputLines_HandlesLargeOutput(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -149,9 +141,7 @@ public class ReadOutputLinesTests
 
     [Theory]
     [InlineData(true)]
-#if WINDOWS
     [InlineData(false)]
-#endif
     public async Task ReadOutputLines_HandlesInterleavedOutput(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -196,9 +186,7 @@ public class ReadOutputLinesTests
 
     [Theory]
     [InlineData(true)]
-#if WINDOWS
     [InlineData(false)]
-#endif
     public async Task ReadOutputLines_HandlesOnlyStdOut(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -231,9 +219,7 @@ public class ReadOutputLinesTests
 
     [Theory]
     [InlineData(true)]
-#if WINDOWS
     [InlineData(false)]
-#endif
     public async Task ReadOutputLines_HandlesOnlyStdErr(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -264,9 +250,7 @@ public class ReadOutputLinesTests
         Assert.All(lines, line => Assert.True(line.StandardError));
     }
 
-#if WINDOWS
     [Fact]
-#endif
     public void ReadOutputLines_WithTimeout_CompletesBeforeTimeout()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -284,9 +268,7 @@ public class ReadOutputLinesTests
         Assert.False(lines[0].StandardError);
     }
 
-#if WINDOWS
     [Fact]
-#endif
     public void ReadOutputLines_WithTimeout_ThrowsOnTimeout()
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
@@ -309,9 +291,7 @@ public class ReadOutputLinesTests
         });
     }
 
-#if WINDOWS
     [Fact]
-#endif
     public async Task ReadOutputLinesAsync_WithCancellation_ThrowsOperationCanceled()
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
@@ -371,9 +351,7 @@ public class ReadOutputLinesTests
 
     [Theory]
     [InlineData(true)]
-#if WINDOWS
     [InlineData(false)]
-#endif
     public async Task ReadOutputLines_PreservesLineOrder(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -409,9 +387,7 @@ public class ReadOutputLinesTests
 
     [Theory]
     [InlineData(true)]
-#if WINDOWS
     [InlineData(false)]
-#endif
     public async Task ReadOutputLines_HandlesLongLines(bool useAsync)
     {
         // Create a very long line (1KB)
@@ -443,9 +419,7 @@ public class ReadOutputLinesTests
 
     [Theory]
     [InlineData(true)]
-#if WINDOWS
     [InlineData(false)]
-#endif
     public async Task ReadOutputLines_CanProcessLineByLine(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
