@@ -1,5 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
 namespace Microsoft.Win32.SafeHandles;
 
@@ -36,18 +35,4 @@ public static partial class SafeFileHandleExtensions
 
         return errorCode;
     }
-
-    internal static ThreadPoolBoundHandle GetOrCreateThreadPoolBinding(this SafeFileHandle handle)
-    {
-        // I am not sure if we really need that, we could just do what EnsureThreadPoolBindingInitialized
-        // because we own all the safe file handles we create.
-        EnsureThreadPoolBindingInitialized(handle);
-        return GetThreadPoolBinding(handle);
-    }
-
-    [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "EnsureThreadPoolBindingInitialized")]
-    extern static void EnsureThreadPoolBindingInitialized(SafeFileHandle @this);
-
-    [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_ThreadPoolBinding")]
-    extern static ThreadPoolBoundHandle GetThreadPoolBinding(SafeFileHandle @this);
 }

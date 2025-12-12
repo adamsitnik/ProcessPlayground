@@ -11,29 +11,35 @@ public static partial class ChildProcess
     private static unsafe CombinedOutput ReadAllBytesWithTimeout(SafeFileHandle fileHandle, SafeProcessHandle processHandle, int processId, TimeSpan? timeout)
     {
         int totalMilliseconds = timeout.GetTimeoutInMilliseconds();
-
-        ThreadPoolBoundHandle threadPoolHandle = fileHandle.GetOrCreateThreadPoolBinding();
-        using CallbackResetEvent outputResetEvent = new(threadPoolHandle);
-        byte[] array = ArrayPool<byte>.Shared.Rent(4096 * 8);
         int totalBytesRead = 0;
 
+        // We use different initial buffer sizes in debug vs release builds
+        // to ensure the unit tests cover buffer growth logic every time.
+        const int InitialBufferSize =
+#if !RELEASE // in dotnet/runtime it's both DEBUG and CHECKED
+            512;
+#else
+            4096 * 8;
+#endif
+
+        byte[] array = ArrayPool<byte>.Shared.Rent(InitialBufferSize);
         try
         {
+            using OverlappedContext overlappedContext = OverlappedContext.Allocate();
             while (true)
             {
-                Span<byte> remainingSpan = array.AsSpan(totalBytesRead);
-                NativeOverlapped* overlapped = outputResetEvent.GetNativeOverlappedForAsyncHandle(threadPoolHandle);
-
-                fixed (byte* outputPin = remainingSpan)
+                Span<byte> remainingBytes = array.AsSpan(totalBytesRead);
+                fixed (byte* pinnedRemaining = remainingBytes)
                 {
-                    Interop.Kernel32.ReadFile(fileHandle, outputPin, remainingSpan.Length, IntPtr.Zero, overlapped);
+                    Interop.Kernel32.ReadFile(fileHandle, pinnedRemaining, remainingBytes.Length, IntPtr.Zero, overlappedContext.GetOverlapped());
+
                     int errorCode = fileHandle.GetLastWin32ErrorAndDisposeHandleIfInvalid();
                     if (errorCode == Interop.Errors.ERROR_IO_PENDING)
                     {
                         // TODO: monitor the time and reduce the timeout for each read
-                        if (!outputResetEvent.WaitOne(totalMilliseconds))
+                        if (!overlappedContext.WaitHandle.WaitOne(totalMilliseconds))
                         {
-                            HandleTimeout(processHandle, fileHandle, overlapped);
+                            HandleTimeout(processHandle, fileHandle, overlappedContext.GetOverlapped());
                         }
 
                         errorCode = Interop.Errors.ERROR_SUCCESS;
@@ -44,7 +50,7 @@ public static partial class ChildProcess
                         throw new Win32Exception(errorCode);
                     }
 
-                    int bytesRead = outputResetEvent.GetOverlappedResult(fileHandle, overlapped);
+                    int bytesRead = overlappedContext.GetOverlappedResult(fileHandle);
                     if (bytesRead <= 0)
                     {
                         break;
@@ -55,8 +61,6 @@ public static partial class ChildProcess
                     {
                         GrowBuffer(ref array);
                     }
-
-                    outputResetEvent.ResetBoth();
                 }
             }
 
