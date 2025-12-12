@@ -20,6 +20,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
     private const short POLLIN = 0x0001;
     private const short POLLHUP = 0x0010;
     private const short POLLERR = 0x0008;
+    private const int EINTR = 4; // Interrupted system call
 
     [DllImport("libc", SetLastError = true)]
     private static extern unsafe int poll(PollFd* fds, nuint nfds, int timeout);
@@ -95,7 +96,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                 if (pollResult < 0)
                 {
                     int errno = Marshal.GetLastPInvokeError();
-                    if (errno == 4) // EINTR - interrupted system call, retry
+                    if (errno == EINTR)
                     {
                         continue;
                     }
@@ -134,7 +135,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                     if (bytesRead < 0)
                     {
                         int errno = Marshal.GetLastPInvokeError();
-                        if (errno == 4) // EINTR - interrupted system call, retry
+                        if (errno == EINTR)
                         {
                             continue;
                         }
