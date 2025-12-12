@@ -1,6 +1,15 @@
-﻿using System.ComponentModel;
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 using System.TBA;
+#if NET48
+using static System.MarshalPolyfill;
+using static System.EnvironmentPolyfill;
+#endif
 
 namespace Microsoft.Win32.SafeHandles;
 
@@ -43,6 +52,14 @@ public static partial class SafeProcessHandleExtensions
     private const int SIGKILL = 9;
     private const int EINTR = 4;
     private const int ECHILD = 10;
+    
+#if NET48
+    private static int GetLastPInvokeError() => Marshal.GetLastWin32Error();
+    private static long GetTickCount64() => (long)(System.Diagnostics.Stopwatch.GetTimestamp() * (1000.0 / System.Diagnostics.Stopwatch.Frequency));
+#else
+    private static int GetLastPInvokeError() => Marshal.GetLastPInvokeError();
+    private static long GetTickCount64() => Environment.TickCount64;
+#endif
     
     private static unsafe SafeProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
@@ -132,7 +149,7 @@ public static partial class SafeProcessHandleExtensions
             // Initialize file actions
             if (posix_spawn_file_actions_init(fileActions) != 0)
             {
-                throw new Win32Exception(Marshal.GetLastPInvokeError(), "posix_spawn_file_actions_init failed");
+                throw new Win32Exception(GetLastPInvokeError(), "posix_spawn_file_actions_init failed");
             }
             fileActionsInitialized = true;
             
@@ -244,7 +261,7 @@ public static partial class SafeProcessHandleExtensions
                 }
                 else if (result == -1)
                 {
-                    int errno = Marshal.GetLastPInvokeError();
+                    int errno = GetLastPInvokeError();
                     if (errno == EINTR) // interrupted system call, retry
                     {
                         continue;
@@ -256,7 +273,7 @@ public static partial class SafeProcessHandleExtensions
         else
         {
             // Wait with timeout using polling
-            long startTime = Environment.TickCount64;
+            long startTime = GetTickCount64();
             long endTime = startTime + milliseconds;
             
             while (true)
@@ -269,7 +286,7 @@ public static partial class SafeProcessHandleExtensions
                 }
                 else if (result == -1)
                 {
-                    int errno = Marshal.GetLastPInvokeError();
+                    int errno = GetLastPInvokeError();
                     if (errno == EINTR)
                     {
                         continue;
@@ -279,7 +296,7 @@ public static partial class SafeProcessHandleExtensions
                 else if (result == 0)
                 {
                     // Process still running
-                    long now = Environment.TickCount64;
+                    long now = GetTickCount64();
                     if (now >= endTime)
                     {
                         // Timeout - terminate the process
@@ -295,7 +312,7 @@ public static partial class SafeProcessHandleExtensions
                             }
                             else if (result == -1)
                             {
-                                int errno = Marshal.GetLastPInvokeError();
+                                int errno = GetLastPInvokeError();
                                 if (errno != EINTR)
                                 {
                                     throw new Win32Exception(errno, "waitpid() failed after timeout");
@@ -342,7 +359,7 @@ public static partial class SafeProcessHandleExtensions
             }
             else if (result == -1)
             {
-                int errno = Marshal.GetLastPInvokeError();
+                int errno = GetLastPInvokeError();
                 if (errno == EINTR)
                 {
                     continue;

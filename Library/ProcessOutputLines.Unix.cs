@@ -1,8 +1,15 @@
-﻿using Microsoft.Win32.SafeHandles;
+﻿using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Win32.SafeHandles;
 using System.Buffers;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
+#if NET48
+using static System.MarshalPolyfill;
+#endif
 
 namespace System.TBA;
 
@@ -27,6 +34,12 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 
     [DllImport("libc", SetLastError = true)]
     private static extern unsafe nint read(int fd, byte* buf, nuint count);
+
+#if NET48
+    private static int GetLastPInvokeError() => Marshal.GetLastWin32Error();
+#else
+    private static int GetLastPInvokeError() => Marshal.GetLastPInvokeError();
+#endif
 
     public IEnumerator<ProcessOutputLine> GetEnumerator()
     {
@@ -91,7 +104,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 
                 if (pollResult < 0)
                 {
-                    int errno = Marshal.GetLastPInvokeError();
+                    int errno = GetLastPInvokeError();
                     if (errno == EINTR)
                     {
                         continue;
@@ -130,7 +143,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 
                     if (bytesRead < 0)
                     {
-                        int errno = Marshal.GetLastPInvokeError();
+                        int errno = GetLastPInvokeError();
                         if (errno == EINTR)
                         {
                             continue;

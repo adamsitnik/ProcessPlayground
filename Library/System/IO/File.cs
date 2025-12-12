@@ -1,4 +1,5 @@
-﻿using Microsoft.Win32.SafeHandles;
+﻿using System;
+using Microsoft.Win32.SafeHandles;
 
 namespace System.IO;
 

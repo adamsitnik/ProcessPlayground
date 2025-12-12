@@ -1,6 +1,13 @@
-﻿using Microsoft.Win32.SafeHandles;
+﻿using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Win32.SafeHandles;
 using System.Buffers;
 using System.Text;
+#if NET48
+using static System.GCPolyfill;
+#endif
 
 namespace System.TBA;
 
@@ -329,7 +336,11 @@ public static partial class ChildProcess
 
     private static byte[] CreateCopy(byte[] buffer, int totalBytesRead)
     {
+#if NET48
+        byte[] resultBuffer = new byte[totalBytesRead];
+#else
         byte[] resultBuffer = GC.AllocateUninitializedArray<byte>(totalBytesRead);
+#endif
         Buffer.BlockCopy(buffer, 0, resultBuffer, 0, totalBytesRead);
         return resultBuffer;
     }
