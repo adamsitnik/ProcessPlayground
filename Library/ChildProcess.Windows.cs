@@ -11,7 +11,7 @@ public static partial class ChildProcess
     {
         int totalBytesRead = 0;
 
-        byte[] array = ArrayPool<byte>.Shared.Rent(BufferHelpers.InitialRentedBufferSize);
+        byte[] array = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
         try
         {
             using OverlappedContext overlappedContext = OverlappedContext.Allocate();
@@ -42,7 +42,7 @@ public static partial class ChildProcess
                     totalBytesRead += bytesRead;
                     if (array.Length == totalBytesRead)
                     {
-                        BufferHelpers.RentLargerBuffer(ref array);
+                        BufferHelper.RentLargerBuffer(ref array);
                     }
                 }
             }

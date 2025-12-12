@@ -2,7 +2,7 @@
 
 namespace System.TBA;
 
-internal static class BufferHelpers
+internal static class BufferHelper
 {
     // We use different initial buffer sizes in debug vs release builds
     // to ensure the unit tests cover buffer growth logic every time.

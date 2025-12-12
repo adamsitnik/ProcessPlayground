@@ -15,8 +15,8 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
 
         TimeoutHelper timeoutHelper = TimeoutHelper.Start(timeout);
 
-        byte[] outputBuffer = ArrayPool<byte>.Shared.Rent(BufferHelpers.InitialRentedBufferSize);
-        byte[] errorBuffer = ArrayPool<byte>.Shared.Rent(BufferHelpers.InitialRentedBufferSize);
+        byte[] outputBuffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
+        byte[] errorBuffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
         int outputStartIndex = 0, outputEndIndex = 0;
         int errorStartIndex = 0, errorEndIndex = 0;
 
@@ -96,12 +96,12 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>
                                 // The buffer is too small to hold a single line.
                                 if (isError)
                                 {
-                                    BufferHelpers.RentLargerBuffer(ref errorBuffer);
+                                    BufferHelper.RentLargerBuffer(ref errorBuffer);
                                     currentBuffer = errorBuffer;
                                 }
                                 else
                                 {
-                                    BufferHelpers.RentLargerBuffer(ref outputBuffer);
+                                    BufferHelper.RentLargerBuffer(ref outputBuffer);
                                     currentBuffer = outputBuffer;
                                 }
                             }

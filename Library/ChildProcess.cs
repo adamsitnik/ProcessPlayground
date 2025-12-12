@@ -182,7 +182,7 @@ public static partial class ChildProcess
             }
 #endif
             using FileStream outputStream = new(read, FileAccess.Read, bufferSize: 1, isAsync: false);
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferHelpers.InitialRentedBufferSize);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
             int totalBytesRead = 0;
 
             try
@@ -199,7 +199,7 @@ public static partial class ChildProcess
                     if (totalBytesRead == buffer.Length)
                     {
                         // Resize the buffer
-                        BufferHelpers.RentLargerBuffer(ref buffer);
+                        BufferHelper.RentLargerBuffer(ref buffer);
                     }
                 }
 
@@ -263,7 +263,7 @@ public static partial class ChildProcess
         {
             int processId = processHandle.GetProcessId();
 
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferHelpers.InitialRentedBufferSize);
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
             int totalBytesRead = 0;
 
             try
@@ -279,7 +279,7 @@ public static partial class ChildProcess
                     totalBytesRead += bytesRead;
                     if (totalBytesRead == buffer.Length)
                     {
-                        BufferHelpers.RentLargerBuffer(ref buffer);
+                        BufferHelper.RentLargerBuffer(ref buffer);
                     }
                 }
 

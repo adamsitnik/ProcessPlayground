@@ -17,7 +17,7 @@ public readonly struct CombinedOutput
     /// <summary>
     /// Gets the process ID that was used when it was running.
     /// </summary>
-    /// <remarks>This information can be useful to process any diagnostics/tracing data.</remarks>
+    /// <remarks>This information can be useful to process any diagnostics/tracing data post run.</remarks>
     public int ProcessId { get; }
 
     public CombinedOutput(int exitCode, ReadOnlyMemory<byte> bytes, int processId) : this()
