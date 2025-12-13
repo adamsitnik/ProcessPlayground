@@ -28,7 +28,11 @@ internal sealed unsafe class OverlappedContext : IDisposable
 
         try
         {
+#if NETFRAMEWORK
+            overlapped = (NativeOverlapped*)Marshal.AllocHGlobal(sizeof(NativeOverlapped));
+#else
             overlapped = (NativeOverlapped*)NativeMemory.Alloc((nuint)sizeof(NativeOverlapped));
+#endif
         }
         catch (OutOfMemoryException)
         {
@@ -48,7 +52,11 @@ internal sealed unsafe class OverlappedContext : IDisposable
 
     public void Dispose()
     {
+#if NETFRAMEWORK
+        Marshal.FreeHGlobal((IntPtr)_overlapped);
+#else
         NativeMemory.Free(_overlapped);
+#endif
         _waitHandle.Dispose();
     }
 

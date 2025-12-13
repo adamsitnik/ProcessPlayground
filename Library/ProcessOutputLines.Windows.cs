@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
@@ -81,9 +82,21 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                                 break;
                             }
 
+#if NETFRAMEWORK
+                            string line;
+                            unsafe
+                            {
+                                fixed (byte* ptr = &currentBuffer[startIndex])
+                                {
+                                    line = encoding.GetString(ptr, lineEnd - 1); // Exclude '\r'
+                                }
+                            }
+                            yield return new ProcessOutputLine(line, standardError: isError);
+#else
                             yield return new ProcessOutputLine(
                                 encoding.GetString(currentBuffer.AsSpan(startIndex, lineEnd - 1)), // Exclude '\r'
                                 standardError: isError);
+#endif
 
                             startIndex += lineEnd + 1;
                             remaining -= lineEnd + 1;
