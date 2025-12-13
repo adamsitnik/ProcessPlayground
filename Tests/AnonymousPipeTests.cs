@@ -31,8 +31,8 @@ public class AnonymousPipeTests
 
         using (readHandle)
         using (writeHandle)
-        using (FileStream readStream = new(readHandle, FileAccess.Read, bufferSize: 0, isAsync: false))
-        using (FileStream writeStream = new(writeHandle, FileAccess.Write, bufferSize: 0, isAsync: false))
+        using (FileStream readStream = new(readHandle, FileAccess.Read, bufferSize: 1, isAsync: false))
+        using (FileStream writeStream = new(writeHandle, FileAccess.Write, bufferSize: 1, isAsync: false))
         {
 #if NETFRAMEWORK
             await writeStream.WriteAsync(message, 0, message.Length);

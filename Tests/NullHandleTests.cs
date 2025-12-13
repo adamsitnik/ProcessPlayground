@@ -24,7 +24,7 @@ public class NullHandleTests
     public async Task NullFileHandle_ReturnsEOF()
     {
         using SafeFileHandle handle = File.OpenNullFileHandle();
-        using FileStream stream = new(handle, FileAccess.Read, bufferSize: 0);
+        using FileStream stream = new(handle, FileAccess.Read, bufferSize: 1);
 
 #if NETFRAMEWORK
         byte[] buffer = new byte[10];
@@ -47,7 +47,7 @@ public class NullHandleTests
     public async Task NullFileHandle_DiscardsWrites()
     {
         using SafeFileHandle handle = File.OpenNullFileHandle();
-        using FileStream stream = new(handle, FileAccess.Write, bufferSize: 0);
+        using FileStream stream = new(handle, FileAccess.Write, bufferSize: 1);
 
 #if NETFRAMEWORK
         await stream.WriteAsync(new byte[100], 0, 100);
