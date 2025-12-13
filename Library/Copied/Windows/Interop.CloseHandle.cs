@@ -4,18 +4,22 @@
 using System;
 using System.Runtime.InteropServices;
 
+#if NETFRAMEWORK
+using LibraryImportAttribute = System.Runtime.InteropServices.DllImportAttribute;
+#endif
+
 internal static partial class Interop
 {
     internal static partial class Kernel32
     {
-#if NET48
-        [DllImport(Libraries.Kernel32, SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        internal static extern bool CloseHandle(IntPtr handle);
-#else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static partial bool CloseHandle(IntPtr handle);
+        internal static
+#if NETFRAMEWORK
+        extern
+#else
+        partial
 #endif
+        bool CloseHandle(IntPtr handle);
     }
 }

@@ -8,7 +8,7 @@ namespace System.IO;
 
 public static partial class FileExtensions
 {
-#if NET48
+#if NETFRAMEWORK
     private static int GetLastPInvokeError() => Marshal.GetLastWin32Error();
 #else
     private static int GetLastPInvokeError() => GetLastPInvokeError();
@@ -73,7 +73,7 @@ public static partial class FileExtensions
         try
         {
             // STD OUT and ERR can't use async IO
-#if NET48
+#if NETFRAMEWORK
             write = new FileStream(pipeName, FileMode.Open, FileAccess.Write, FileShare.Read).SafeFileHandle;
 #else
             write = File.OpenHandle(pipeName, FileMode.Open, FileAccess.Write, FileShare.Read, FileOptions.None);

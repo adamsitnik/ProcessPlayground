@@ -10,7 +10,7 @@ internal static partial class Interop
 {
     internal static partial class Kernel32
     {
-#if NET48
+#if NETFRAMEWORK
         [DllImport(Libraries.Kernel32, EntryPoint = "CreateFileW", SetLastError = true, CharSet = CharSet.Unicode)]
         internal static unsafe extern SafeFileHandle CreateFile(
             string lpFileName,

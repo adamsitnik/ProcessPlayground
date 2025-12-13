@@ -39,5 +39,16 @@ public static partial class FileExtensions
         // DESIGN: this method may be too specific to make it public in general File API!
         public static void CreateNamedPipe(out SafeFileHandle read, out SafeFileHandle write, string? name = null)
             => CreateNamedPipeCore(out read, out write, name);
+
+#if NETFRAMEWORK
+        /// <summary>
+        /// Polyfill for File.OpenHandle on .NET Framework
+        /// </summary>
+        public static SafeFileHandle OpenHandle(string path, FileMode mode, FileAccess access = FileAccess.ReadWrite, FileShare share = FileShare.Read, FileOptions options = FileOptions.None)
+        {
+            FileStream fs = new FileStream(path, mode, access, share, bufferSize: 1, options);
+            return fs.SafeFileHandle;
+        }
+#endif
     }
 }

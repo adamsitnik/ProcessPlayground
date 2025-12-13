@@ -9,7 +9,7 @@ internal static partial class Interop
 {
     internal static partial class Kernel32
     {
-#if NET48
+#if NETFRAMEWORK
         [DllImport(Libraries.Kernel32, SetLastError = true)]
         internal static unsafe extern int ReadFile(
             SafeHandle handle,
@@ -27,7 +27,7 @@ internal static partial class Interop
             NativeOverlapped* overlapped);
 #endif
 
-#if NET48
+#if NETFRAMEWORK
         [DllImport(Libraries.Kernel32, SetLastError = true)]
         internal static unsafe extern int ReadFile(
             SafeHandle handle,

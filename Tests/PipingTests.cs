@@ -55,7 +55,7 @@ public class PipingTests
 
             using SafeProcessHandle producerHandle = SafeProcessHandle.Start(producer, input: null, output: writePipe, error: null);
 
-#if NET48
+#if NETFRAMEWORK
             using (SafeFileHandle outputHandle = new FileStream("output.txt", FileMode.Create, FileAccess.Write, FileShare.ReadWrite).SafeFileHandle)
 #else
             using (SafeFileHandle outputHandle = File.OpenHandle("output.txt", FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
@@ -67,7 +67,7 @@ public class PipingTests
                 await consumerHandle.WaitForExitAsync();
             }
 
-#if NET48
+#if NETFRAMEWORK
             string result = File.ReadAllText("output.txt");
 #else
             string result = await File.ReadAllTextAsync("output.txt");

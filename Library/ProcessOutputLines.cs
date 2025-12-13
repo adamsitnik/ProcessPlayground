@@ -66,7 +66,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             using StreamReader outputReader = new(new FileStream(parentOutputHandle, FileAccess.Read, bufferSize: 0), encoding);
             using StreamReader errorReader = new(new FileStream(parentErrorHandle, FileAccess.Read, bufferSize: 0), encoding);
 
-#if NET48
+#if NETFRAMEWORK
             Task<string?> readOutput = outputReader.ReadLineAsync();
             Task<string?> readError = errorReader.ReadLineAsync();
 #else
@@ -90,7 +90,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                     StreamReader activeReader = isError ? errorReader : outputReader;
                     while (true)
                     {
-#if NET48
+#if NETFRAMEWORK
                         ValueTask<string?> nextRead = new ValueTask<string?>(activeReader.ReadLineAsync());
 #else
                         ValueTask<string?> nextRead = activeReader.ReadLineAsync(cancellationToken);
@@ -136,7 +136,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             {
                 yield return new(moreData, !isError);
 
-#if NET48
+#if NETFRAMEWORK
                 moreData = await remaining.ReadLineAsync();
 #else
                 moreData = await remaining.ReadLineAsync(cancellationToken);

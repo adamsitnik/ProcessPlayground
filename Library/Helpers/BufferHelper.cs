@@ -17,7 +17,7 @@ internal static class BufferHelper
     internal static void RentLargerBuffer(ref byte[] buffer)
     {
         byte[] oldBuffer = buffer;
-#if NET48
+#if NETFRAMEWORK
         const int MaxArrayLength = 0X7FEFFFFF; // From .NET Framework Array class
         buffer = ArrayPool<byte>.Shared.Rent(Math.Min(buffer.Length * 2, MaxArrayLength));
 #else

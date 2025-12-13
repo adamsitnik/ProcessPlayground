@@ -2,14 +2,13 @@
 
   <PropertyGroup>
     <TargetFrameworks>net10.0;net48</TargetFrameworks>
-    <ImplicitUsings>enable</ImplicitUsings>
+    <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>System.TBA</RootNamespace>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
-    <ImplicitUsings>disable</ImplicitUsings>
     <LangVersion>preview</LangVersion>
     <!-- net48 only runs on Windows, so always use Windows define -->
     <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
@@ -21,6 +20,12 @@
     <!-- Exclude Unix files for net48 since Full Framework only runs on Windows -->
     <Compile Remove="Copied/Unix/*.cs" />
     <Compile Remove="**/*.Unix.cs" />
+  </ItemGroup>
+
+  <!-- Exclude polyfills for non-Framework targets -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
+    <Compile Remove="System/ArgumentNullException.cs" />
+    <Compile Remove="System/ArgumentException.cs" />
   </ItemGroup>
 
   <PropertyGroup Condition="'$(OS)' == 'Windows_NT' AND '$(TargetFramework)' != 'net48'">

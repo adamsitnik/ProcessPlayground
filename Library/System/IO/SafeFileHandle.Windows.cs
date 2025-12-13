@@ -5,7 +5,7 @@ namespace Microsoft.Win32.SafeHandles;
 
 public static partial class SafeFileHandleExtensions
 {
-#if NET48
+#if NETFRAMEWORK
     private static int GetLastPInvokeError() => Marshal.GetLastWin32Error();
 #else
     private static int GetLastPInvokeError() => Marshal.GetLastPInvokeError();

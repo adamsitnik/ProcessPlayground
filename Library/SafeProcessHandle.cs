@@ -14,7 +14,7 @@ public static partial class SafeProcessHandleExtensions
     {
         public static SafeProcessHandle Start(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error)
         {
-#if NET48
+#if NETFRAMEWORK
             ThrowHelper.ThrowIfNull(options, nameof(options));
 #else
             ArgumentNullException.ThrowIfNull(options);
@@ -81,7 +81,7 @@ public static partial class SafeProcessHandleExtensions
 
     private static void Validate(SafeProcessHandle processHandle)
     {
-#if NET48
+#if NETFRAMEWORK
         ThrowHelper.ThrowIfNull(processHandle, nameof(processHandle));
 #else
         ArgumentNullException.ThrowIfNull(processHandle);

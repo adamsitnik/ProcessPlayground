@@ -1,4 +1,4 @@
-#if NET48
+#if NETFRAMEWORK
 namespace System.TBA;
 
 internal static class ThrowHelper

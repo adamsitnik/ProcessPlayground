@@ -34,7 +34,7 @@ public class AnonymousPipeTests
         using (FileStream readStream = new(readHandle, FileAccess.Read, bufferSize: 0, isAsync: false))
         using (FileStream writeStream = new(writeHandle, FileAccess.Write, bufferSize: 0, isAsync: false))
         {
-#if NET48
+#if NETFRAMEWORK
             await writeStream.WriteAsync(message, 0, message.Length);
 #else
             await writeStream.WriteAsync(message);
@@ -42,7 +42,7 @@ public class AnonymousPipeTests
             await writeStream.FlushAsync();
 
             byte[] buffer = new byte[message.Length];
-#if NET48
+#if NETFRAMEWORK
             int bytesRead = await readStream.ReadAsync(buffer, 0, buffer.Length);
 #else
             int bytesRead = await readStream.ReadAsync(buffer);

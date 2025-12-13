@@ -54,12 +54,7 @@ internal static partial class Interop
             HasBirthTime = 1,
         }
 
-#if NET48
-        [DllImport("libSystem.Native", EntryPoint = "SystemNative_FStat", SetLastError = true)]
-        internal static extern int FStat(SafeHandle fd, out FileStatus output);
-#else
         [LibraryImport("libSystem.Native", EntryPoint = "SystemNative_FStat", SetLastError = true)]
         internal static partial int FStat(SafeHandle fd, out FileStatus output);
-#endif
     }
 }
