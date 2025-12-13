@@ -17,9 +17,7 @@ public class RedirectToPipe
             process.StartInfo.Arguments = "--help";
             process.StartInfo.RedirectStandardOutput = true;
             process.StartInfo.RedirectStandardError = true;
-#if NETFRAMEWORK
             process.StartInfo.UseShellExecute = false;
-#endif
 
             process.OutputDataReceived += static (sender, e) => { };
             process.ErrorDataReceived += static (sender, e) => { };
@@ -44,9 +42,7 @@ public class RedirectToPipe
             Arguments = "--help",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-#if NETFRAMEWORK
             UseShellExecute = false
-#endif
         };
 
         using Process process = Process.Start(info)!;

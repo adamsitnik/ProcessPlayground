@@ -26,6 +26,7 @@ public class RedirectToFile
             process.StartInfo.Arguments = "--help";
             process.StartInfo.CreateNoWindow = true;
             process.StartInfo.RedirectStandardOutput = true;
+            process.StartInfo.UseShellExecute = false;
 
             // Send the output and error streams to empty handlers because the text is also written to the log files
             process.OutputDataReceived += (sender, e) => text.WriteLine(e.Data);
