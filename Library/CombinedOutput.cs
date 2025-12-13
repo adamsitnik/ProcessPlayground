@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System;
+using System.Text;
 
 namespace System.TBA;
 
@@ -30,6 +31,22 @@ public readonly struct CombinedOutput
     public string GetText(Encoding? encoding = null)
     {
         encoding ??= Encoding.UTF8;
+#if NETFRAMEWORK
+        // For NETFRAMEWORK, pin the span and use the pointer overload
+        if (Bytes.Length == 0)
+        {
+            return string.Empty;
+        }
+        ReadOnlySpan<byte> span = Bytes.Span;
+        unsafe
+        {
+            fixed (byte* ptr = span)
+            {
+                return encoding.GetString(ptr, span.Length);
+            }
+        }
+#else
         return encoding.GetString(Bytes.Span);
+#endif
     }
 }

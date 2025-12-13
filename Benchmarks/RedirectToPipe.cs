@@ -1,6 +1,8 @@
 ﻿using BenchmarkDotNet.Attributes;
 using System.TBA;
 using System.Diagnostics;
+using System.Threading.Tasks;
+using System;
 
 namespace Benchmarks;
 
@@ -15,6 +17,7 @@ public class RedirectToPipe
             process.StartInfo.Arguments = "--help";
             process.StartInfo.RedirectStandardOutput = true;
             process.StartInfo.RedirectStandardError = true;
+            process.StartInfo.UseShellExecute = false;
 
             process.OutputDataReceived += static (sender, e) => { };
             process.ErrorDataReceived += static (sender, e) => { };
@@ -36,9 +39,10 @@ public class RedirectToPipe
         ProcessStartInfo info = new()
         {
             FileName = "dotnet",
-            ArgumentList = { "--help" },
+            Arguments = "--help",
             RedirectStandardOutput = true,
-            RedirectStandardError = true
+            RedirectStandardError = true,
+            UseShellExecute = false
         };
 
         using Process process = Process.Start(info)!;
@@ -78,6 +82,7 @@ public class RedirectToPipe
         return process.ExitCode;
     }
 
+#if NET
     [Benchmark]
     public async Task<int> OldReadToEndAsync()
     {
@@ -98,6 +103,7 @@ public class RedirectToPipe
 
         return process.ExitCode;
     }
+#endif
 
     [Benchmark]
     public int NewReadLines()

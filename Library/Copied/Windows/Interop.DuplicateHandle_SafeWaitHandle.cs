@@ -9,9 +9,19 @@ internal static partial class Interop
 {
     internal static partial class Kernel32
     {
+#if NETFRAMEWORK
+        [DllImport(Libraries.Kernel32, SetLastError = true)]
+#else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
+#endif
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static partial bool DuplicateHandle(
+        internal static
+#if NETFRAMEWORK
+        extern
+#else
+        partial
+#endif
+        bool DuplicateHandle(
             IntPtr hSourceProcessHandle,
             SafeHandle hSourceHandle,
             IntPtr hTargetProcess,

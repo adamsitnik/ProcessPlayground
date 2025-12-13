@@ -1,4 +1,6 @@
-﻿using System.Text;
+﻿using System;
+using System.Collections.Generic;
+using System.Text;
 
 namespace System.TBA;
 
@@ -12,7 +14,11 @@ internal static class ProcessUtils
         // problems (it specifies exactly which part of the string
         // is the file to execute).
         ReadOnlySpan<char> fileName = options.FileName.AsSpan().Trim();
+#if NETFRAMEWORK
+        bool fileNameIsQuoted = fileName.Length > 0 && fileName[0] == '"' && fileName[fileName.Length - 1] == '"';
+#else
         bool fileNameIsQuoted = fileName.StartsWith('"') && fileName.EndsWith('"');
+#endif
         if (!fileNameIsQuoted)
         {
             commandLine.Append('"');

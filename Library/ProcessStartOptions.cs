@@ -1,4 +1,8 @@
-﻿namespace System.TBA;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+
+namespace System.TBA;
 
 public sealed class ProcessStartOptions
 {

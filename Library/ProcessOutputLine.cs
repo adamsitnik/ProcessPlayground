@@ -1,4 +1,6 @@
-﻿namespace System.TBA;
+﻿using System;
+
+namespace System.TBA;
 
 public readonly struct ProcessOutputLine : IEquatable<ProcessOutputLine>
 {

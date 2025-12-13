@@ -1,6 +1,8 @@
 ﻿using BenchmarkDotNet.Attributes;
 using System.TBA;
 using System.Diagnostics;
+using System.Threading.Tasks;
+using System.IO;
 
 namespace Benchmarks;
 
@@ -24,6 +26,7 @@ public class RedirectToFile
             process.StartInfo.Arguments = "--help";
             process.StartInfo.CreateNoWindow = true;
             process.StartInfo.RedirectStandardOutput = true;
+            process.StartInfo.UseShellExecute = false;
 
             // Send the output and error streams to empty handlers because the text is also written to the log files
             process.OutputDataReceived += (sender, e) => text.WriteLine(e.Data);
@@ -36,6 +39,7 @@ public class RedirectToFile
         }
     }
 
+#if NET
     [Benchmark]
     public async Task<int> OldAsync()
     {
@@ -60,6 +64,7 @@ public class RedirectToFile
             return process.ExitCode;
         }
     }
+#endif
 
     [Benchmark]
     public int Shell()
@@ -78,6 +83,7 @@ public class RedirectToFile
         }
     }
 
+#if NET
     [Benchmark]
     public async Task<int> ShellAsync()
     {
@@ -94,6 +100,7 @@ public class RedirectToFile
             return process.ExitCode;
         }
     }
+#endif
 
     [Benchmark]
     public int New()

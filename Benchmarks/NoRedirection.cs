@@ -1,6 +1,7 @@
 ﻿using BenchmarkDotNet.Attributes;
 using System.TBA;
 using System.Diagnostics;
+using System.Threading.Tasks;
 
 namespace Benchmarks;
 
@@ -13,26 +14,28 @@ public class NoRedirection
         ProcessStartInfo info = new()
         {
             FileName = "dotnet",
-            ArgumentList = { "--help" },
+            Arguments = "--help"
         };
 
         using Process process = Process.Start(info)!;
         process.WaitForExit();
     }
 
+#if NET
     [Benchmark]
     public async Task<int> OldAsync()
     {
         ProcessStartInfo info = new()
         {
             FileName = "dotnet",
-            ArgumentList = { "--help" },
+            Arguments = "--help"
         };
 
         using Process process = Process.Start(info)!;
         await process.WaitForExitAsync();
         return process.ExitCode;
     }
+#endif
 
     [Benchmark]
     public int New()

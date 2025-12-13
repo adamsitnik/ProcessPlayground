@@ -1,4 +1,6 @@
-﻿namespace Microsoft.Win32.SafeHandles;
+﻿using System;
+
+namespace Microsoft.Win32.SafeHandles;
 
 public static partial class SafeFileHandleExtensions
 {

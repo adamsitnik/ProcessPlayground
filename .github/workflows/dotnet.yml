@@ -28,9 +28,15 @@ jobs:
       run: dotnet restore
     - name: Build Release
       run: dotnet build --configuration Release --no-restore
-    - name: Test Release
-      run: dotnet test --configuration Release --verbosity normal
+    - name: Test Release (net10.0)
+      run: dotnet test --configuration Release --framework net10.0 --verbosity normal
+    - name: Test Release (net48) - Windows Only
+      if: runner.os == 'Windows'
+      run: dotnet test --configuration Release --framework net48 --verbosity normal
     - name: Build Debug
       run: dotnet build --no-restore
-    - name: Test Debug
-      run: dotnet test --configuration Debug --verbosity normal
+    - name: Test Debug (net10.0)
+      run: dotnet test --configuration Debug --framework net10.0 --verbosity normal
+    - name: Test Debug (net48) - Windows Only
+      if: runner.os == 'Windows'
+      run: dotnet test --configuration Debug --framework net48 --verbosity normal

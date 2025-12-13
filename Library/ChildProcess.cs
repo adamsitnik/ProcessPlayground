@@ -1,4 +1,8 @@
-﻿using Microsoft.Win32.SafeHandles;
+﻿using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Win32.SafeHandles;
 using System.Buffers;
 using System.Text;
 
@@ -190,7 +194,11 @@ public static partial class ChildProcess
             {
                 while (true)
                 {
+#if NETFRAMEWORK
+                    int bytesRead = outputStream.Read(buffer, totalBytesRead, buffer.Length - totalBytesRead);
+#else
                     int bytesRead = outputStream.Read(buffer.AsSpan(totalBytesRead));
+#endif
                     if (bytesRead <= 0)
                     {
                         break;
@@ -271,7 +279,11 @@ public static partial class ChildProcess
             {
                 while (true)
                 {
+#if NETFRAMEWORK
+                    int bytesRead = await outputStream.ReadAsync(buffer, totalBytesRead, buffer.Length - totalBytesRead, cancellationToken);
+#else
                     int bytesRead = await outputStream.ReadAsync(buffer.AsMemory(totalBytesRead), cancellationToken);
+#endif
                     if (bytesRead <= 0)
                     {
                         break;
@@ -329,7 +341,11 @@ public static partial class ChildProcess
 
     private static byte[] CreateCopy(byte[] buffer, int totalBytesRead)
     {
+#if NETFRAMEWORK
+        byte[] resultBuffer = new byte[totalBytesRead];
+#else
         byte[] resultBuffer = GC.AllocateUninitializedArray<byte>(totalBytesRead);
+#endif
         Buffer.BlockCopy(buffer, 0, resultBuffer, 0, totalBytesRead);
         return resultBuffer;
     }
