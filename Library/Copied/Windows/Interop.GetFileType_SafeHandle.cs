@@ -9,10 +9,11 @@ internal static partial class Interop
     {
 #if NETFRAMEWORK
         [DllImport(Libraries.Kernel32, SetLastError = true)]
-        internal static extern int GetFileType(SafeHandle hFile);
+        internal static extern
 #else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
-        internal static partial int GetFileType(SafeHandle hFile);
+        internal static partial
 #endif
+         int GetFileType(SafeHandle hFile);
     }
 }

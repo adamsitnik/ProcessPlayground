@@ -8,12 +8,6 @@ namespace System.IO;
 
 public static partial class FileExtensions
 {
-#if NETFRAMEWORK
-    private static int GetLastPInvokeError() => Marshal.GetLastWin32Error();
-#else
-    private static int GetLastPInvokeError() => GetLastPInvokeError();
-#endif
-
     private static unsafe SafeFileHandle OpenNullFileHandleCore()
     {
         Interop.Kernel32.SECURITY_ATTRIBUTES securityAttributes = default;
@@ -29,7 +23,7 @@ public static partial class FileExtensions
 
         if (handle.IsInvalid)
         {
-            throw new Win32Exception(GetLastPInvokeError(), "Failed to open NUL device");
+            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to open NUL device");
         }
 
         return handle;
@@ -42,7 +36,7 @@ public static partial class FileExtensions
         bool ret = Interop.Kernel32.CreatePipe(out read, out write, ref securityAttributesParent, 0);
         if (!ret || read.IsInvalid || write.IsInvalid)
         {
-            throw new Win32Exception(GetLastPInvokeError());
+            throw new Win32Exception(Marshal.GetLastPInvokeError());
         }
     }
 
@@ -67,17 +61,29 @@ public static partial class FileExtensions
 
         if (read.IsInvalid)
         {
-            throw new Win32Exception(GetLastPInvokeError());
+            throw new Win32Exception(Marshal.GetLastPInvokeError());
         }
 
         try
         {
-            // STD OUT and ERR can't use async IO
-#if NETFRAMEWORK
-            write = new FileStream(pipeName, FileMode.Open, FileAccess.Write, FileShare.Read).SafeFileHandle;
-#else
-            write = File.OpenHandle(pipeName, FileMode.Open, FileAccess.Write, FileShare.Read, FileOptions.None);
-#endif
+            // STD OUT and ERR can't use async IO - need to call CreateFile directly
+            unsafe
+            {
+                Interop.Kernel32.SECURITY_ATTRIBUTES securityAttributes = default;
+                write = Interop.Kernel32.CreateFile(
+                    pipeName,
+                    Interop.Kernel32.GenericOperations.GENERIC_WRITE,
+                    FileShare.Read,
+                    &securityAttributes,
+                    FileMode.Open,
+                    0,
+                    IntPtr.Zero);
+            }
+            
+            if (write.IsInvalid)
+            {
+                throw new Win32Exception(Marshal.GetLastPInvokeError());
+            }
         }
         catch
         {

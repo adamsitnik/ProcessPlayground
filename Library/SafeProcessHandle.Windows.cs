@@ -10,12 +10,6 @@ namespace Microsoft.Win32.SafeHandles;
 
 public static partial class SafeProcessHandleExtensions
 {
-#if NETFRAMEWORK
-    private static int GetLastPInvokeError() => Marshal.GetLastWin32Error();
-#else
-    private static int GetLastPInvokeError() => Marshal.GetLastPInvokeError();
-#endif
-
     // Linux doesn't have a corresponding sys-call just to get exit code of a process by its handle.
     // That is why it's Windows-specific helper.
     internal static int GetExitCode(this SafeProcessHandle processHandle)
@@ -100,7 +94,7 @@ public static partial class SafeProcessHandleExtensions
                         ref processInfo      // pointer to PROCESS_INFORMATION
                     );
                     if (!retVal)
-                        errorCode = Marshal.GetLastWin32Error();
+                        errorCode = Marshal.GetLastPInvokeError();
                 }
 
                 if (processInfo.hProcess != IntPtr.Zero && processInfo.hProcess != new IntPtr(-1))
@@ -150,7 +144,7 @@ public static partial class SafeProcessHandleExtensions
         int result = Interop.Kernel32.GetProcessId(processHandle);
         if (result == 0)
         {
-            throw new Win32Exception(GetLastPInvokeError());
+            throw new Win32Exception(Marshal.GetLastPInvokeError());
         }
         return result;
     }

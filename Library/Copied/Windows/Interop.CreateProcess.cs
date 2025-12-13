@@ -12,23 +12,17 @@ internal static partial class Interop
     {
 #if NETFRAMEWORK
         [DllImport(Libraries.Kernel32, EntryPoint = "CreateProcessW", SetLastError = true, CharSet = CharSet.Unicode)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        internal static unsafe extern bool CreateProcess(
-            string? lpApplicationName,
-            char* lpCommandLine,
-            ref SECURITY_ATTRIBUTES procSecAttrs,
-            ref SECURITY_ATTRIBUTES threadSecAttrs,
-            [MarshalAs(UnmanagedType.Bool)] bool bInheritHandles,
-            int dwCreationFlags,
-            IntPtr lpEnvironment,
-            string? lpCurrentDirectory,
-            ref STARTUPINFO lpStartupInfo,
-            ref PROCESS_INFORMATION lpProcessInformation
-        );
 #else
         [LibraryImport(Libraries.Kernel32, EntryPoint = "CreateProcessW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
+#endif
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static unsafe partial bool CreateProcess(
+        internal static unsafe
+#if NETFRAMEWORK
+        extern
+#else
+        partial
+#endif
+        bool CreateProcess(
             string? lpApplicationName,
             char* lpCommandLine,
             ref SECURITY_ATTRIBUTES procSecAttrs,
@@ -40,7 +34,6 @@ internal static partial class Interop
             ref STARTUPINFO lpStartupInfo,
             ref PROCESS_INFORMATION lpProcessInformation
         );
-#endif
 
         [StructLayout(LayoutKind.Sequential)]
         internal struct PROCESS_INFORMATION

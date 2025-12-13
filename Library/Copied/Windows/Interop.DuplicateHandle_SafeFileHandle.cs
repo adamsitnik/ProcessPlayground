@@ -11,20 +11,17 @@ internal static partial class Interop
     {
 #if NETFRAMEWORK
         [DllImport(Libraries.Kernel32, SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        internal static extern bool DuplicateHandle(
-            IntPtr hSourceProcessHandle,
-            SafeHandle hSourceHandle,
-            IntPtr hTargetProcess,
-            out SafeFileHandle targetHandle,
-            int dwDesiredAccess,
-            [MarshalAs(UnmanagedType.Bool)] bool bInheritHandle,
-            int dwOptions
-        );
 #else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
+#endif
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static partial bool DuplicateHandle(
+        internal static
+#if NETFRAMEWORK
+        extern
+#else
+        partial
+#endif
+        bool DuplicateHandle(
             IntPtr hSourceProcessHandle,
             SafeHandle hSourceHandle,
             IntPtr hTargetProcess,
@@ -33,6 +30,5 @@ internal static partial class Interop
             [MarshalAs(UnmanagedType.Bool)] bool bInheritHandle,
             int dwOptions
         );
-#endif
     }
 }

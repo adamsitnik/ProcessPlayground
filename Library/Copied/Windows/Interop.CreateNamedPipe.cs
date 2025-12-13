@@ -11,18 +11,12 @@ internal static partial class Interop
     {
 #if NETFRAMEWORK
         [DllImport(Libraries.Kernel32, EntryPoint = "CreateNamedPipeW", SetLastError = true, CharSet = CharSet.Unicode)]
-        internal static extern SafeFileHandle CreateNamedPipe(
-            string pipeName,
-            int openMode,
-            int pipeMode,
-            int maxInstances,
-            int outBufferSize,
-            int inBufferSize,
-            int defaultTimeout,
-            ref SECURITY_ATTRIBUTES securityAttributes);
+        internal static extern
 #else
         [LibraryImport(Libraries.Kernel32, EntryPoint = "CreateNamedPipeW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
-        internal static partial SafeFileHandle CreateNamedPipe(
+        internal static partial
+#endif
+         SafeFileHandle CreateNamedPipe(
             string pipeName,
             int openMode,
             int pipeMode,
@@ -31,6 +25,5 @@ internal static partial class Interop
             int inBufferSize,
             int defaultTimeout,
             ref SECURITY_ATTRIBUTES securityAttributes);
-#endif
     }
 }

@@ -11,11 +11,12 @@ internal static partial class Interop
 #if NETFRAMEWORK
         [DllImport(Libraries.Kernel32, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static extern bool GetExitCodeProcess(SafeProcessHandle processHandle, out int exitCode);
+        internal static extern
 #else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static partial bool GetExitCodeProcess(SafeProcessHandle processHandle, out int exitCode);
+        internal static partial
 #endif
+         bool GetExitCodeProcess(SafeProcessHandle processHandle, out int exitCode);
     }
 }

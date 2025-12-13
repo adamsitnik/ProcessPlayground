@@ -11,20 +11,20 @@ internal static partial class Interop
     {
 #if NETFRAMEWORK
         [DllImport(Libraries.Kernel32, SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        internal static unsafe extern bool GetOverlappedResult(
-            SafeFileHandle hFile,
-            NativeOverlapped* lpOverlapped,
-            ref int lpNumberOfBytesTransferred,
-            [MarshalAs(UnmanagedType.Bool)] bool bWait);
 #else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
+#endif
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static unsafe partial bool GetOverlappedResult(
+        internal static unsafe
+#if NETFRAMEWORK
+        extern
+#else
+        partial
+#endif
+        bool GetOverlappedResult(
             SafeFileHandle hFile,
             NativeOverlapped* lpOverlapped,
             ref int lpNumberOfBytesTransferred,
             [MarshalAs(UnmanagedType.Bool)] bool bWait);
-#endif
     }
 }
