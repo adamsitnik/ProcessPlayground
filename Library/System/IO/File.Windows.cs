@@ -66,24 +66,8 @@ public static partial class FileExtensions
 
         try
         {
-            // STD OUT and ERR can't use async IO - need to call CreateFile directly
-            unsafe
-            {
-                Interop.Kernel32.SECURITY_ATTRIBUTES securityAttributes = default;
-                write = Interop.Kernel32.CreateFile(
-                    pipeName,
-                    Interop.Kernel32.GenericOperations.GENERIC_WRITE,
-                    FileShare.Read,
-                    &securityAttributes,
-                    FileMode.Open,
-                    0,
-                    IntPtr.Zero);
-            }
-            
-            if (write.IsInvalid)
-            {
-                throw new Win32Exception(Marshal.GetLastPInvokeError());
-            }
+            // STD OUT and ERR can't use async IO
+            write = File.OpenHandle(pipeName, FileMode.Open, FileAccess.Write, FileShare.Read, FileOptions.None);
         }
         catch
         {

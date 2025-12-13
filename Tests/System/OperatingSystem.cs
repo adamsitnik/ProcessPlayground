@@ -2,7 +2,6 @@ using System.Runtime.InteropServices;
 
 namespace System;
 
-#if NETFRAMEWORK
 // Polyfill extension for .NET Framework to add OperatingSystem.IsWindows() etc. methods
 public static partial class OperatingSystemExtensions
 {
@@ -15,4 +14,3 @@ public static partial class OperatingSystemExtensions
         public static bool IsLinux() => RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
     }
 }
-#endif
