@@ -1,4 +1,5 @@
 using System;
+using System.Runtime.CompilerServices;
 
 namespace System;
 
@@ -7,7 +8,7 @@ public static partial class ArgumentExceptionExtensions
 {
     extension(ArgumentException)
     {
-        public static void ThrowIfNullOrEmpty(string? argument, string? paramName = null)
+        public static void ThrowIfNullOrEmpty(string? argument, [CallerArgumentExpression(nameof(argument))] string? paramName = null)
         {
             if (string.IsNullOrEmpty(argument))
             {

@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.IO;
 using System.Threading;
 using System.Linq;
@@ -18,7 +17,7 @@ public class CombinedOutputTests
     [InlineData(false)]
     public async Task CombinedOutput_ReturnsStdOutAndStdErr(bool useAsync)
     {
-        ProcessStartOptions options = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+        ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Hello from stdout && echo Error from stderr 1>&2" } }
             : new("sh") { Arguments = { "-c", "echo 'Hello from stdout' && echo 'Error from stderr' >&2" } };
 
@@ -37,7 +36,7 @@ public class CombinedOutputTests
     [InlineData(false)]
     public async Task CombinedOutput_CapturesExitCode(bool useAsync)
     {
-        ProcessStartOptions options = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+        ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "exit 42" } }
             : new("sh") { Arguments = { "-c", "exit 42" } };
 
@@ -53,7 +52,7 @@ public class CombinedOutputTests
     [InlineData(false)]
     public async Task CombinedOutput_HandlesEmptyOutput(bool useAsync)
     {
-        ProcessStartOptions options = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+        ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "" } }
             : new("sh") { Arguments = { "-c", "" } };
 
@@ -70,7 +69,7 @@ public class CombinedOutputTests
     [InlineData(false)]
     public async Task CombinedOutput_HandlesProcessThatWritesNoOutput(bool useAsync)
     {
-        ProcessStartOptions options = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+        ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "rem This is a comment that produces no output" } }
             : new("sh") { Arguments = { "-c", "# This is a comment that produces no output" } };
 
@@ -88,7 +87,7 @@ public class CombinedOutputTests
     public async Task CombinedOutput_HandlesLargeOutput(bool useAsync)
     {
         // Generate a large amount of output
-        ProcessStartOptions options = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+        ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "for /L %i in (1,1,1000) do @echo Line %i" } }
             : new("sh") { Arguments = { "-c", "for i in $(seq 1 1000); do echo \"Line $i\"; done" } };
 
@@ -115,7 +114,7 @@ public class CombinedOutputTests
     public async Task CombinedOutput_MergesStdOutAndStdErrInCorrectOrder(bool useAsync)
     {
         // This test verifies that stdout and stderr are interleaved correctly
-        ProcessStartOptions options = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+        ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo OUT1 && echo ERR1 1>&2 && echo OUT2 && echo ERR2 1>&2" } }
             : new("sh") { Arguments = { "-c", "echo OUT1 && echo ERR1 >&2 && echo OUT2 && echo ERR2 >&2" } };
 
@@ -135,7 +134,7 @@ public class CombinedOutputTests
     [Fact]
     public void CombinedOutput_WithTimeout_CompletesBeforeTimeout()
     {
-        ProcessStartOptions options = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+        ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Quick output" } }
             : new("sh") { Arguments = { "-c", "echo 'Quick output'" } };
 
@@ -149,14 +148,14 @@ public class CombinedOutputTests
     [Fact]
     public void CombinedOutput_WithTimeout_ThrowsOnTimeout()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && Console.IsInputRedirected)
+        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
             // On Windows, if standard input is redirected, the test cannot proceed
             // because timeout utility requires it.
             return;
         }
 
-        ProcessStartOptions options = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+        ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "timeout /t 10 /nobreak" } }
             : new("sh") { Arguments = { "-c", "sleep 10" } };
 
@@ -169,14 +168,14 @@ public class CombinedOutputTests
     [Fact]
     public async Task CombinedOutputAsync_WithCancellation_ThrowsOperationCanceled()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && Console.IsInputRedirected)
+        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
             // On Windows, if standard input is redirected, the test cannot proceed
             // because timeout utility requires it.
             return;
         }
 
-        ProcessStartOptions options = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+        ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "timeout /t 10 /nobreak" } }
             : new("sh") { Arguments = { "-c", "sleep 10" } };
 
@@ -190,14 +189,14 @@ public class CombinedOutputTests
     [Fact]
     public void CombinedOutput_WithInfiniteTimeout_Waits()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && Console.IsInputRedirected)
+        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
             // On Windows, if standard input is redirected, the test cannot proceed
             // because timeout utility requires it.
             return;
         }
 
-        ProcessStartOptions options = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+        ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "timeout /t 3 /nobreak" } }
             : new("sh") { Arguments = { "-c", "sleep 3 && echo 'Waiting done'" } };
 
@@ -210,7 +209,7 @@ public class CombinedOutputTests
     [Fact]
     public async Task CombinedOutputAsync_MultipleConcurrentCalls()
     {
-        ProcessStartOptions options = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+        ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Concurrent test" } }
             : new("sh") { Arguments = { "-c", "echo 'Concurrent test'" } };
 

@@ -13,7 +13,7 @@ namespace Tests;
 public class ReadOutputLinesTests
 {
 #if NETFRAMEWORK
-    private static bool IsWindows() => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+    private static bool IsWindows() => OperatingSystem.IsWindows();
 #else
     private static bool IsWindows() => OperatingSystem.IsWindows();
 #endif

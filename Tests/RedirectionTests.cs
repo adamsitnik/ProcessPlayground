@@ -20,7 +20,7 @@ public class RedirectionTests
     [InlineData(false)]
     public async Task StandardOutputAndErrorCanPointToTheSameHandle(bool useNamedPipes)
     {
-        bool isAsync = useNamedPipes && RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        bool isAsync = useNamedPipes && OperatingSystem.IsWindows();
         ProcessStartOptions info = new("dotnet")
         {
             Arguments = { "--help", "--invalid-argument-to-produce-error" },

@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Text;
 using System.IO;
 using System.Threading;
@@ -25,7 +24,7 @@ public class PipingTests
             ProcessStartOptions consumer;
             string expectedOutput;
 
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            if (OperatingSystem.IsWindows())
             {
                 producer = new("cmd")
                 {
@@ -55,11 +54,7 @@ public class PipingTests
 
             using SafeProcessHandle producerHandle = SafeProcessHandle.Start(producer, input: null, output: writePipe, error: null);
 
-#if NETFRAMEWORK
-            using (SafeFileHandle outputHandle = new FileStream("output.txt", FileMode.Create, FileAccess.Write, FileShare.ReadWrite).SafeFileHandle)
-#else
             using (SafeFileHandle outputHandle = File.OpenHandle("output.txt", FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
-#endif
             {
                 using SafeProcessHandle consumerHandle = SafeProcessHandle.Start(consumer, readPipe, outputHandle, error: null);
 
