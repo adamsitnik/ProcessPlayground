@@ -18,7 +18,7 @@ public static partial class ChildProcess
     /// <remarks>When <paramref name="timeout"/> is not specified, the default is to wait indefinitely.</remarks>
     public static int Execute(ProcessStartOptions options, TimeSpan? timeout = default)
     {
-        ArgumentNullException.ThrowIfNull(options, nameof(options));
+        ArgumentNullException.ThrowIfNull(options);
 
         // Design: this is exactly what ProcessStartInfo does when RedirectStandard{Input,Output,Error} are false (default).
         // We allow specifying a timeout and killing the process if it exceeds it.
@@ -37,7 +37,7 @@ public static partial class ChildProcess
     /// <returns>The exit code of the process.</returns>
     public static async Task<int> ExecuteAsync(ProcessStartOptions options, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(options, nameof(options));
+        ArgumentNullException.ThrowIfNull(options);
 
         using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
         using SafeFileHandle outputHandle = Console.OpenStandardOutputHandle();
@@ -55,7 +55,7 @@ public static partial class ChildProcess
     /// <remarks>When <paramref name="timeout"/> is not specified, the default is to wait indefinitely.</remarks>
     public static int Discard(ProcessStartOptions options, TimeSpan? timeout = default)
     {
-        ArgumentNullException.ThrowIfNull(options, nameof(options));
+        ArgumentNullException.ThrowIfNull(options);
 
         // Design: currently, we don't have a way to discard output in ProcessStartInfo,
         // and users often implement it on their own by redirecting the output, consuming it and ignoring it.
@@ -73,7 +73,7 @@ public static partial class ChildProcess
     /// <returns>The exit code of the process.</returns>
     public static async Task<int> DiscardAsync(ProcessStartOptions options, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(options, nameof(options));
+        ArgumentNullException.ThrowIfNull(options);
 
         using SafeFileHandle nullHandle = File.OpenNullFileHandle();
 
@@ -92,7 +92,7 @@ public static partial class ChildProcess
     /// <remarks>When <paramref name="timeout"/> is not specified, the default is to wait indefinitely.</remarks>
     public static int RedirectToFiles(ProcessStartOptions options, string? inputFile, string? outputFile, string? errorFile, TimeSpan? timeout = default)
     {
-        ArgumentNullException.ThrowIfNull(options, nameof(options));
+        ArgumentNullException.ThrowIfNull(options);
 
         // Design: currently, we don't have a way to redirect to files in ProcessStartInfo,
         // and users often implement it on their own by redirecting the output, consuming it and copying to file(s).
@@ -117,7 +117,7 @@ public static partial class ChildProcess
     /// <returns>The exit code of the process.</returns>
     public static async Task<int> RedirectToFilesAsync(ProcessStartOptions options, string? inputFile, string? outputFile, string? errorFile, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(options, nameof(options));
+        ArgumentNullException.ThrowIfNull(options);
 
         var handles = OpenFileHandlesForRedirection(inputFile, outputFile, errorFile);
         using SafeFileHandle inputHandle = handles.input, outputHandle = handles.output, errorHandle = handles.error;
@@ -134,7 +134,7 @@ public static partial class ChildProcess
     /// <returns>An instance of <see cref="ProcessOutputLines"/> ready to be enumerated.</returns>
     public static ProcessOutputLines ReadOutputLines(ProcessStartOptions options, TimeSpan? timeout = null, Encoding? encoding = null)
     {
-        ArgumentNullException.ThrowIfNull(options, nameof(options));
+        ArgumentNullException.ThrowIfNull(options);
 
         return new(options, timeout, encoding);
     }
@@ -151,7 +151,7 @@ public static partial class ChildProcess
     /// <remarks>Use <see cref="Console.OpenStandardInput()"/> to provide input of the process.</remarks>
     public static CombinedOutput GetCombinedOutput(ProcessStartOptions options, SafeFileHandle? input = null, TimeSpan? timeout = null)
     {
-        ArgumentNullException.ThrowIfNull(options, nameof(options));
+        ArgumentNullException.ThrowIfNull(options);
 
         SafeFileHandle? read = null;
         SafeFileHandle? write = null;
@@ -243,7 +243,7 @@ public static partial class ChildProcess
     /// <remarks>Use <see cref="Console.OpenStandardInput()"/> to provide input of the process.</remarks>
     public static async Task<CombinedOutput> GetCombinedOutputAsync(ProcessStartOptions options, SafeFileHandle? input = null, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(options, nameof(options));
+        ArgumentNullException.ThrowIfNull(options);
 
         SafeFileHandle? read = null;
         SafeFileHandle? write = null;
