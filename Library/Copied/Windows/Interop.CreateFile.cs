@@ -12,17 +12,12 @@ internal static partial class Interop
     {
 #if NETFRAMEWORK
         [DllImport(Libraries.Kernel32, EntryPoint = "CreateFileW", SetLastError = true, CharSet = CharSet.Unicode)]
-        internal static unsafe extern SafeFileHandle CreateFile(
-            string lpFileName,
-            int dwDesiredAccess,
-            FileShare dwShareMode,
-            SECURITY_ATTRIBUTES* lpSecurityAttributes,
-            FileMode dwCreationDisposition,
-            int dwFlagsAndAttributes,
-            IntPtr hTemplateFile);
+        internal static unsafe extern
 #else
         [LibraryImport(Libraries.Kernel32, EntryPoint = "CreateFileW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
-        internal static unsafe partial SafeFileHandle CreateFile(
+        internal static unsafe partial
+#endif
+        SafeFileHandle CreateFile(
             string lpFileName,
             int dwDesiredAccess,
             FileShare dwShareMode,
@@ -30,6 +25,5 @@ internal static partial class Interop
             FileMode dwCreationDisposition,
             int dwFlagsAndAttributes,
             IntPtr hTemplateFile);
-#endif
     }
 }
