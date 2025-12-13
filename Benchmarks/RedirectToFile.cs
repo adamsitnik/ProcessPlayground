@@ -1,6 +1,8 @@
 ﻿using BenchmarkDotNet.Attributes;
 using System.TBA;
 using System.Diagnostics;
+using System.Threading.Tasks;
+using System.IO;
 
 namespace Benchmarks;
 
@@ -36,6 +38,7 @@ public class RedirectToFile
         }
     }
 
+#if NET
     [Benchmark]
     public async Task<int> OldAsync()
     {
@@ -60,6 +63,7 @@ public class RedirectToFile
             return process.ExitCode;
         }
     }
+#endif
 
     [Benchmark]
     public int Shell()
@@ -78,6 +82,7 @@ public class RedirectToFile
         }
     }
 
+#if NET
     [Benchmark]
     public async Task<int> ShellAsync()
     {
@@ -94,6 +99,7 @@ public class RedirectToFile
             return process.ExitCode;
         }
     }
+#endif
 
     [Benchmark]
     public int New()

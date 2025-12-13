@@ -1,6 +1,7 @@
 ﻿using BenchmarkDotNet.Attributes;
 using System.TBA;
 using System.Diagnostics;
+using System.Threading.Tasks;
 
 namespace Benchmarks;
 
@@ -33,6 +34,7 @@ public class Discard
         }
     }
 
+#if NET
     [Benchmark]
     public async Task<int> OldAsync()
     {
@@ -54,6 +56,7 @@ public class Discard
             return process.ExitCode;
         }
     }
+#endif
 
     [Benchmark]
     public int New()
