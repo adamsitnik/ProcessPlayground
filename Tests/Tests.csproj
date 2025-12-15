@@ -25,7 +25,7 @@
     <Compile Remove="**/*.Unix.cs" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
+  <ItemGroup Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFrameworkIdentifier)' != '.NETFramework'">
     <Compile Remove="**/*.Windows.cs" />
   </ItemGroup>
 

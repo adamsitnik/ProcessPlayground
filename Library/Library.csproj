@@ -17,9 +17,6 @@
     <PackageReference Include="System.Memory" Version="4.5.5" />
     <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="8.0.0" />
     <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
-    <!-- Exclude Unix files for net48 since Full Framework only runs on Windows -->
-    <Compile Remove="Copied/Unix/*.cs" />
-    <Compile Remove="**/*.Unix.cs" />
   </ItemGroup>
 
   <!-- Exclude polyfills for non-Framework targets -->
@@ -35,7 +32,7 @@
     <Compile Remove="**/*.Unix.cs" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
+  <ItemGroup Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFrameworkIdentifier)' != '.NETFramework'">
     <Compile Remove="Copied/Windows/*.cs" />
     <Compile Remove="**/*.Windows.cs" />
   </ItemGroup>

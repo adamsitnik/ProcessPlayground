@@ -14,7 +14,8 @@ public class NoRedirection
         ProcessStartInfo info = new()
         {
             FileName = "dotnet",
-            Arguments = "--help"
+            Arguments = "--help",
+            UseShellExecute = false
         };
 
         using Process process = Process.Start(info)!;
