@@ -30,7 +30,7 @@
   <ItemGroup Condition="'$(OS)' == 'Windows_NT' OR '$(TargetFrameworkIdentifier)' == '.NETFramework'">
     <Compile Remove="Copied/Unix/*.cs" />
     <Compile Remove="**/*.Unix.cs" />
-    <Compile Remove="**/*.Linux.cs" />
+    <Compile Remove="SafeProcessHandle.Linux.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFrameworkIdentifier)' != '.NETFramework'">
@@ -38,14 +38,14 @@
     <Compile Remove="**/*.Windows.cs" />
   </ItemGroup>
 
-  <!-- Linux-specific: Use .Linux.cs files and exclude .Unix.cs files -->
+  <!-- Linux-specific: Use SafeProcessHandle.Linux.cs and exclude SafeProcessHandle.Unix.cs -->
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
-    <Compile Remove="**/*.Unix.cs" />
+    <Compile Remove="SafeProcessHandle.Unix.cs" />
   </ItemGroup>
 
-  <!-- macOS-specific: Use .Unix.cs files and exclude .Linux.cs files -->
+  <!-- macOS-specific: Use SafeProcessHandle.Unix.cs and exclude SafeProcessHandle.Linux.cs -->
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
-    <Compile Remove="**/*.Linux.cs" />
+    <Compile Remove="SafeProcessHandle.Linux.cs" />
   </ItemGroup>
 
   <ItemGroup>
