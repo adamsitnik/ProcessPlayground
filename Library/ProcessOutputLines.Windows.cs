@@ -20,6 +20,8 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
         int errorStartIndex = 0, errorEndIndex = 0;
 
         SafeFileHandle? parentOutputHandle = null, childOutputHandle = null, parentErrorHandle = null, childErrorHandle = null;
+        MemoryHandle outputPin = outputBuffer.AsMemory().Pin();
+        MemoryHandle errorPin = errorBuffer.AsMemory().Pin();
         try
         {
             using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
@@ -29,8 +31,6 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             using SafeProcessHandle processHandle = SafeProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
             using OverlappedContext outputContext = OverlappedContext.Allocate();
             using OverlappedContext errorContext = OverlappedContext.Allocate();
-            using MemoryHandle outputPin = outputBuffer.AsMemory().Pin();
-            using MemoryHandle errorPin = errorBuffer.AsMemory().Pin();
 
             _processId = processHandle.GetProcessId();
 
@@ -95,13 +95,17 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                                 // The buffer is too small to hold a single line.
                                 if (isError)
                                 {
+                                    errorPin.Dispose();
                                     BufferHelper.RentLargerBuffer(ref errorBuffer);
                                     currentBuffer = errorBuffer;
+                                    errorPin = errorBuffer.AsMemory().Pin();
                                 }
                                 else
                                 {
+                                    outputPin.Dispose();
                                     BufferHelper.RentLargerBuffer(ref outputBuffer);
                                     currentBuffer = outputBuffer;
+                                    outputPin = outputBuffer.AsMemory().Pin();
                                 }
                             }
                             else
@@ -124,14 +128,14 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                             outputEndIndex = currentEndIndex;
                         }
 
+
                         unsafe
                         {
-                            Span<byte> slice = currentBuffer.AsSpan(currentEndIndex);
-                            fixed (byte* sliceOfPinned = slice)
-                            {
-                                // Important! The whole currentBuffer is pinned above, so it's safe to exit the fixed block after issuing the read.
-                                Interop.Kernel32.ReadFile(currentFileHandle, sliceOfPinned, slice.Length, IntPtr.Zero, currentContext.GetOverlapped());
-                            }
+                            void* pinPointer = isError ? errorPin.Pointer : outputPin.Pointer;
+                            int sliceLength = currentBuffer.Length - currentEndIndex;
+                            byte* targetPointer = (byte*)pinPointer + currentEndIndex;
+
+                            Interop.Kernel32.ReadFile(currentFileHandle, targetPointer, sliceLength, IntPtr.Zero, currentContext.GetOverlapped());
                         }
                     }
                     else
@@ -185,6 +189,9 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             childOutputHandle?.Dispose();
             parentErrorHandle?.Dispose();
             childErrorHandle?.Dispose();
+
+            outputPin.Dispose();
+            errorPin.Dispose();
 
             ArrayPool<byte>.Shared.Return(outputBuffer);
             ArrayPool<byte>.Shared.Return(errorBuffer);
