@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 namespace Benchmarks;
 
 // If you don’t set RedirectStandardOutput = true, .NET does not create a pipe for you. The child process simply uses the inherited handle.
+[BenchmarkCategory(nameof(NoRedirection))]
 public class NoRedirection
 {
     [Benchmark(Baseline = true)]

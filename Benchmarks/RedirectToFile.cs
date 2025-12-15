@@ -6,6 +6,7 @@ using System.IO;
 
 namespace Benchmarks;
 
+[BenchmarkCategory(nameof(RedirectToFile))]
 public class RedirectToFile
 {
     private string? _filePath;

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 
 namespace Benchmarks;
 
+[BenchmarkCategory(nameof(Discard))]
 public class Discard
 {
     [Benchmark(Baseline = true)]

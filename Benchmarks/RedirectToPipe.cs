@@ -6,6 +6,7 @@ using System;
 
 namespace Benchmarks;
 
+[BenchmarkCategory(nameof(RedirectToPipe))]
 public class RedirectToPipe
 {
     [Benchmark(Baseline = true)]
