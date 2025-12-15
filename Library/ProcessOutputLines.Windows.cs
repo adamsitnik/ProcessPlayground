@@ -46,7 +46,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                 Interop.Kernel32.ReadFile(parentErrorHandle, (byte*)errorPin.Pointer, errorBuffer.Length, IntPtr.Zero, errorContext.GetOverlapped());
             }
 
-            while (!parentOutputHandle.IsClosed && !parentErrorHandle.IsClosed)
+            while (!parentOutputHandle.IsClosed || !parentErrorHandle.IsClosed)
             {
                 int waitResult = WaitHandle.WaitAny(waitHandles, timeoutHelper.GetRemainingMillisecondsOrThrow());
 
@@ -128,7 +128,6 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                             outputEndIndex = currentEndIndex;
                         }
 
-
                         unsafe
                         {
                             void* pinPointer = isError ? errorPin.Pointer : outputPin.Pointer;
@@ -146,10 +145,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                             yield return new ProcessOutputLine(
                                 encoding.GetString(currentBuffer, currentStartIndex, currentEndIndex - currentStartIndex),
                                 standardError: isError);
-                        }
 
-                        if (!currentFileHandle.IsClosed)
-                        {
                             if (isError)
                             {
                                 errorStartIndex = errorEndIndex = 0;
@@ -158,8 +154,14 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                             {
                                 outputStartIndex = outputEndIndex = 0;
                             }
+                        }
 
+                        if (!currentFileHandle.IsClosed)
+                        {
+                            // Close the handle to stop further reads.
                             currentFileHandle.Close();
+                            // And reset the wait handle to avoid triggering on closed handle.
+                            currentContext.WaitHandle.Reset();
                         }
                     }
                 }
