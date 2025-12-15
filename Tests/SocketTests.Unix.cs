@@ -2,6 +2,8 @@ using System.TBA;
 using Microsoft.Win32.SafeHandles;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading.Tasks;
+using System.IO;
 
 namespace Tests;
 
