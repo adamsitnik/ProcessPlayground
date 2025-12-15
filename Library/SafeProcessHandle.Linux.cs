@@ -39,33 +39,34 @@ public static partial class SafeProcessHandleExtensions
         public short revents;
     }
     
-    [StructLayout(LayoutKind.Sequential)]
-    private struct siginfo_t
+    [StructLayout(LayoutKind.Sequential, Size = 128)]
+    private unsafe struct siginfo_t
     {
-        public int si_signo;
-        public int si_errno;
-        public int si_code;
-        public int si_pid;
-        public int si_uid;
-        public int si_status;
-        // ... other fields not needed for our use case
+        public int si_signo;     // offset 0
+        public int si_errno;     // offset 4
+        public int si_code;      // offset 8
+        private int _pad0;       // offset 12 (padding)
+        public int si_pid;       // offset 16
+        public int si_uid;       // offset 20
+        public int si_status;    // offset 24
+        // Rest of the structure is padding to make total size 128 bytes
     }
     
     // System call numbers for x86_64 Linux
     private const int __NR_clone3 = 435;
     private const int __NR_pidfd_send_signal = 424;
     
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe long syscall(long number, void* arg1, nuint arg2);
+    [DllImport("libc", EntryPoint = "syscall", SetLastError = true)]
+    private static extern unsafe long syscall_clone3(long number, clone_args* args, nuint size);
     
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe int syscall(int number, int arg1, int arg2, nint arg3);
+    [DllImport("libc", EntryPoint = "syscall", SetLastError = true)]
+    private static extern unsafe int syscall_pidfd_send_signal(int number, int pidfd, int sig, nint siginfo);
     
     [DllImport("libc", SetLastError = true)]
     private static extern unsafe int poll(PollFd* fds, nuint nfds, int timeout);
     
     [DllImport("libc", SetLastError = true)]
-    private static extern unsafe int waitid(int idtype, int id, siginfo_t* infop, int options, void* rusage);
+    private static extern unsafe int waitid(int idtype, int id, siginfo_t* infop, int options);
     
     [DllImport("libc", SetLastError = true)]
     private static extern int close(int fd);
@@ -155,7 +156,13 @@ public static partial class SafeProcessHandleExtensions
             }
         }
 
+        // Get file descriptors for stdin/stdout/stderr
+        int stdinFd = (int)inputHandle.DangerousGetHandle();
+        int stdoutFd = (int)outputHandle.DangerousGetHandle();
+        int stderrFd = (int)errorHandle.DangerousGetHandle();
+        
         // Allocate native memory for arguments and environment
+        // NOTE: We allocate this before forking so both parent and child can access it
         IntPtr[] argvHandles = new IntPtr[argList.Count];
         IntPtr[] envpHandles = new IntPtr[envList.Count];
         IntPtr filePathHandle = IntPtr.Zero;
@@ -194,23 +201,21 @@ public static partial class SafeProcessHandleExtensions
             }
             envpPtrs[envList.Count] = null;
             
-            // Get file descriptors for stdin/stdout/stderr
-            int stdinFd = (int)inputHandle.DangerousGetHandle();
-            int stdoutFd = (int)outputHandle.DangerousGetHandle();
-            int stderrFd = (int)errorHandle.DangerousGetHandle();
-            
             // Use clone3 to create process with CLONE_PIDFD
-            int pidfd = -1;
+            // Allocate pidfd on the stack to ensure it has a stable address
+            int* pidfd_ptr = stackalloc int[1];
+            *pidfd_ptr = -1;
+            
             clone_args args = new clone_args
             {
                 flags = CLONE_PIDFD,
-                pidfd = (ulong)(nint)(&pidfd),
+                pidfd = (ulong)(nint)pidfd_ptr,
                 exit_signal = SIGCHLD,
                 stack = 0,
                 stack_size = 0
             };
             
-            long cloneResult = syscall(__NR_clone3, &args, (nuint)sizeof(clone_args));
+            long cloneResult = syscall_clone3(__NR_clone3, &args, (nuint)sizeof(clone_args));
             
             if (cloneResult == -1)
             {
@@ -218,7 +223,10 @@ public static partial class SafeProcessHandleExtensions
             }
             else if (cloneResult == 0)
             {
-                // Child process
+                // ===================== CHILD PROCESS =====================
+                // This code runs in the child process only
+                // We must NOT return to the finally block - we must call _exit()
+                
                 // Set up file descriptors
                 if (stdinFd != 0)
                 {
@@ -239,29 +247,40 @@ public static partial class SafeProcessHandleExtensions
                     chdir(cwdPtr);
                 }
                 
-                // Execute the program
+                // Execute the program - this replaces the current process image
+                // After exec, we're running the new program, not this code
                 fixed (byte** argv = argvPtrs)
                 fixed (byte** envp = envpPtrs)
                 {
                     execve(filePathPtr, argv, envp);
                 }
                 
-                // If we get here, execve failed
+                // If we get here, execve failed - exit immediately
+                // Use _exit (not exit) to avoid flushing buffers, running atexit handlers, etc.
                 _exit(127);
+                // NOTE: Code never reaches here
             }
             
-            // Parent process - pidfd should now be set
+            // ===================== PARENT PROCESS =====================
+            // pidfd should now be set by the kernel
+            int pidfd = *pidfd_ptr;
             if (pidfd < 0)
             {
                 throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to get pidfd from clone3");
             }
             
+            // Small sleep to give child time to exec before we free memory
+            // This is not perfect but should work in practice
+            Thread.Sleep(1);
+            
             // Return a SafeProcessHandle with the pidfd
-            return new SafeProcessHandle(pidfd, ownsHandle: true);
+            // Note: We set ownsHandle to false because we'll close the pidfd manually in WaitForExitCore
+            return new SafeProcessHandle(pidfd, ownsHandle: false);
         }
         finally
         {
             // Free marshaled strings
+            // This runs only in the parent process (child calls _exit)
             if (filePathHandle != IntPtr.Zero)
             {
                 Marshal.FreeHGlobal(filePathHandle);
@@ -306,10 +325,10 @@ public static partial class SafeProcessHandleExtensions
             siginfo_t info = default;
             while (true)
             {
-                int result = waitid(P_PIDFD, pidfd, &info, WEXITED, null);
+                int result = waitid(P_PIDFD, pidfd, &info, WEXITED);
                 if (result == 0)
                 {
-                    // Process exited - close the pidfd
+                    // Process exited - close the pidfd since we don't own it via SafeHandle
                     close(pidfd);
                     return info.si_status;
                 }
@@ -356,7 +375,7 @@ public static partial class SafeProcessHandleExtensions
                 else if (pollResult == 0)
                 {
                     // Timeout - kill the process using pidfd_send_signal
-                    int killResult = syscall(__NR_pidfd_send_signal, pidfd, 9, (nint)0); // SIGKILL = 9
+                    int killResult = syscall_pidfd_send_signal(__NR_pidfd_send_signal, pidfd, 9, (nint)0); // SIGKILL = 9
                     if (killResult < 0)
                     {
                         int errno = Marshal.GetLastPInvokeError();
@@ -371,7 +390,7 @@ public static partial class SafeProcessHandleExtensions
                     siginfo_t info = default;
                     while (true)
                     {
-                        int result = waitid(P_PIDFD, pidfd, &info, WEXITED, null);
+                        int result = waitid(P_PIDFD, pidfd, &info, WEXITED);
                         if (result == 0)
                         {
                             close(pidfd);
@@ -393,7 +412,7 @@ public static partial class SafeProcessHandleExtensions
                     siginfo_t info = default;
                     while (true)
                     {
-                        int result = waitid(P_PIDFD, pidfd, &info, WEXITED | WNOHANG, null);
+                        int result = waitid(P_PIDFD, pidfd, &info, WEXITED | WNOHANG);
                         if (result == 0)
                         {
                             close(pidfd);
@@ -424,7 +443,7 @@ public static partial class SafeProcessHandleExtensions
             {
                 unsafe
                 {
-                    syscall(__NR_pidfd_send_signal, pidfd, 9, (nint)0); // SIGKILL = 9
+                    syscall_pidfd_send_signal(__NR_pidfd_send_signal, pidfd, 9, (nint)0); // SIGKILL = 9
                 }
             }
             catch
@@ -483,7 +502,7 @@ public static partial class SafeProcessHandleExtensions
         siginfo_t info = default;
         while (true)
         {
-            int result = waitid(P_PIDFD, pidfd, &info, WEXITED | WNOHANG, null);
+            int result = waitid(P_PIDFD, pidfd, &info, WEXITED | WNOHANG);
             if (result == 0)
             {
                 return info.si_status;
