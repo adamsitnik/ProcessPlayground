@@ -3,6 +3,8 @@ using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Diagnosers;
 using BenchmarkDotNet.Exporters;
 using BenchmarkDotNet.Jobs;
+using BenchmarkDotNet.Order;
+using BenchmarkDotNet.Reports;
 using BenchmarkDotNet.Running;
 using Perfolizer.Horology;
 
@@ -14,13 +16,16 @@ var job = Job.Default
     .AsDefault();
 
 var config = ManualConfig.CreateMinimumViable()
+    .AddLogicalGroupRules(BenchmarkLogicalGroupRule.ByCategory)
     .AddJob(job)
     .AddExporter(MarkdownExporter.GitHub)
     .AddDiagnoser(MemoryDiagnoser.Default)
 #if NET
     .AddDiagnoser(new ThreadingDiagnoser(new ThreadingDiagnoserConfig(displayLockContentionWhenZero: false)))
 #endif
-    .HideColumns(Column.Error, Column.StdDev, Column.RatioSD);
+    .HideColumns(Column.Error, Column.StdDev, Column.RatioSD)
+    .WithOrderer(new DefaultOrderer(SummaryOrderPolicy.Declared, MethodOrderPolicy.Declared))
+    .WithSummaryStyle(SummaryStyle.Default.WithRatioStyle(RatioStyle.Trend));
 
 BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly)
     .Run(args, config);
