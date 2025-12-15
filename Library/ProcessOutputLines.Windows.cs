@@ -140,12 +140,12 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                     }
                     else
                     {
-                        // EOF on STD OUT: return remaining characters
+                        // EOF: return remaining characters
                         if (currentStartIndex != currentEndIndex)
                         {
                             yield return new ProcessOutputLine(
                                 encoding.GetString(currentBuffer, currentStartIndex, currentEndIndex - currentStartIndex),
-                                standardError: false);
+                                standardError: isError);
                         }
 
                         if (!currentFileHandle.IsClosed)
@@ -165,7 +165,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                 }
                 else
                 {
-                    throw new InvalidOperationException($"Unexpected wait currentFileHandle result: {waitResult}.");
+                    throw new InvalidOperationException($"Unexpected wait result: {waitResult}.");
                 }
             }
 
