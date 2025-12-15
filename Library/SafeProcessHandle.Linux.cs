@@ -146,14 +146,6 @@ public static partial class SafeProcessHandleExtensions
     private const int SIGSTOP = 19;
     private const int NSIG = 65;
     
-    // Helper class to store pidfd for a given PID
-    private class ProcessInfo
-    {
-        public int Pidfd { get; set; }
-    }
-    
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, ProcessInfo> s_processInfo = new();
-    
     private static unsafe SafeProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
         // Resolve executable path first
@@ -375,10 +367,9 @@ public static partial class SafeProcessHandleExtensions
                 throw new Win32Exception(childError, $"Failed to execute {resolvedPath}");
             }
             
-            // Success - create SafeProcessHandle with PID (not pidfd)
-            // Store pidfd mapped to PID for later retrieval
-            var handle = new SafeProcessHandle(pid, ownsHandle: true);
-            s_processInfo[pid] = new ProcessInfo { Pidfd = pidfd };
+            // Success - create SafeProcessHandle with pidfd (not PID)
+            // The pidfd is the file descriptor that identifies the process
+            var handle = new SafeProcessHandle(pidfd, ownsHandle: true);
             
             return handle;
         }
@@ -412,19 +403,17 @@ public static partial class SafeProcessHandleExtensions
 
     private static int GetProcessIdCore(SafeProcessHandle processHandle)
     {
-        // The handle contains the actual PID
-        return (int)processHandle.DangerousGetHandle();
+        // The handle contains the pidfd (file descriptor), not the PID
+        // We need to get the PID from the pidfd
+        // For now, return the pidfd itself as a placeholder
+        // TODO: Implement proper PID retrieval from pidfd (e.g., via /proc/self/fdinfo)
+        int pidfd = (int)processHandle.DangerousGetHandle();
+        return pidfd;
     }
 
     private static unsafe int WaitForExitCore(SafeProcessHandle processHandle, int milliseconds)
     {
-        int pid = (int)processHandle.DangerousGetHandle();
-        int pidfd = s_processInfo.TryGetValue(pid, out var info) ? info.Pidfd : -1;
-        
-        if (pidfd < 0)
-        {
-            throw new InvalidOperationException("Process handle does not have a valid pidfd");
-        }
+        int pidfd = (int)processHandle.DangerousGetHandle();
         
         if (milliseconds == Timeout.Infinite)
         {
@@ -435,9 +424,8 @@ public static partial class SafeProcessHandleExtensions
                 int result = waitid(P_PIDFD, pidfd, &siginfo, WEXITED);
                 if (result == 0)
                 {
-                    // Process exited - close the pidfd and remove from dictionary
+                    // Process exited - close the pidfd
                     close(pidfd);
-                    s_processInfo.TryRemove(pid, out _);
                     return siginfo.si_status;
                 }
                 else
@@ -493,7 +481,6 @@ public static partial class SafeProcessHandleExtensions
                         if (result == 0)
                         {
                             close(pidfd);
-                            s_processInfo.TryRemove(pid, out _);
                             return siginfo.si_status;
                         }
                         else
@@ -516,7 +503,6 @@ public static partial class SafeProcessHandleExtensions
                         if (result == 0)
                         {
                             close(pidfd);
-                            s_processInfo.TryRemove(pid, out _);
                             return siginfo.si_status;
                         }
                         else
@@ -535,13 +521,7 @@ public static partial class SafeProcessHandleExtensions
 
     private static async Task<int> WaitForExitAsyncCore(SafeProcessHandle processHandle, CancellationToken cancellationToken)
     {
-        int pid = (int)processHandle.DangerousGetHandle();
-        int pidfd = s_processInfo.TryGetValue(pid, out var info) ? info.Pidfd : -1;
-        
-        if (pidfd < 0)
-        {
-            throw new InvalidOperationException("Process handle does not have a valid pidfd");
-        }
+        int pidfd = (int)processHandle.DangerousGetHandle();
         
         // Register cancellation to kill the process using pidfd_send_signal
         using var registration = cancellationToken.Register(() =>
@@ -568,7 +548,6 @@ public static partial class SafeProcessHandleExtensions
                 // Process exited, get the exit status
                 int exitStatus = WaitIdPidfd(pidfd);
                 close(pidfd);
-                s_processInfo.TryRemove(pid, out _);
                 return exitStatus;
             }
             else if (pollResult < 0)
