@@ -39,7 +39,6 @@ public class AnonymousPipeTests
 #else
             await writeStream.WriteAsync(message);
 #endif
-            await writeStream.FlushAsync();
 
             byte[] buffer = new byte[message.Length];
 #if NETFRAMEWORK
