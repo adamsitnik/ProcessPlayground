@@ -25,6 +25,8 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
         int errorStartIndex = 0, errorEndIndex = 0;
 
         SafeFileHandle? parentOutputHandle = null, childOutputHandle = null, parentErrorHandle = null, childErrorHandle = null;
+        MemoryHandle outputPin = outputBuffer.AsMemory().Pin();
+        MemoryHandle errorPin = errorBuffer.AsMemory().Pin();
         try
         {
             using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
@@ -34,8 +36,6 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             using SafeProcessHandle processHandle = SafeProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
             using OverlappedContext outputContext = OverlappedContext.Allocate();
             using OverlappedContext errorContext = OverlappedContext.Allocate();
-            using MemoryHandle outputPin = outputBuffer.AsMemory().Pin();
-            using MemoryHandle errorPin = errorBuffer.AsMemory().Pin();
 
             _processId = processHandle.GetProcessId();
 
@@ -51,7 +51,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                 Interop.Kernel32.ReadFile(parentErrorHandle, (byte*)errorPin.Pointer, errorBuffer.Length, IntPtr.Zero, errorContext.GetOverlapped());
             }
 
-            while (!parentOutputHandle.IsClosed && !parentErrorHandle.IsClosed)
+            while (!parentOutputHandle.IsClosed || !parentErrorHandle.IsClosed)
             {
                 int waitResult = WaitHandle.WaitAny(waitHandles, timeoutHelper.GetRemainingMillisecondsOrThrow());
 
@@ -112,13 +112,17 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                                 // The buffer is too small to hold a single line.
                                 if (isError)
                                 {
+                                    errorPin.Dispose();
                                     BufferHelper.RentLargerBuffer(ref errorBuffer);
                                     currentBuffer = errorBuffer;
+                                    errorPin = errorBuffer.AsMemory().Pin();
                                 }
                                 else
                                 {
+                                    outputPin.Dispose();
                                     BufferHelper.RentLargerBuffer(ref outputBuffer);
                                     currentBuffer = outputBuffer;
+                                    outputPin = outputBuffer.AsMemory().Pin();
                                 }
                             }
                             else
@@ -143,26 +147,22 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 
                         unsafe
                         {
-                            Span<byte> slice = currentBuffer.AsSpan(currentEndIndex);
-                            fixed (byte* sliceOfPinned = slice)
-                            {
-                                // Important! The whole currentBuffer is pinned above, so it's safe to exit the fixed block after issuing the read.
-                                Interop.Kernel32.ReadFile(currentFileHandle, sliceOfPinned, slice.Length, IntPtr.Zero, currentContext.GetOverlapped());
-                            }
+                            void* pinPointer = isError ? errorPin.Pointer : outputPin.Pointer;
+                            int sliceLength = currentBuffer.Length - currentEndIndex;
+                            byte* targetPointer = (byte*)pinPointer + currentEndIndex;
+
+                            Interop.Kernel32.ReadFile(currentFileHandle, targetPointer, sliceLength, IntPtr.Zero, currentContext.GetOverlapped());
                         }
                     }
                     else
                     {
-                        // EOF on STD OUT: return remaining characters
+                        // EOF: return remaining characters
                         if (currentStartIndex != currentEndIndex)
                         {
                             yield return new ProcessOutputLine(
                                 encoding.GetString(currentBuffer, currentStartIndex, currentEndIndex - currentStartIndex),
-                                standardError: false);
-                        }
+                                standardError: isError);
 
-                        if (!currentFileHandle.IsClosed)
-                        {
                             if (isError)
                             {
                                 errorStartIndex = errorEndIndex = 0;
@@ -171,14 +171,20 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                             {
                                 outputStartIndex = outputEndIndex = 0;
                             }
+                        }
 
+                        if (!currentFileHandle.IsClosed)
+                        {
+                            // Close the handle to stop further reads.
                             currentFileHandle.Close();
+                            // And reset the wait handle to avoid triggering on closed handle.
+                            currentContext.WaitHandle.Reset();
                         }
                     }
                 }
                 else
                 {
-                    throw new InvalidOperationException($"Unexpected wait currentFileHandle result: {waitResult}.");
+                    throw new InvalidOperationException($"Unexpected wait result: {waitResult}.");
                 }
             }
 
@@ -202,6 +208,9 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             childOutputHandle?.Dispose();
             parentErrorHandle?.Dispose();
             childErrorHandle?.Dispose();
+
+            outputPin.Dispose();
+            errorPin.Dispose();
 
             ArrayPool<byte>.Shared.Return(outputBuffer);
             ArrayPool<byte>.Shared.Return(errorBuffer);
