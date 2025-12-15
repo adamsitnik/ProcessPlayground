@@ -1,3 +1,9 @@
+using System.IO;
+using System.Threading;
+using System.Linq;
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 ﻿using Microsoft.Win32.SafeHandles;
 using System.TBA;
 using System.Text;
@@ -19,7 +25,7 @@ public class CombinedOutputTests
             ? await ChildProcess.GetCombinedOutputAsync(options)
             : ChildProcess.GetCombinedOutput(options);
 
-        string output = Encoding.UTF8.GetString(result.Bytes.Span);
+        string output = result.GetText();
         Assert.Contains("Hello from stdout", output);
         Assert.Contains("Error from stderr", output);
         Assert.Equal(0, result.ExitCode);
@@ -89,7 +95,7 @@ public class CombinedOutputTests
             ? await ChildProcess.GetCombinedOutputAsync(options)
             : ChildProcess.GetCombinedOutput(options);
 
-        string output = Encoding.UTF8.GetString(result.Bytes.Span);
+        string output = result.GetText();
         
         // Build expected output
         StringBuilder expected = new();
@@ -116,7 +122,7 @@ public class CombinedOutputTests
             ? await ChildProcess.GetCombinedOutputAsync(options)
             : ChildProcess.GetCombinedOutput(options);
 
-        string output = Encoding.UTF8.GetString(result.Bytes.Span);
+        string output = result.GetText();
         
         // Verify all lines are present (order may vary due to buffering)
         Assert.Contains("OUT1", output);
@@ -134,7 +140,7 @@ public class CombinedOutputTests
 
         CombinedOutput result = ChildProcess.GetCombinedOutput(options, timeout: TimeSpan.FromSeconds(5));
 
-        string output = Encoding.UTF8.GetString(result.Bytes.Span);
+        string output = result.GetText();
         Assert.Contains("Quick output", output);
         Assert.Equal(0, result.ExitCode);
     }
@@ -176,7 +182,11 @@ public class CombinedOutputTests
         using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(500));
         using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
 
+#if NETFRAMEWORK
+        await Assert.ThrowsAsync<TaskCanceledException>(async () =>
+#else
         await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+#endif
             await ChildProcess.GetCombinedOutputAsync(options, inputHandle, cancellationToken: cts.Token));
     }
 
@@ -196,7 +206,7 @@ public class CombinedOutputTests
 
         CombinedOutput result = ChildProcess.GetCombinedOutput(options, input: Console.OpenStandardInputHandle(), timeout: Timeout.InfiniteTimeSpan);
 
-        string output = Encoding.UTF8.GetString(result.Bytes.Span);
+        string output = result.GetText();
         Assert.True(output.Contains("Waiting") || output.Contains("done"));
     }
 
@@ -219,7 +229,7 @@ public class CombinedOutputTests
         // Verify all completed successfully
         foreach (var result in results)
         {
-            string output = Encoding.UTF8.GetString(result.Bytes.Span);
+            string output = result.GetText();
             Assert.Contains("Concurrent test", output);
             Assert.Equal(0, result.ExitCode);
         }

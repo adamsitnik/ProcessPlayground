@@ -1,6 +1,9 @@
-﻿using System.ComponentModel;
+﻿using System;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using System.TBA;
 
 namespace Microsoft.Win32.SafeHandles;
@@ -31,7 +34,7 @@ public static partial class SafeProcessHandleExtensions
         Interop.Kernel32.STARTUPINFO startupInfo = default;
         Interop.Kernel32.PROCESS_INFORMATION processInfo = default;
         Interop.Kernel32.SECURITY_ATTRIBUTES unused_SecAttrs = default;
-        SafeProcessHandle procSH = new();
+        SafeProcessHandle? procSH = null;
         IntPtr currentProcHandle = Interop.Kernel32.GetCurrentProcess();
 
         // Take a global lock to synchronize all redirect pipe handle creations and CreateProcess
@@ -91,17 +94,17 @@ public static partial class SafeProcessHandleExtensions
                         ref processInfo      // pointer to PROCESS_INFORMATION
                     );
                     if (!retVal)
-                        errorCode = Marshal.GetLastWin32Error();
+                        errorCode = Marshal.GetLastPInvokeError();
                 }
 
                 if (processInfo.hProcess != IntPtr.Zero && processInfo.hProcess != new IntPtr(-1))
-                    Marshal.InitHandle(procSH, processInfo.hProcess);
+                    procSH = new(processInfo.hProcess, true);
                 if (processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
                     Interop.Kernel32.CloseHandle(processInfo.hThread);
             }
             catch
             {
-                procSH.Dispose();
+                procSH?.Dispose();
 
                 throw;
             }
@@ -109,6 +112,11 @@ public static partial class SafeProcessHandleExtensions
             {
                 Interop.Kernel32.CloseHandle(currentProcHandle);
             }
+        }
+
+        if (procSH == null)
+        {
+            throw new InvalidOperationException("Failed to create process handle.");
         }
 
         return procSH;

@@ -1,23 +1,38 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
+    <TargetFrameworks>net10.0;net48</TargetFrameworks>
+    <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>System.TBA</RootNamespace>
+    <LangVersion>preview</LangVersion>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
+  <PropertyGroup Condition="'$(OS)' == 'Windows_NT' OR '$(TargetFrameworkIdentifier)' == '.NETFramework'">
     <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'">
+    <PackageReference Include="System.Memory" Version="4.5.5" />
+    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="8.0.0" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
+  </ItemGroup>
+
+  <!-- Exclude polyfills for non-Framework targets -->
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' != '.NETFramework'">
+    <Compile Remove="System/ArgumentNullException.cs" />
+    <Compile Remove="System/ArgumentException.cs" />
+    <Compile Remove="System/Runtime/InteropServices/Marshal.cs" />
+    <Compile Remove="System/Runtime/CompilerServices/CallerArgumentExpressionAttribute.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(OS)' == 'Windows_NT' OR '$(TargetFrameworkIdentifier)' == '.NETFramework'">
     <Compile Remove="Copied/Unix/*.cs" />
     <Compile Remove="**/*.Unix.cs" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
+  <ItemGroup Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFrameworkIdentifier)' != '.NETFramework'">
     <Compile Remove="Copied/Windows/*.cs" />
     <Compile Remove="**/*.Windows.cs" />
   </ItemGroup>

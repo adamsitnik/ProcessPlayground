@@ -1,4 +1,5 @@
-﻿using System.Buffers;
+﻿using System;
+using System.Buffers;
 
 namespace System.TBA;
 
@@ -16,7 +17,12 @@ internal static class BufferHelper
     internal static void RentLargerBuffer(ref byte[] buffer)
     {
         byte[] oldBuffer = buffer;
+#if NETFRAMEWORK
+        const int MaxArrayLength = 0X7FEFFFFF; // From .NET Framework Array class
+        buffer = ArrayPool<byte>.Shared.Rent(Math.Min(buffer.Length * 2, MaxArrayLength));
+#else
         buffer = ArrayPool<byte>.Shared.Rent(Math.Min(buffer.Length * 2, Array.MaxLength));
+#endif
 
         try
         {
