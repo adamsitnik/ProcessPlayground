@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.Marshalling;
 using System.Threading;
 using System.Threading.Tasks;
 using System.TBA;
@@ -97,8 +98,8 @@ public static partial class SafeProcessHandleExtensions
     [DllImport("libc", SetLastError = true)]
     private static extern int close(int fd);
     
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe int access(byte* pathname, int mode);
+    [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int access(string pathname, int mode);
     
     [DllImport("libc", SetLastError = true)]
     private static extern unsafe int pipe2(int* pipefd, int flags);
@@ -112,8 +113,8 @@ public static partial class SafeProcessHandleExtensions
     [DllImport("libc", SetLastError = true)]
     private static extern int dup2(int oldfd, int newfd);
     
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe int chdir(byte* path);
+    [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
+    private static partial int chdir(string path);
     
     [DllImport("libc", SetLastError = true)]
     private static extern unsafe int execve(byte* path, byte** argv, byte** envp);
@@ -195,7 +196,6 @@ public static partial class SafeProcessHandleExtensions
         IntPtr[] argvHandles = new IntPtr[argList.Count];
         IntPtr[] envpHandles = new IntPtr[envList.Count];
         IntPtr filePathHandle = IntPtr.Zero;
-        IntPtr cwdHandle = IntPtr.Zero;
         
         byte*[] argvPtrs = new byte*[argList.Count + 1];
         byte*[] envpPtrs = new byte*[envList.Count + 1];
@@ -205,14 +205,6 @@ public static partial class SafeProcessHandleExtensions
             // Marshal file path
             filePathHandle = Marshal.StringToHGlobalAnsi(resolvedPath);
             byte* filePathPtr = (byte*)filePathHandle;
-            
-            // Marshal working directory if specified
-            byte* cwdPtr = null;
-            if (options.WorkingDirectory != null)
-            {
-                cwdHandle = Marshal.StringToHGlobalAnsi(options.WorkingDirectory.FullName);
-                cwdPtr = (byte*)cwdHandle;
-            }
             
             // Marshal argv
             for (int i = 0; i < argList.Count; i++)
@@ -311,9 +303,9 @@ public static partial class SafeProcessHandleExtensions
                 }
                 
                 // Change working directory if specified
-                if (cwdPtr != null)
+                if (options.WorkingDirectory != null)
                 {
-                    if (chdir(cwdPtr) == -1)
+                    if (chdir(options.WorkingDirectory.FullName) == -1)
                     {
                         int err = Marshal.GetLastPInvokeError();
                         write(waitPipe[1], &err, (nuint)sizeof(int));
@@ -379,10 +371,6 @@ public static partial class SafeProcessHandleExtensions
             if (filePathHandle != IntPtr.Zero)
             {
                 Marshal.FreeHGlobal(filePathHandle);
-            }
-            if (cwdHandle != IntPtr.Zero)
-            {
-                Marshal.FreeHGlobal(cwdHandle);
             }
             foreach (var handle in argvHandles)
             {
@@ -644,17 +632,9 @@ public static partial class SafeProcessHandleExtensions
         return null;
     }
     
-    private static unsafe bool IsExecutable(string path)
+    private static bool IsExecutable(string path)
     {
-        IntPtr pathHandle = Marshal.StringToHGlobalAnsi(path);
-        try
-        {
-            // Check for execute permission (X_OK = 1)
-            return access((byte*)pathHandle, 1) == 0;
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(pathHandle);
-        }
+        // Check for execute permission (X_OK = 1)
+        return access(path, 1) == 0;
     }
 }
