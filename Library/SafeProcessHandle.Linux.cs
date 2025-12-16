@@ -193,32 +193,28 @@ public static partial class SafeProcessHandleExtensions
         }
         
         // Allocate native memory for arguments and environment
-        IntPtr[] argvHandles = new IntPtr[argList.Count];
-        IntPtr[] envpHandles = new IntPtr[envList.Count];
-        IntPtr filePathHandle = IntPtr.Zero;
-        
-        byte*[] argvPtrs = new byte*[argList.Count + 1];
-        byte*[] envpPtrs = new byte*[envList.Count + 1];
+        byte** argvPtrs = null;
+        byte** envpPtrs = null;
+        byte* filePathPtr = null;
         
         try
         {
             // Marshal file path
-            filePathHandle = Marshal.StringToHGlobalAnsi(resolvedPath);
-            byte* filePathPtr = (byte*)filePathHandle;
+            filePathPtr = (byte*)Marshal.StringToHGlobalAnsi(resolvedPath);
             
             // Marshal argv
+            argvPtrs = (byte**)Marshal.AllocHGlobal((argList.Count + 1) * sizeof(byte*));
             for (int i = 0; i < argList.Count; i++)
             {
-                argvHandles[i] = Marshal.StringToHGlobalAnsi(argList[i]);
-                argvPtrs[i] = (byte*)argvHandles[i];
+                argvPtrs[i] = (byte*)Marshal.StringToHGlobalAnsi(argList[i]);
             }
             argvPtrs[argList.Count] = null;
             
             // Marshal envp
+            envpPtrs = (byte**)Marshal.AllocHGlobal((envList.Count + 1) * sizeof(byte*));
             for (int i = 0; i < envList.Count; i++)
             {
-                envpHandles[i] = Marshal.StringToHGlobalAnsi(envList[i]);
-                envpPtrs[i] = (byte*)envpHandles[i];
+                envpPtrs[i] = (byte*)Marshal.StringToHGlobalAnsi(envList[i]);
             }
             envpPtrs[envList.Count] = null;
             
@@ -252,6 +248,9 @@ public static partial class SafeProcessHandleExtensions
             else if (cloneResult == 0)
             {
                 // ===================== CHILD PROCESS =====================
+                // CRITICAL: Do not return from this block! Must call _exit() to avoid
+                // running managed cleanup code that would double-free the marshaled memory.
+
                 // Restore signal mask and reset signal handlers to default
                 // This is critical for proper child process behavior
                 sigaction_t sa_default = new sigaction_t { sa_handler = (IntPtr)SIG_DFL };
@@ -301,31 +300,31 @@ public static partial class SafeProcessHandleExtensions
                         _exit(127);
                     }
                 }
-                
+
                 // Change working directory if specified
                 if (options.WorkingDirectory != null)
                 {
-                    if (chdir(options.WorkingDirectory.FullName) == -1)
+                    byte* wdPtr = (byte*)Marshal.StringToHGlobalAnsi(options.WorkingDirectory.FullName);
+                    int chdirResult = chdir(options.WorkingDirectory.FullName);
+                    Marshal.FreeHGlobal((IntPtr)wdPtr);
+                    
+                    if (chdirResult == -1)
                     {
                         int err = Marshal.GetLastPInvokeError();
                         write(waitPipe[1], &err, (nuint)sizeof(int));
                         _exit(127);
                     }
                 }
-                
+
                 // Execute the program - this replaces the current process image
-                fixed (byte** argv = argvPtrs)
-                fixed (byte** envp = envpPtrs)
-                {
-                    execve(filePathPtr, argv, envp);
-                }
-                
+                execve(filePathPtr, argvPtrs, envpPtrs);
+
                 // If we get here, execve failed
                 int execErr = Marshal.GetLastPInvokeError();
                 write(waitPipe[1], &execErr, (nuint)sizeof(int));
                 _exit(127);
             }
-            
+
             // ===================== PARENT PROCESS =====================
             // Restore signal mask immediately
             pthread_sigmask(SIG_SETMASK, &old_signal_set, null);
@@ -367,24 +366,28 @@ public static partial class SafeProcessHandleExtensions
         }
         finally
         {
-            // Free marshaled strings
-            if (filePathHandle != IntPtr.Zero)
+            // Free marshaled strings - only parent process reaches here
+            if (filePathPtr != null)
             {
-                Marshal.FreeHGlobal(filePathHandle);
+                Marshal.FreeHGlobal((IntPtr)filePathPtr);
             }
-            foreach (var handle in argvHandles)
+            
+            if (argvPtrs != null)
             {
-                if (handle != IntPtr.Zero)
+                for (int i = 0; argvPtrs[i] != null; i++)
                 {
-                    Marshal.FreeHGlobal(handle);
+                    Marshal.FreeHGlobal((IntPtr)argvPtrs[i]);
                 }
+                Marshal.FreeHGlobal((IntPtr)argvPtrs);
             }
-            foreach (var handle in envpHandles)
+            
+            if (envpPtrs != null)
             {
-                if (handle != IntPtr.Zero)
+                for (int i = 0; envpPtrs[i] != null; i++)
                 {
-                    Marshal.FreeHGlobal(handle);
+                    Marshal.FreeHGlobal((IntPtr)envpPtrs[i]);
                 }
+                Marshal.FreeHGlobal((IntPtr)envpPtrs);
             }
         }
     }
