@@ -3,10 +3,11 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Runtime.InteropServices.Marshalling;
 using System.Threading;
 using System.Threading.Tasks;
 using System.TBA;
+using System.Text;
+using System.Diagnostics;
 
 namespace Microsoft.Win32.SafeHandles;
 
@@ -44,7 +45,7 @@ public static partial class SafeProcessHandleExtensions
     }
     
     [StructLayout(LayoutKind.Sequential, Size = 128)]
-    private unsafe struct siginfo_t
+    private struct siginfo_t
     {
         public int si_signo;     // offset 0
         public int si_errno;     // offset 4
@@ -63,7 +64,7 @@ public static partial class SafeProcessHandleExtensions
     }
     
     [StructLayout(LayoutKind.Sequential)]
-    private unsafe struct sigaction_t
+    private struct sigaction_t
     {
         public IntPtr sa_handler;
         public sigset_t sa_mask;
@@ -79,58 +80,58 @@ public static partial class SafeProcessHandleExtensions
     private const int __NR_clone3 = 435;
     private const int __NR_pidfd_send_signal = 424;
     private const int __NR_pidfd_open = 434;
-    
-    [DllImport("libc", EntryPoint = "syscall", SetLastError = true)]
-    private static extern unsafe long syscall_clone3(long number, clone_args* args, nuint size);
-    
-    [DllImport("libc", EntryPoint = "syscall", SetLastError = true)]
-    private static extern unsafe int syscall_pidfd_send_signal(int number, int pidfd, int sig, nint siginfo);
-    
-    [DllImport("libc", EntryPoint = "syscall", SetLastError = true)]
-    private static extern int syscall_pidfd_open(int number, int pid, uint flags);
-    
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe int poll(PollFd* fds, nuint nfds, int timeout);
-    
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe int waitid(int idtype, int id, siginfo_t* infop, int options);
-    
-    [DllImport("libc", SetLastError = true)]
-    private static extern int close(int fd);
-    
+
+    [LibraryImport("libc", EntryPoint = "syscall", SetLastError = true)]
+    private static unsafe partial long syscall_clone3(long number, clone_args* args, nuint size);
+
+    [LibraryImport("libc", EntryPoint = "syscall", SetLastError = true)]
+    private static partial int syscall_pidfd_send_signal(int number, int pidfd, int sig, nint siginfo);
+
+    [LibraryImport("libc", EntryPoint = "syscall", SetLastError = true)]
+    private static partial int syscall_pidfd_open(int number, int pid, uint flags);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static unsafe partial int poll(PollFd* fds, nuint nfds, int timeout);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static unsafe partial int waitid(int idtype, int id, siginfo_t* infop, int options);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int close(int fd);
+
     [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
     private static partial int access(string pathname, int mode);
-    
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe int pipe2(int* pipefd, int flags);
-    
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe nint read(int fd, void* buf, nuint count);
-    
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe nint write(int fd, void* buf, nuint count);
-    
-    [DllImport("libc", SetLastError = true)]
-    private static extern int dup2(int oldfd, int newfd);
-    
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static unsafe partial int pipe2(int* pipefd, int flags);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static unsafe partial nint read(int fd, void* buf, nuint count);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static unsafe partial nint write(int fd, void* buf, nuint count);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int dup2(int oldfd, int newfd);
+
     [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
     private static partial int chdir(string path);
-    
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe int execve(byte* path, byte** argv, byte** envp);
-    
-    [DllImport("libc", SetLastError = true)]
-    private static extern void _exit(int status);
-    
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe int pthread_sigmask(int how, sigset_t* set, sigset_t* oldset);
-    
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe int sigfillset(sigset_t* set);
-    
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe int sigaction(int signum, sigaction_t* act, sigaction_t* oldact);
-    
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static unsafe partial int execve(byte* path, byte** argv, byte** envp);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial void _exit(int status);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static unsafe partial int pthread_sigmask(int how, sigset_t* set, sigset_t* oldset);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static unsafe partial int sigfillset(sigset_t* set);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static unsafe partial int sigaction(int signum, sigaction_t* act, sigaction_t* oldact);
+
     // Constants
     private const ulong CLONE_PIDFD = 0x00001000;
     private const int SIGCHLD = 17;
@@ -146,7 +147,7 @@ public static partial class SafeProcessHandleExtensions
     private const int SIGKILL = 9;
     private const int SIGSTOP = 19;
     private const int NSIG = 65;
-    
+
     private static unsafe SafeProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
         // Resolve executable path first
@@ -155,78 +156,50 @@ public static partial class SafeProcessHandleExtensions
         {
             throw new Win32Exception(2, $"Cannot find executable: {options.FileName}");
         }
-        
+
         // Prepare arguments array (argv)
-        List<string> argList = [resolvedPath, .. options.Arguments];
-        
+        string[] argv = [resolvedPath, .. options.Arguments];
+
         // Prepare environment array (envp)
-        Dictionary<string, string?> envDict = new();
-        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
-        {
-            envDict[(string)entry.Key] = (string?)entry.Value;
-        }
-        
-        foreach (var kvp in options.Environment)
-        {
-            envDict[kvp.Key] = kvp.Value;
-        }
-        
-        List<string> envList = new();
-        foreach (var kvp in envDict)
-        {
-            if (kvp.Value != null)
-            {
-                envList.Add($"{kvp.Key}={kvp.Value}");
-            }
-        }
+        string[] envp = GetEnvironmentVariables(options);
 
         // Get file descriptors for stdin/stdout/stderr
-        int stdinFd = (int)inputHandle.DangerousGetHandle();
-        int stdoutFd = (int)outputHandle.DangerousGetHandle();
-        int stderrFd = (int)errorHandle.DangerousGetHandle();
-        
-        // Create a pipe to wait for exec completion (prevents race conditions with .NET runtime)
-        int* waitPipe = stackalloc int[2];
-        if (pipe2(waitPipe, O_CLOEXEC) != 0)
-        {
-            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to create exec sync pipe");
-        }
-        
-        // Allocate native memory for arguments and environment
-        byte** argvPtrs = null;
-        byte** envpPtrs = null;
-        byte* filePathPtr = null;
+        int stdInFd = (int)inputHandle.DangerousGetHandle();
+        int stdOutFd = (int)outputHandle.DangerousGetHandle();
+        int stdErrFd = (int)errorHandle.DangerousGetHandle();
+
+        return StartProcessInternal(resolvedPath, argv, envp, options, stdInFd, stdOutFd, stdErrFd);
+    }
+
+    private static unsafe SafeProcessHandle StartProcessInternal(string resolvedPath, string[] argv, string[] envp,
+        ProcessStartOptions options, int stdinFd, int stdoutFd, int stderrFd)
+    {
+        // Allocate native memory BEFORE forking
+        byte* resolvedPathPtr = AllocateNullTerminatedUtf8String(resolvedPath);
+        byte** argvPtr = null;
+        byte** envpPtr = null;
         
         try
         {
-            // Marshal file path
-            filePathPtr = (byte*)Marshal.StringToHGlobalAnsi(resolvedPath);
-            
-            // Marshal argv
-            argvPtrs = (byte**)Marshal.AllocHGlobal((argList.Count + 1) * sizeof(byte*));
-            for (int i = 0; i < argList.Count; i++)
+            AllocNullTerminatedArray(argv, ref argvPtr);
+            AllocNullTerminatedArray(envp, ref envpPtr);
+
+            // Create a pipe to wait for exec completion (prevents race conditions with .NET runtime)
+            int* waitPipe = stackalloc int[2];
+            if (pipe2(waitPipe, O_CLOEXEC) != 0)
             {
-                argvPtrs[i] = (byte*)Marshal.StringToHGlobalAnsi(argList[i]);
+                throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to create exec sync pipe");
             }
-            argvPtrs[argList.Count] = null;
-            
-            // Marshal envp
-            envpPtrs = (byte**)Marshal.AllocHGlobal((envList.Count + 1) * sizeof(byte*));
-            for (int i = 0; i < envList.Count; i++)
-            {
-                envpPtrs[i] = (byte*)Marshal.StringToHGlobalAnsi(envList[i]);
-            }
-            envpPtrs[envList.Count] = null;
-            
+
             // Block all signals before forking (critical for .NET runtime compatibility)
             sigset_t signal_set;
             sigset_t old_signal_set;
             sigfillset(&signal_set);
             pthread_sigmask(SIG_SETMASK, &signal_set, &old_signal_set);
-            
+
             // Use clone3 to create process with CLONE_PIDFD
             int pidfd = -1;
-            clone_args args = new clone_args
+            clone_args args = new()
             {
                 flags = CLONE_PIDFD,
                 pidfd = (ulong)(nint)(&pidfd),
@@ -234,28 +207,28 @@ public static partial class SafeProcessHandleExtensions
                 stack = 0,
                 stack_size = 0
             };
-            
+
             long cloneResult = syscall_clone3(__NR_clone3, &args, (nuint)sizeof(clone_args));
-            
+
             if (cloneResult == -1)
             {
                 int err = Marshal.GetLastPInvokeError();
                 pthread_sigmask(SIG_SETMASK, &old_signal_set, null);
                 close(waitPipe[0]);
                 close(waitPipe[1]);
-                throw new Win32Exception(err, $"clone3 failed for {resolvedPath}");
+
+                throw new Win32Exception(err, "clone3 failed");
             }
             else if (cloneResult == 0)
             {
                 // ===================== CHILD PROCESS =====================
-                // CRITICAL: Do not return from this block! Must call _exit() to avoid
-                // running managed cleanup code that would double-free the marshaled memory.
-
-                // Restore signal mask and reset signal handlers to default
-                // This is critical for proper child process behavior
-                sigaction_t sa_default = new sigaction_t { sa_handler = (IntPtr)SIG_DFL };
-                sigaction_t sa_old;
+                // CRITICAL: DO NOT free memory here! The parent will do it.
+                // DO NOT return from this block! Must call _exit() or execve().
                 
+                // Restore signal mask and reset signal handlers to default
+                sigaction_t sa_default = new() { sa_handler = SIG_DFL };
+                sigaction_t sa_old;
+
                 for (int sig = 1; sig < NSIG; sig++)
                 {
                     if (sig == SIGKILL || sig == SIGSTOP)
@@ -264,21 +237,21 @@ public static partial class SafeProcessHandleExtensions
                     }
                     if (sigaction(sig, null, &sa_old) == 0)
                     {
-                        if (sa_old.sa_handler != (IntPtr)SIG_DFL && sa_old.sa_handler != (IntPtr)1) // 1 = SIG_IGN
+                        if (sa_old.sa_handler != SIG_DFL && sa_old.sa_handler != 1) // 1 = SIG_IGN
                         {
                             sigaction(sig, &sa_default, null);
                         }
                     }
                 }
                 pthread_sigmask(SIG_SETMASK, &old_signal_set, null);
-                
+
                 // Set up file descriptors
                 if (stdinFd != 0)
                 {
                     if (dup2(stdinFd, 0) == -1)
                     {
                         int err = Marshal.GetLastPInvokeError();
-                        write(waitPipe[1], &err, (nuint)sizeof(int));
+                        write(waitPipe[1], &err, sizeof(int));
                         _exit(127);
                     }
                 }
@@ -287,7 +260,7 @@ public static partial class SafeProcessHandleExtensions
                     if (dup2(stdoutFd, 1) == -1)
                     {
                         int err = Marshal.GetLastPInvokeError();
-                        write(waitPipe[1], &err, (nuint)sizeof(int));
+                        write(waitPipe[1], &err, sizeof(int));
                         _exit(127);
                     }
                 }
@@ -296,7 +269,7 @@ public static partial class SafeProcessHandleExtensions
                     if (dup2(stderrFd, 2) == -1)
                     {
                         int err = Marshal.GetLastPInvokeError();
-                        write(waitPipe[1], &err, (nuint)sizeof(int));
+                        write(waitPipe[1], &err, sizeof(int));
                         _exit(127);
                     }
                 }
@@ -304,33 +277,29 @@ public static partial class SafeProcessHandleExtensions
                 // Change working directory if specified
                 if (options.WorkingDirectory != null)
                 {
-                    byte* wdPtr = (byte*)Marshal.StringToHGlobalAnsi(options.WorkingDirectory.FullName);
-                    int chdirResult = chdir(options.WorkingDirectory.FullName);
-                    Marshal.FreeHGlobal((IntPtr)wdPtr);
-                    
-                    if (chdirResult == -1)
+                    if (chdir(options.WorkingDirectory.FullName) == -1)
                     {
                         int err = Marshal.GetLastPInvokeError();
-                        write(waitPipe[1], &err, (nuint)sizeof(int));
+                        write(waitPipe[1], &err, sizeof(int));
                         _exit(127);
                     }
                 }
 
                 // Execute the program - this replaces the current process image
-                execve(filePathPtr, argvPtrs, envpPtrs);
+                execve(resolvedPathPtr, argvPtr, envpPtr);
 
                 // If we get here, execve failed
                 int execErr = Marshal.GetLastPInvokeError();
-                write(waitPipe[1], &execErr, (nuint)sizeof(int));
+                write(waitPipe[1], &execErr, sizeof(int));
                 _exit(127);
             }
 
             // ===================== PARENT PROCESS =====================
             // Restore signal mask immediately
             pthread_sigmask(SIG_SETMASK, &old_signal_set, null);
-            
+
             int pid = (int)cloneResult;
-            
+
             // pidfd should now be set by the kernel
             if (pidfd < 0)
             {
@@ -338,16 +307,16 @@ public static partial class SafeProcessHandleExtensions
                 close(waitPipe[1]);
                 throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to get pidfd from clone3");
             }
-            
+
             // Close write end of pipe and wait for child to exec
             close(waitPipe[1]);
-            
+
             // Try to read from the pipe - if exec succeeds, pipe closes and read returns 0
             // If exec fails, child writes errno to pipe
             int childError = 0;
-            nint bytesRead = read(waitPipe[0], &childError, (nuint)sizeof(int));
+            nint bytesRead = read(waitPipe[0], &childError, sizeof(int));
             close(waitPipe[0]);
-            
+
             if (bytesRead == sizeof(int))
             {
                 // Child failed to exec
@@ -355,40 +324,19 @@ public static partial class SafeProcessHandleExtensions
                 siginfo_t info;
                 waitid(P_PIDFD, pidfd, &info, WEXITED);
                 close(pidfd);
-                throw new Win32Exception(childError, $"Failed to execute {resolvedPath}");
+                throw new Win32Exception(childError, "Failed to execute");
             }
-            
+
             // Success - create SafeProcessHandle with pidfd (not PID)
             // The pidfd is the file descriptor that identifies the process
-            var handle = new SafeProcessHandle(pidfd, ownsHandle: true);
-            
-            return handle;
+            return new SafeProcessHandle(pidfd, ownsHandle: true);
         }
         finally
         {
-            // Free marshaled strings - only parent process reaches here
-            if (filePathPtr != null)
-            {
-                Marshal.FreeHGlobal((IntPtr)filePathPtr);
-            }
-            
-            if (argvPtrs != null)
-            {
-                for (int i = 0; argvPtrs[i] != null; i++)
-                {
-                    Marshal.FreeHGlobal((IntPtr)argvPtrs[i]);
-                }
-                Marshal.FreeHGlobal((IntPtr)argvPtrs);
-            }
-            
-            if (envpPtrs != null)
-            {
-                for (int i = 0; envpPtrs[i] != null; i++)
-                {
-                    Marshal.FreeHGlobal((IntPtr)envpPtrs[i]);
-                }
-                Marshal.FreeHGlobal((IntPtr)envpPtrs);
-            }
+            // Free memory - ONLY parent reaches here (child called _exit or execve)
+            NativeMemory.Free(resolvedPathPtr);
+            FreeArray(envpPtr, envp.Length);
+            FreeArray(argvPtr, argv.Length);
         }
     }
 
@@ -598,14 +546,14 @@ public static partial class SafeProcessHandleExtensions
         // If it's an absolute path, use it directly
         if (Path.IsPathRooted(fileName))
         {
-            return System.IO.File.Exists(fileName) ? fileName : null;
+            return File.Exists(fileName) ? fileName : null;
         }
         
         // If it contains a path separator, treat it as relative
         if (fileName.Contains('/'))
         {
             string fullPath = Path.GetFullPath(fileName);
-            return System.IO.File.Exists(fullPath) ? fullPath : null;
+            return File.Exists(fullPath) ? fullPath : null;
         }
         
         // Search in PATH
@@ -623,7 +571,7 @@ public static partial class SafeProcessHandleExtensions
             }
             
             string fullPath = Path.Combine(dir, fileName);
-            if (System.IO.File.Exists(fullPath))
+            if (File.Exists(fullPath))
             {
                 if (IsExecutable(fullPath))
                 {
@@ -639,5 +587,75 @@ public static partial class SafeProcessHandleExtensions
     {
         // Check for execute permission (X_OK = 1)
         return access(path, 1) == 0;
+    }
+
+    private static string[] GetEnvironmentVariables(ProcessStartOptions options)
+    {
+        Dictionary<string, string?> envDict = new();
+        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
+        {
+            envDict[(string)entry.Key] = (string?)entry.Value;
+        }
+
+        foreach (var kvp in options.Environment)
+        {
+            envDict[kvp.Key] = kvp.Value;
+        }
+
+        List<string> envList = new();
+        foreach (var kvp in envDict)
+        {
+            if (kvp.Value != null)
+            {
+                envList.Add($"{kvp.Key}={kvp.Value}");
+            }
+        }
+
+        return envList.ToArray();
+    }
+
+    private static unsafe void AllocNullTerminatedArray(string[] arr, ref byte** arrPtr)
+    {
+        nuint arrLength = (nuint)arr.Length + 1; // +1 is for null termination
+
+        // Allocate the unmanaged array to hold each string pointer.
+        // It needs to have an extra element to null terminate the array.
+        // Zero the memory so that if any of the individual string allocations fails,
+        // we can loop through the array to free any that succeeded.
+        // The last element will remain null.
+        arrPtr = (byte**)NativeMemory.AllocZeroed(arrLength, (nuint)sizeof(byte*));
+
+        // Now copy each string to unmanaged memory referenced from the array.
+        // We need the data to be an unmanaged, null-terminated array of UTF8-encoded bytes.
+        for (int i = 0; i < arr.Length; i++)
+        {
+            arrPtr[i] = AllocateNullTerminatedUtf8String(arr[i]);
+        }
+    }
+
+    private static unsafe byte* AllocateNullTerminatedUtf8String(string input)
+    {
+        int byteLength = Encoding.UTF8.GetByteCount(input);
+        byte* result = (byte*)NativeMemory.Alloc((nuint)byteLength + 1); //+1 for null termination
+
+        int bytesWritten = Encoding.UTF8.GetBytes(input, new Span<byte>(result, byteLength));
+        Debug.Assert(bytesWritten == byteLength);
+        result[bytesWritten] = (byte)'\0'; // null terminate
+        return result;
+    }
+
+    private static unsafe void FreeArray(byte** arr, int length)
+    {
+        if (arr != null)
+        {
+            // Free each element of the array
+            for (int i = 0; i < length; i++)
+            {
+                NativeMemory.Free(arr[i]);
+            }
+
+            // And then the array itself
+            NativeMemory.Free(arr);
+        }
     }
 }
