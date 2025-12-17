@@ -133,7 +133,9 @@ public static partial class SafeProcessHandleExtensions
     private static unsafe partial int sigaction(int signum, sigaction_t* act, sigaction_t* oldact);
 
     // Constants
-    private const ulong CLONE_PIDFD = 0x00001000;
+    private const ulong CLONE_VM = 0x00000100;      // Share memory space (for vfork behavior)
+    private const ulong CLONE_VFORK = 0x00004000;   // Suspend parent until child execs (for vfork behavior)
+    private const ulong CLONE_PIDFD = 0x00001000;   // Get pidfd for the child
     private const int SIGCHLD = 17;
     private const short POLLIN = 0x0001;
     private const short POLLHUP = 0x0010;
@@ -197,11 +199,13 @@ public static partial class SafeProcessHandleExtensions
             sigfillset(&signal_set);
             pthread_sigmask(SIG_SETMASK, &signal_set, &old_signal_set);
 
-            // Use clone3 to create process with CLONE_PIDFD
+            // Use clone3 to create process with CLONE_VM | CLONE_VFORK | CLONE_PIDFD
+            // This replicates vfork() behavior for performance (as dotnet/runtime does)
+            // while also getting a pidfd atomically
             int pidfd = -1;
             clone_args args = new()
             {
-                flags = CLONE_PIDFD,
+                flags = CLONE_VM | CLONE_VFORK | CLONE_PIDFD,
                 pidfd = (ulong)(nint)(&pidfd),
                 exit_signal = SIGCHLD,
                 stack = 0,
