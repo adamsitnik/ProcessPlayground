@@ -49,7 +49,7 @@ public static partial class SafeProcessHandleExtensions
     private static unsafe SafeProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
         // Resolve executable path first
-        string? resolvedPath = UnixHelpers.ResolvePath(options.FileName)
+        string? resolvedPath = UnixHelpers.ResolvePath(options.FileName);
         if (string.IsNullOrEmpty(resolvedPath))
         {
             throw new Win32Exception(2, $"Cannot find executable: {options.FileName}");
