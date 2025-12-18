@@ -21,9 +21,6 @@ public static partial class SafeProcessHandleExtensions
     private static extern int kill(int pid, int sig);
     
     [DllImport("libc", SetLastError = true)]
-    private static extern unsafe int access(byte* pathname, int mode);
-    
-    [DllImport("libc", SetLastError = true)]
     private static extern unsafe int posix_spawn(
         int* pid,
         byte* path,
@@ -52,7 +49,7 @@ public static partial class SafeProcessHandleExtensions
     private static unsafe SafeProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
         // Resolve executable path first
-        string? resolvedPath = ResolvePath(options.FileName);
+        string? resolvedPath = UnixHelpers.ResolvePath(options.FileName)
         if (string.IsNullOrEmpty(resolvedPath))
         {
             throw new Win32Exception(2, $"Cannot find executable: {options.FileName}");
@@ -390,63 +387,6 @@ public static partial class SafeProcessHandleExtensions
         {
             // Process was terminated by a signal
             return -1;
-        }
-    }
-    
-    private static string? ResolvePath(string fileName)
-    {
-        // If it's an absolute path, use it directly
-        if (Path.IsPathRooted(fileName))
-        {
-            return System.IO.File.Exists(fileName) ? fileName : null;
-        }
-        
-        // If it contains a path separator, treat it as relative
-        if (fileName.Contains('/'))
-        {
-            string fullPath = Path.GetFullPath(fileName);
-            return System.IO.File.Exists(fullPath) ? fullPath : null;
-        }
-        
-        // Search in PATH
-        string? pathEnv = Environment.GetEnvironmentVariable("PATH");
-        if (string.IsNullOrEmpty(pathEnv))
-        {
-            return null;
-        }
-        
-        foreach (string dir in pathEnv.Split(':'))
-        {
-            if (string.IsNullOrWhiteSpace(dir))
-            {
-                continue;
-            }
-            
-            string fullPath = Path.Combine(dir, fileName);
-            if (System.IO.File.Exists(fullPath))
-            {
-                // Check if it's executable
-                if (IsExecutable(fullPath))
-                {
-                    return fullPath;
-                }
-            }
-        }
-        
-        return null;
-    }
-    
-    private static unsafe bool IsExecutable(string path)
-    {
-        IntPtr pathHandle = Marshal.StringToHGlobalAnsi(path);
-        try
-        {
-            // Check for execute permission (X_OK = 1)
-            return access((byte*)pathHandle, 1) == 0;
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(pathHandle);
         }
     }
 }

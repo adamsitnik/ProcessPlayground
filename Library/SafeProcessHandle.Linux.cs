@@ -99,9 +99,6 @@ public static partial class SafeProcessHandleExtensions
     [LibraryImport("libc", SetLastError = true)]
     private static partial int close(int fd);
 
-    [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
-    private static partial int access(string pathname, int mode);
-
     [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial int pipe2(int* pipefd, int flags);
 
@@ -114,8 +111,8 @@ public static partial class SafeProcessHandleExtensions
     [LibraryImport("libc", SetLastError = true)]
     private static partial int dup2(int oldfd, int newfd);
 
-    [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
-    private static partial int chdir(string path);
+    [LibraryImport("libc", SetLastError = true)]
+    private static unsafe partial int chdir(byte* path);
 
     [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial int execve(byte* path, byte** argv, byte** envp);
@@ -150,10 +147,10 @@ public static partial class SafeProcessHandleExtensions
     private const int SIGSTOP = 19;
     private const int NSIG = 65;
 
-    private static unsafe SafeProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
+    private static SafeProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
         // Resolve executable path first
-        string? resolvedPath = ResolvePath(options.FileName);
+        string? resolvedPath = UnixHelpers.ResolvePath(options.FileName);
         if (string.IsNullOrEmpty(resolvedPath))
         {
             throw new Win32Exception(2, $"Cannot find executable: {options.FileName}");
@@ -177,14 +174,15 @@ public static partial class SafeProcessHandleExtensions
         ProcessStartOptions options, int stdinFd, int stdoutFd, int stderrFd)
     {
         // Allocate native memory BEFORE forking
-        byte* resolvedPathPtr = AllocateNullTerminatedUtf8String(resolvedPath);
+        byte* resolvedPathPtr = UnixHelpers.AllocateNullTerminatedUtf8String(resolvedPath);
+        byte* workingDirPtr = UnixHelpers.AllocateNullTerminatedUtf8String(options.WorkingDirectory?.FullName);
         byte** argvPtr = null;
         byte** envpPtr = null;
         
         try
         {
-            AllocNullTerminatedArray(argv, ref argvPtr);
-            AllocNullTerminatedArray(envp, ref envpPtr);
+            UnixHelpers.AllocNullTerminatedArray(argv, ref argvPtr);
+            UnixHelpers.AllocNullTerminatedArray(envp, ref envpPtr);
 
             // Create a pipe to wait for exec completion (prevents race conditions with .NET runtime)
             int* waitPipe = stackalloc int[2];
@@ -279,9 +277,9 @@ public static partial class SafeProcessHandleExtensions
                 }
 
                 // Change working directory if specified
-                if (options.WorkingDirectory != null)
+                if (workingDirPtr != null)
                 {
-                    if (chdir(options.WorkingDirectory.FullName) == -1)
+                    if (chdir(workingDirPtr) == -1)
                     {
                         int err = Marshal.GetLastPInvokeError();
                         write(waitPipe[1], &err, sizeof(int));
@@ -339,8 +337,9 @@ public static partial class SafeProcessHandleExtensions
         {
             // Free memory - ONLY parent reaches here (child called _exit or execve)
             NativeMemory.Free(resolvedPathPtr);
-            FreeArray(envpPtr, envp.Length);
-            FreeArray(argvPtr, argv.Length);
+            UnixHelpers.FreePointer(workingDirPtr);
+            UnixHelpers.FreeArray(envpPtr, envp.Length);
+            UnixHelpers.FreeArray(argvPtr, argv.Length);
         }
     }
 
@@ -544,54 +543,6 @@ public static partial class SafeProcessHandleExtensions
             }
         }
     }
-    
-    private static string? ResolvePath(string fileName)
-    {
-        // If it's an absolute path, use it directly
-        if (Path.IsPathRooted(fileName))
-        {
-            return File.Exists(fileName) ? fileName : null;
-        }
-        
-        // If it contains a path separator, treat it as relative
-        if (fileName.Contains('/'))
-        {
-            string fullPath = Path.GetFullPath(fileName);
-            return File.Exists(fullPath) ? fullPath : null;
-        }
-        
-        // Search in PATH
-        string? pathEnv = Environment.GetEnvironmentVariable("PATH");
-        if (string.IsNullOrEmpty(pathEnv))
-        {
-            return null;
-        }
-        
-        foreach (string dir in pathEnv.Split(':'))
-        {
-            if (string.IsNullOrWhiteSpace(dir))
-            {
-                continue;
-            }
-            
-            string fullPath = Path.Combine(dir, fileName);
-            if (File.Exists(fullPath))
-            {
-                if (IsExecutable(fullPath))
-                {
-                    return fullPath;
-                }
-            }
-        }
-        
-        return null;
-    }
-    
-    private static bool IsExecutable(string path)
-    {
-        // Check for execute permission (X_OK = 1)
-        return access(path, 1) == 0;
-    }
 
     private static string[] GetEnvironmentVariables(ProcessStartOptions options)
     {
@@ -616,50 +567,5 @@ public static partial class SafeProcessHandleExtensions
         }
 
         return envList.ToArray();
-    }
-
-    private static unsafe void AllocNullTerminatedArray(string[] arr, ref byte** arrPtr)
-    {
-        nuint arrLength = (nuint)arr.Length + 1; // +1 is for null termination
-
-        // Allocate the unmanaged array to hold each string pointer.
-        // It needs to have an extra element to null terminate the array.
-        // Zero the memory so that if any of the individual string allocations fails,
-        // we can loop through the array to free any that succeeded.
-        // The last element will remain null.
-        arrPtr = (byte**)NativeMemory.AllocZeroed(arrLength, (nuint)sizeof(byte*));
-
-        // Now copy each string to unmanaged memory referenced from the array.
-        // We need the data to be an unmanaged, null-terminated array of UTF8-encoded bytes.
-        for (int i = 0; i < arr.Length; i++)
-        {
-            arrPtr[i] = AllocateNullTerminatedUtf8String(arr[i]);
-        }
-    }
-
-    private static unsafe byte* AllocateNullTerminatedUtf8String(string input)
-    {
-        int byteLength = Encoding.UTF8.GetByteCount(input);
-        byte* result = (byte*)NativeMemory.Alloc((nuint)byteLength + 1); //+1 for null termination
-
-        int bytesWritten = Encoding.UTF8.GetBytes(input, new Span<byte>(result, byteLength));
-        Debug.Assert(bytesWritten == byteLength);
-        result[bytesWritten] = (byte)'\0'; // null terminate
-        return result;
-    }
-
-    private static unsafe void FreeArray(byte** arr, int length)
-    {
-        if (arr != null)
-        {
-            // Free each element of the array
-            for (int i = 0; i < length; i++)
-            {
-                NativeMemory.Free(arr[i]);
-            }
-
-            // And then the array itself
-            NativeMemory.Free(arr);
-        }
     }
 }
