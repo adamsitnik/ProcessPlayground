@@ -54,4 +54,24 @@
     <None Include="*.cs" />
   </ItemGroup>
 
+  <!-- Build native library on Linux before C# compilation -->
+  <Target Name="BuildNativeLibrary" BeforeTargets="BeforeBuild" Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <Message Text="Building native process spawn library..." Importance="high" />
+    <Exec Command="make -C native" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+
+  <!-- Copy native library to output directory on Linux -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <Content Include="native\libprocessspawn.so">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>libprocessspawn.so</Link>
+    </Content>
+  </ItemGroup>
+
+  <!-- Clean native library -->
+  <Target Name="CleanNativeLibrary" AfterTargets="Clean" Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <Message Text="Cleaning native process spawn library..." Importance="high" />
+    <Exec Command="make -C native clean" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+
 </Project>

@@ -19,7 +19,17 @@ namespace Microsoft.Win32.SafeHandles;
 public static partial class SafeProcessHandleExtensions
 {
     // P/Invoke declarations for Linux-specific APIs
-    
+
+    [LibraryImport("processspawn", SetLastError = true)]
+    private static unsafe partial int spawn_process_with_pidfd(
+        byte* path,
+        byte** argv,
+        byte** envp,
+        int stdin_fd,
+        int stdout_fd,
+        int stderr_fd,
+        byte* working_dir);
+
     [StructLayout(LayoutKind.Sequential)]
     private struct clone_args
     {
@@ -184,155 +194,21 @@ public static partial class SafeProcessHandleExtensions
             UnixHelpers.AllocNullTerminatedArray(argv, ref argvPtr);
             UnixHelpers.AllocNullTerminatedArray(envp, ref envpPtr);
 
-            // Create a pipe to wait for exec completion (prevents race conditions with .NET runtime)
-            int* waitPipe = stackalloc int[2];
-            if (pipe2(waitPipe, O_CLOEXEC) != 0)
-            {
-                throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to create exec sync pipe");
-            }
+            // Call native library to spawn process
+            int pidfd = spawn_process_with_pidfd(
+                resolvedPathPtr,
+                argvPtr,
+                envpPtr,
+                stdinFd,
+                stdoutFd,
+                stderrFd,
+                workingDirPtr);
 
-            // Block all signals before forking (critical for .NET runtime compatibility)
-            sigset_t signal_set;
-            sigset_t old_signal_set;
-            sigfillset(&signal_set);
-            pthread_sigmask(SIG_SETMASK, &signal_set, &old_signal_set);
-
-            // Use clone3 to create process with CLONE_VM | CLONE_VFORK | CLONE_PIDFD
-            // This replicates vfork() behavior for performance (as dotnet/runtime does)
-            // while also getting a pidfd atomically
-            int pidfd = -1;
-            clone_args args = new()
-            {
-                flags = CLONE_VM | CLONE_VFORK | CLONE_PIDFD,
-                pidfd = (ulong)(nint)(&pidfd),
-                exit_signal = SIGCHLD,
-                stack = 0,
-                stack_size = 0
-            };
-
-            long cloneResult = syscall_clone3(__NR_clone3, &args, (nuint)sizeof(clone_args));
-
-            if (cloneResult == -1)
-            {
-                int err = Marshal.GetLastPInvokeError();
-                pthread_sigmask(SIG_SETMASK, &old_signal_set, null);
-                close(waitPipe[0]);
-                close(waitPipe[1]);
-
-                throw new Win32Exception(err, "clone3 failed");
-            }
-            else if (cloneResult == 0)
-            {
-                // ===================== CHILD PROCESS =====================
-                // CRITICAL: DO NOT free memory here! The parent will do it.
-                // DO NOT return from this block! Must call _exit() or execve().
-
-                // Restore signal mask and reset signal handlers to default
-                sigset_t junk_signal_set = default;
-                sigaction_t sa_default = new() { sa_handler = SIG_DFL };
-                sigaction_t sa_old = default;
-
-                for (int sig = 1; sig < NSIG; sig++)
-                {
-                    if (sig == SIGKILL || sig == SIGSTOP)
-                    {
-                        continue;
-                    }
-
-                    if (sigaction(sig, null, &sa_old) != 0)
-                    {
-                        if (sa_old.sa_handler != SIG_DFL && sa_old.sa_handler != SIG_IGN)
-                        {
-                            sigaction(sig, &sa_default, null);
-                        }
-                    }
-                }
-                pthread_sigmask(SIG_SETMASK, &old_signal_set, &junk_signal_set);
-
-                // Set up file descriptors
-                if (stdinFd != 0)
-                {
-                    if (dup2(stdinFd, 0) == -1)
-                    {
-                        int err = Marshal.GetLastPInvokeError();
-                        write(waitPipe[1], &err, sizeof(int));
-                        _exit(127);
-                    }
-                }
-                if (stdoutFd != 1)
-                {
-                    if (dup2(stdoutFd, 1) == -1)
-                    {
-                        int err = Marshal.GetLastPInvokeError();
-                        write(waitPipe[1], &err, sizeof(int));
-                        _exit(127);
-                    }
-                }
-                if (stderrFd != 2)
-                {
-                    if (dup2(stderrFd, 2) == -1)
-                    {
-                        int err = Marshal.GetLastPInvokeError();
-                        write(waitPipe[1], &err, sizeof(int));
-                        _exit(127);
-                    }
-                }
-
-                // Change working directory if specified
-                if (workingDirPtr != null)
-                {
-                    if (chdir(workingDirPtr) == -1)
-                    {
-                        int err = Marshal.GetLastPInvokeError();
-                        write(waitPipe[1], &err, sizeof(int));
-                        _exit(127);
-                    }
-                }
-
-                // Execute the program - this replaces the current process image
-                execve(resolvedPathPtr, argvPtr, envpPtr);
-
-                // If we get here, execve failed
-                int execErr = Marshal.GetLastPInvokeError();
-                write(waitPipe[1], &execErr, sizeof(int));
-                _exit(127);
-            }
-
-            // ===================== PARENT PROCESS =====================
-            // Restore signal mask immediately
-            pthread_sigmask(SIG_SETMASK, &old_signal_set, &signal_set);
-
-            int pid = (int)cloneResult;
-
-            // pidfd should now be set by the kernel
             if (pidfd < 0)
             {
-                close(waitPipe[0]);
-                close(waitPipe[1]);
-                throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to get pidfd from clone3");
+                throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to spawn process");
             }
 
-            // Close write end of pipe and wait for child to exec
-            close(waitPipe[1]);
-
-            // Try to read from the pipe - if exec succeeds, pipe closes and read returns 0
-            // If exec fails, child writes errno to pipe
-            int childError = 0;
-            nint bytesRead = read(waitPipe[0], &childError, sizeof(int));
-            close(waitPipe[0]);
-
-            if (bytesRead == sizeof(int))
-            {
-                // Child failed to exec
-                // Reap child using pidfd before closing it
-                siginfo_t info;
-                waitid(P_PIDFD, pidfd, &info, WEXITED);
-                close(pidfd);
-                throw new Win32Exception(childError, "Failed to execute");
-            }
-
-            // Success - create SafeProcessHandle with pidfd (not PID)
-            // The pidfd is the file descriptor that identifies the process
             return new SafeProcessHandle(pidfd, ownsHandle: true);
         }
         finally
