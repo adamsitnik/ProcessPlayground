@@ -142,7 +142,7 @@ public static partial class SafeProcessHandleExtensions
     private const int WNOHANG = 0x00000001;
     private const int O_CLOEXEC = 0x80000;
     private const int SIG_SETMASK = 2;
-    private const int SIG_DFL = 0;
+    private const int SIG_DFL = 0, SIG_IGN = 1;
     private const int SIGKILL = 9;
     private const int SIGSTOP = 19;
     private const int NSIG = 65;
@@ -226,10 +226,11 @@ public static partial class SafeProcessHandleExtensions
                 // ===================== CHILD PROCESS =====================
                 // CRITICAL: DO NOT free memory here! The parent will do it.
                 // DO NOT return from this block! Must call _exit() or execve().
-                
+
                 // Restore signal mask and reset signal handlers to default
+                sigset_t junk_signal_set = default;
                 sigaction_t sa_default = new() { sa_handler = SIG_DFL };
-                sigaction_t sa_old;
+                sigaction_t sa_old = default;
 
                 for (int sig = 1; sig < NSIG; sig++)
                 {
@@ -237,15 +238,16 @@ public static partial class SafeProcessHandleExtensions
                     {
                         continue;
                     }
-                    if (sigaction(sig, null, &sa_old) == 0)
+
+                    if (sigaction(sig, null, &sa_old) != 0)
                     {
-                        if (sa_old.sa_handler != SIG_DFL && sa_old.sa_handler != 1) // 1 = SIG_IGN
+                        if (sa_old.sa_handler != SIG_DFL && sa_old.sa_handler != SIG_IGN)
                         {
                             sigaction(sig, &sa_default, null);
                         }
                     }
                 }
-                pthread_sigmask(SIG_SETMASK, &old_signal_set, null);
+                pthread_sigmask(SIG_SETMASK, &old_signal_set, &junk_signal_set);
 
                 // Set up file descriptors
                 if (stdinFd != 0)
@@ -298,7 +300,7 @@ public static partial class SafeProcessHandleExtensions
 
             // ===================== PARENT PROCESS =====================
             // Restore signal mask immediately
-            pthread_sigmask(SIG_SETMASK, &old_signal_set, null);
+            pthread_sigmask(SIG_SETMASK, &old_signal_set, &signal_set);
 
             int pid = (int)cloneResult;
 
