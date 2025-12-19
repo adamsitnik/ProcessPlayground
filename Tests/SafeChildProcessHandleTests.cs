@@ -275,15 +275,7 @@ public class SafeChildProcessHandleTests
             _ = options2.Environment;
             
             // Verify the updated value is accessible
-            var lines2 = new List<ProcessOutputLine>();
-            foreach (var line in ChildProcess.ReadOutputLines(options2))
-            {
-                if (!line.StandardError)
-                {
-                    lines2.Add(line);
-                }
-            }
-            string? capturedOutput2 = Assert.Single(lines2).Content;
+            string? capturedOutput2 = Assert.Single((IEnumerable<ProcessOutputLine>)ChildProcess.ReadOutputLines(options2)).Content;
             Assert.Equal(updatedValue, capturedOutput2.Trim());
         }
         finally
