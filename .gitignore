@@ -421,5 +421,6 @@ FodyWeavers.xsd
 BenchmarksGo/BenchmarksGo
 BenchmarksGo/BenchmarksGo.exe
 
+# Native build artifacts
 *.so
 *.o
