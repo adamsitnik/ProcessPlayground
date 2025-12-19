@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.TBA;
 using Microsoft.Win32.SafeHandles;
@@ -136,7 +137,7 @@ public class SafeChildProcessHandleTests
     [Fact]
     public void Constructor_WithEmptyDictionary_StartsWithNoEnvVars()
     {
-        var emptyDict = new System.Collections.Generic.Dictionary<string, string?>();
+        var emptyDict = new Dictionary<string, string?>();
         ProcessStartOptions options = new("test_executable", emptyDict);
         
         // Environment should be empty
@@ -170,7 +171,7 @@ public class SafeChildProcessHandleTests
     [Fact]
     public void Constructor_WithProvidedDictionary_UsesProvidedVars()
     {
-        var dict = new System.Collections.Generic.Dictionary<string, string?>
+        var dict = new Dictionary<string, string?>
         {
             ["VAR1"] = "value1",
             ["VAR2"] = "value2"
@@ -294,9 +295,12 @@ public class SafeChildProcessHandleTests
                 error: nullHandle);
             
             int exitCode = processHandle.WaitForExit();
-            // Process should still exit successfully (printenv returns 1 if var not found, but that's expected)
+            // printenv returns 1 when variable not found (Linux)
+            // Windows cmd /c echo returns 0 even if variable is not set
 #if !WINDOWS
-            Assert.Equal(1, exitCode); // printenv returns 1 when variable not found
+            Assert.Equal(1, exitCode); 
+#else
+            Assert.Equal(0, exitCode);
 #endif
         }
         finally
@@ -320,7 +324,7 @@ public class SafeChildProcessHandleTests
         try
         {
             // Use empty dictionary constructor
-            var emptyDict = new System.Collections.Generic.Dictionary<string, string?>();
+            var emptyDict = new Dictionary<string, string?>();
             
 #if WINDOWS
             ProcessStartOptions options = new("cmd.exe", emptyDict)
