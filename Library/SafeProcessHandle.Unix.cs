@@ -171,7 +171,7 @@ public static partial class SafeProcessHandleExtensions
             }
             
             // Free native memory
-            NativeMemory.Free(filePathPtr);
+            UnixHelpers.FreePointer(filePathPtr);
             UnixHelpers.FreePointer(cwdPtr);
             UnixHelpers.FreeArray(argvPtr, argv.Length);
             UnixHelpers.FreeArray(envpPtr, envp.Length);
