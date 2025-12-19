@@ -56,7 +56,7 @@ public static partial class SafeProcessHandleExtensions
         }
         
         // Prepare arguments array (argv)
-        List<string> argList = [resolvedPath, .. options.Arguments];
+        string[] argv = [resolvedPath, .. options.Arguments];
         
         // Prepare environment array (envp)
         // Start with current environment variables
@@ -72,7 +72,7 @@ public static partial class SafeProcessHandleExtensions
             envDict[kvp.Key] = kvp.Value;
         }
         
-        // Convert to list of strings
+        // Convert to array of strings
         List<string> envList = new();
         foreach (var kvp in envDict)
         {
@@ -81,15 +81,13 @@ public static partial class SafeProcessHandleExtensions
                 envList.Add($"{kvp.Key}={kvp.Value}");
             }
         }
+        string[] envp = envList.ToArray();
 
-        // Allocate all native memory
-        IntPtr[] argvHandles = new IntPtr[argList.Count];
-        IntPtr[] envpHandles = new IntPtr[envList.Count];
-        IntPtr filePathHandle = IntPtr.Zero;
-        IntPtr cwdHandle = IntPtr.Zero;
-        
-        byte*[] argvPtrs = new byte*[argList.Count + 1];
-        byte*[] envpPtrs = new byte*[envList.Count + 1];
+        // Allocate native memory
+        byte* filePathPtr = UnixHelpers.AllocateNullTerminatedUtf8String(resolvedPath);
+        byte* cwdPtr = UnixHelpers.AllocateNullTerminatedUtf8String(options.WorkingDirectory?.FullName);
+        byte** argvPtr = null;
+        byte** envpPtr = null;
         
         // Allocate file_actions on the stack (typical size is 80 bytes, use 128 to be safe)
         byte* fileActionsBuffer = stackalloc byte[128];
@@ -98,33 +96,9 @@ public static partial class SafeProcessHandleExtensions
         
         try
         {
-            // Marshal file path
-            filePathHandle = Marshal.StringToHGlobalAnsi(resolvedPath);
-            byte* filePathPtr = (byte*)filePathHandle;
-            
-            // Marshal working directory if specified
-            byte* cwdPtr = null;
-            if (options.WorkingDirectory != null)
-            {
-                cwdHandle = Marshal.StringToHGlobalAnsi(options.WorkingDirectory.FullName);
-                cwdPtr = (byte*)cwdHandle;
-            }
-            
-            // Marshal argv
-            for (int i = 0; i < argList.Count; i++)
-            {
-                argvHandles[i] = Marshal.StringToHGlobalAnsi(argList[i]);
-                argvPtrs[i] = (byte*)argvHandles[i];
-            }
-            argvPtrs[argList.Count] = null;
-            
-            // Marshal envp
-            for (int i = 0; i < envList.Count; i++)
-            {
-                envpHandles[i] = Marshal.StringToHGlobalAnsi(envList[i]);
-                envpPtrs[i] = (byte*)envpHandles[i];
-            }
-            envpPtrs[envList.Count] = null;
+            // Allocate argv and envp arrays
+            UnixHelpers.AllocNullTerminatedArray(argv, ref argvPtr);
+            UnixHelpers.AllocNullTerminatedArray(envp, ref envpPtr);
             
             // Get file descriptors
             int stdinFd = (int)inputHandle.DangerousGetHandle();
@@ -177,14 +151,10 @@ public static partial class SafeProcessHandleExtensions
             
             // Spawn the process
             int pid = 0;
-            fixed (byte** argv = argvPtrs)
-            fixed (byte** envp = envpPtrs)
+            int spawnResult = posix_spawn(&pid, filePathPtr, fileActions, null, argvPtr, envpPtr);
+            if (spawnResult != 0)
             {
-                int result = posix_spawn(&pid, filePathPtr, fileActions, null, argv, envp);
-                if (result != 0)
-                {
-                    throw new Win32Exception(result, $"posix_spawn failed for {resolvedPath}");
-                }
+                throw new Win32Exception(spawnResult, $"posix_spawn failed for {resolvedPath}");
             }
             
             // If working directory couldn't be set via file actions, we'll have to accept it
@@ -200,29 +170,11 @@ public static partial class SafeProcessHandleExtensions
                 posix_spawn_file_actions_destroy(fileActions);
             }
             
-            // Free marshaled strings
-            if (filePathHandle != IntPtr.Zero)
-            {
-                Marshal.FreeHGlobal(filePathHandle);
-            }
-            if (cwdHandle != IntPtr.Zero)
-            {
-                Marshal.FreeHGlobal(cwdHandle);
-            }
-            foreach (var handle in argvHandles)
-            {
-                if (handle != IntPtr.Zero)
-                {
-                    Marshal.FreeHGlobal(handle);
-                }
-            }
-            foreach (var handle in envpHandles)
-            {
-                if (handle != IntPtr.Zero)
-                {
-                    Marshal.FreeHGlobal(handle);
-                }
-            }
+            // Free native memory
+            NativeMemory.Free(filePathPtr);
+            UnixHelpers.FreePointer(cwdPtr);
+            UnixHelpers.FreeArray(argvPtr, argv.Length);
+            UnixHelpers.FreeArray(envpPtr, envp.Length);
         }
     }
 

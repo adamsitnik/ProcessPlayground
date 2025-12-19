@@ -31,22 +31,6 @@ public static partial class SafeProcessHandleExtensions
         byte* working_dir);
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct clone_args
-    {
-        public ulong flags;
-        public ulong pidfd;
-        public ulong child_tid;
-        public ulong parent_tid;
-        public ulong exit_signal;
-        public ulong stack;
-        public ulong stack_size;
-        public ulong tls;
-        public ulong set_tid;
-        public ulong set_tid_size;
-        public ulong cgroup;
-    }
-    
-    [StructLayout(LayoutKind.Sequential)]
     private struct PollFd
     {
         public int fd;
@@ -66,39 +50,14 @@ public static partial class SafeProcessHandleExtensions
         public int si_status;    // offset 24
         // Rest of the structure is padding to make total size 128 bytes
     }
-    
-    [StructLayout(LayoutKind.Sequential)]
-    private unsafe struct sigset_t
-    {
-        private fixed ulong __bits[16]; // 1024 bits for signal mask on Linux
-    }
-    
-    [StructLayout(LayoutKind.Sequential)]
-    private struct sigaction_t
-    {
-        public IntPtr sa_handler;
-        public sigset_t sa_mask;
-        public int sa_flags;
-        public IntPtr sa_restorer;
-    }
-    
+
     // System call numbers for x86_64 Linux
     // Note: ARM64 Linux uses different syscall numbers:
-    // - clone3: 435 (same as x86_64)
     // - pidfd_send_signal: 424 (same as x86_64)
-    // - pidfd_open: 434 (same as x86_64)
-    private const int __NR_clone3 = 435;
     private const int __NR_pidfd_send_signal = 424;
-    private const int __NR_pidfd_open = 434;
-
-    [LibraryImport("libc", EntryPoint = "syscall", SetLastError = true)]
-    private static unsafe partial long syscall_clone3(long number, clone_args* args, nuint size);
 
     [LibraryImport("libc", EntryPoint = "syscall", SetLastError = true)]
     private static partial int syscall_pidfd_send_signal(int number, int pidfd, int sig, nint siginfo);
-
-    [LibraryImport("libc", EntryPoint = "syscall", SetLastError = true)]
-    private static partial int syscall_pidfd_open(int number, int pid, uint flags);
 
     [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial int poll(PollFd* fds, nuint nfds, int timeout);
@@ -109,53 +68,14 @@ public static partial class SafeProcessHandleExtensions
     [LibraryImport("libc", SetLastError = true)]
     private static partial int close(int fd);
 
-    [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial int pipe2(int* pipefd, int flags);
-
-    [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial nint read(int fd, void* buf, nuint count);
-
-    [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial nint write(int fd, void* buf, nuint count);
-
-    [LibraryImport("libc", SetLastError = true)]
-    private static partial int dup2(int oldfd, int newfd);
-
-    [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial int chdir(byte* path);
-
-    [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial int execve(byte* path, byte** argv, byte** envp);
-
-    [LibraryImport("libc", SetLastError = true)]
-    private static partial void _exit(int status);
-
-    [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial int pthread_sigmask(int how, sigset_t* set, sigset_t* oldset);
-
-    [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial int sigfillset(sigset_t* set);
-
-    [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial int sigaction(int signum, sigaction_t* act, sigaction_t* oldact);
-
     // Constants
-    private const ulong CLONE_VM = 0x00000100;      // Share memory space (for vfork behavior)
-    private const ulong CLONE_VFORK = 0x00004000;   // Suspend parent until child execs (for vfork behavior)
-    private const ulong CLONE_PIDFD = 0x00001000;   // Get pidfd for the child
-    private const int SIGCHLD = 17;
     private const short POLLIN = 0x0001;
     private const short POLLHUP = 0x0010;
     private const int EINTR = 4;
     private const int P_PIDFD = 3;
     private const int WEXITED = 0x00000004;
     private const int WNOHANG = 0x00000001;
-    private const int O_CLOEXEC = 0x80000;
-    private const int SIG_SETMASK = 2;
-    private const int SIG_DFL = 0, SIG_IGN = 1;
     private const int SIGKILL = 9;
-    private const int SIGSTOP = 19;
-    private const int NSIG = 65;
 
     private static SafeProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
