@@ -30,6 +30,7 @@
   <ItemGroup Condition="'$(OS)' == 'Windows_NT' OR '$(TargetFrameworkIdentifier)' == '.NETFramework'">
     <Compile Remove="Copied/Unix/*.cs" />
     <Compile Remove="**/*.Unix.cs" />
+    <Compile Remove="SafeProcessHandle.Linux.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFrameworkIdentifier)' != '.NETFramework'">
@@ -37,10 +38,40 @@
     <Compile Remove="**/*.Windows.cs" />
   </ItemGroup>
 
+  <!-- Linux-specific: Use SafeProcessHandle.Linux.cs -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <Compile Remove="SafeProcessHandle.Unix.cs" />
+  </ItemGroup>
+
+  <!-- Non-Linux platforms: Use SafeProcessHandle.Unix.cs -->
+  <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('Linux'))">
+    <Compile Remove="SafeProcessHandle.Linux.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- Workaround https://github.com/dotnet/project-system/issues/935 -->
     <None Include="Copied/**/*.cs" />
     <None Include="*.cs" />
   </ItemGroup>
+
+  <!-- Build native library on Linux before C# compilation -->
+  <Target Name="BuildNativeLibrary" BeforeTargets="BeforeBuild" Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <Message Text="Building native process spawn library..." Importance="high" />
+    <Exec Command="make -C native" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+
+  <!-- Copy native library to output directory on Linux -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <Content Include="native\libprocessspawn.so">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>libprocessspawn.so</Link>
+    </Content>
+  </ItemGroup>
+
+  <!-- Clean native library -->
+  <Target Name="CleanNativeLibrary" AfterTargets="Clean" Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <Message Text="Cleaning native process spawn library..." Importance="high" />
+    <Exec Command="make -C native clean" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
 
 </Project>

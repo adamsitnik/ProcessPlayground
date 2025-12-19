@@ -72,8 +72,13 @@ public class RedirectToFile
     {
         using (Process process = new())
         {
+#if WINDOWS
             process.StartInfo.FileName = @"c:\windows\system32\cmd.exe";
             process.StartInfo.Arguments = $"/c \"dotnet --help > {_filePath}\"";
+#else
+            process.StartInfo.FileName = "/bin/sh";
+            process.StartInfo.Arguments = $"-c \"dotnet --help > {_filePath}\"";
+#endif
             process.StartInfo.CreateNoWindow = true;
 
             process.Start();
@@ -90,8 +95,13 @@ public class RedirectToFile
     {
         using (Process process = new())
         {
+#if WINDOWS
             process.StartInfo.FileName = @"c:\windows\system32\cmd.exe";
             process.StartInfo.Arguments = $"/c \"dotnet --help > {_filePath}\"";
+#else
+            process.StartInfo.FileName = "/bin/sh";
+            process.StartInfo.Arguments = $"-c \"dotnet --help > {_filePath}\"";
+#endif
             process.StartInfo.CreateNoWindow = true;
 
             process.Start();
