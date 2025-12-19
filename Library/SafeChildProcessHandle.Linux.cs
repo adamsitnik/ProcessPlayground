@@ -353,19 +353,8 @@ public partial class SafeChildProcessHandle
 
     private static string[] GetEnvironmentVariables(ProcessStartOptions options)
     {
-        Dictionary<string, string?> envDict = new();
-        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
-        {
-            envDict[(string)entry.Key] = (string?)entry.Value;
-        }
-
-        foreach (var kvp in options.Environment)
-        {
-            envDict[kvp.Key] = kvp.Value;
-        }
-
         List<string> envList = new();
-        foreach (var kvp in envDict)
+        foreach (var kvp in options.Environment)
         {
             if (kvp.Value != null)
             {

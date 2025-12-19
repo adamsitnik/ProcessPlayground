@@ -73,7 +73,7 @@ public partial class SafeChildProcessHandle
                 if (options.CreateNoWindow) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NO_WINDOW;
 
                 string? environmentBlock = null;
-                if (options.Environment.Count > 0)
+                if (options.HasEnvironmentBeenAccessed)
                 {
                     creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_UNICODE_ENVIRONMENT;
                     environmentBlock = ProcessUtils.GetEnvironmentVariablesBlock(options.Environment);
