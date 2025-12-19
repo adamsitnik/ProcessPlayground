@@ -66,22 +66,8 @@ public partial class SafeChildProcessHandle
         string[] argv = [resolvedPath, .. options.Arguments];
         
         // Prepare environment array (envp)
-        // Start with current environment variables
-        Dictionary<string, string?> envDict = new();
-        foreach (System.Collections.DictionaryEntry entry in Environment.GetEnvironmentVariables())
-        {
-            envDict[(string)entry.Key] = (string?)entry.Value;
-        }
-        
-        // Override/add with provided environment variables
-        foreach (var kvp in options.Environment)
-        {
-            envDict[kvp.Key] = kvp.Value;
-        }
-        
-        // Convert to array of strings
         List<string> envList = new();
-        foreach (var kvp in envDict)
+        foreach (var kvp in options.Environment)
         {
             if (kvp.Value != null)
             {
