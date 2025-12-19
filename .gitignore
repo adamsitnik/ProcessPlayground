@@ -422,7 +422,5 @@ BenchmarksGo/BenchmarksGo
 BenchmarksGo/BenchmarksGo.exe
 
 # Native build artifacts
-Library/native/*.o
-Library/native/*.so
-Library/native/*.a
-Library/native/*.dylib
+*.so
+*.o
