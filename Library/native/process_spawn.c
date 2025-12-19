@@ -38,7 +38,7 @@ int spawn_process_with_pidfd(
     
     // Use clone3 to get pidfd atomically with fork
     struct clone_args args = {0};  // Zero-initialize
-    args.flags = CLONE_PIDFD;
+    args.flags = CLONE_VFORK | CLONE_PIDFD;
     args.pidfd = (uint64_t)(uintptr_t)&pidfd;
     args.exit_signal = SIGCHLD;
     
