@@ -230,33 +230,77 @@ public class SafeChildProcessHandleTests
         // Any variables added via Environment.SetEnvironmentVariable will NOT be visible
         // unless options.Environment is accessed (which copies them to the child's envp).
         
-        // Use an environment variable that should already exist (set by the test runner)
-        string testVarName = "PATH"; // PATH should always exist
-        
+        // Set a unique environment variable in the parent process
+        string testVarName = "COPILOT_TEST_VAR_" + Guid.NewGuid().ToString("N");
+        string initialValue = "initial_value_123";
+        Environment.SetEnvironmentVariable(testVarName, initialValue);
+
+        try
+        {
 #if WINDOWS
-        ProcessStartOptions options = new("cmd.exe")
-        {
-            Arguments = { "/c", "echo", $"%{testVarName}%" }
-        };
+            ProcessStartOptions options = new("cmd.exe")
+            {
+                Arguments = { "/c", "echo", $"%{testVarName}%" }
+            };
 #else
-        ProcessStartOptions options = new("printenv")
-        {
-            Arguments = { testVarName }
-        };
+            ProcessStartOptions options = new("printenv")
+            {
+                Arguments = { testVarName }
+            };
 #endif
 
-        // Do NOT access options.Environment - this should use environ directly
-        
-        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
-        
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
-            options, 
-            input: null, 
-            output: nullHandle, 
-            error: nullHandle);
-        
-        int exitCode = processHandle.WaitForExit();
-        Assert.Equal(0, exitCode); // PATH should exist, so printenv should succeed
+            // Do NOT access options.Environment - this should use environ directly
+            var output = ChildProcess.ReadOutputLines(options);
+            
+            string? capturedOutput = null;
+            foreach (var line in output)
+            {
+                if (!line.StandardError)
+                {
+                    capturedOutput = line.Content;
+                    break;
+                }
+            }
+            
+            // On Linux with optimization: variable won't be visible (empty output)
+            // On Windows: behavior may differ
+#if !WINDOWS
+            // On Linux, the variable should NOT be visible because we didn't access Environment
+            Assert.True(string.IsNullOrEmpty(capturedOutput), 
+                $"Expected empty output, but got: '{capturedOutput}'. " +
+                "When Environment is not accessed, child should not see variables set via Environment.SetEnvironmentVariable.");
+#endif
+
+            // Now test with a different value and accessing Environment
+            string updatedValue = "updated_value_456";
+            Environment.SetEnvironmentVariable(testVarName, updatedValue);
+            
+            ProcessStartOptions options2 = new("printenv")
+            {
+                Arguments = { testVarName }
+            };
+            
+            // Access Environment to ensure the variable is included
+            _ = options2.Environment;
+            
+            var output2 = ChildProcess.ReadOutputLines(options2);
+            string? capturedOutput2 = null;
+            foreach (var line in output2)
+            {
+                if (!line.StandardError)
+                {
+                    capturedOutput2 = line.Content;
+                    break;
+                }
+            }
+            
+            // Now the updated value should be visible
+            Assert.Equal(updatedValue, capturedOutput2);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(testVarName, null);
+        }
     }
 
 #if WINDOWS || LINUX

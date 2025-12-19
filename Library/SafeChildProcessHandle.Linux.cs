@@ -125,7 +125,7 @@ public partial class SafeChildProcessHandle
             UnixHelpers.AllocNullTerminatedArray(argv, ref argvPtr);
             
             // Only allocate envp if the user has accessed the environment
-            if (envp != null)
+            if (envp is not null)
             {
                 UnixHelpers.AllocNullTerminatedArray(envp, ref envpPtr);
             }
@@ -156,10 +156,7 @@ public partial class SafeChildProcessHandle
             // Free memory - ONLY parent reaches here (child called _exit or execve)
             NativeMemory.Free(resolvedPathPtr);
             UnixHelpers.FreePointer(workingDirPtr);
-            if (envp != null)
-            {
-                UnixHelpers.FreeArray(envpPtr, envp.Length);
-            }
+            UnixHelpers.FreeArray(envpPtr, envp?.Length ?? 0);
             UnixHelpers.FreeArray(argvPtr, argv.Length);
         }
     }
