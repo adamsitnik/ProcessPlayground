@@ -10,6 +10,9 @@
 #include <string.h>
 #include <stdint.h>
 
+// External variable containing the current environment
+extern char **environ;
+
 // Helper to write errno to pipe and exit (ignores write failures)
 static inline void write_errno_and_exit(int pipe_fd, int err) {
     // We're about to exit anyway, so ignore write failures
@@ -123,7 +126,8 @@ int spawn_process_with_pidfd(
         }
         
         // Execute the program
-        execve(path, argv, envp);
+        // If envp is NULL, use the current environment (environ)
+        execve(path, argv, envp != NULL ? envp : environ);
         
         // If we get here, execve failed
         write_errno_and_exit(wait_pipe[1], errno);

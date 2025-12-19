@@ -99,8 +99,9 @@ public partial class SafeChildProcessHandle
         // Prepare arguments array (argv)
         string[] argv = [resolvedPath, .. options.Arguments];
 
-        // Prepare environment array (envp)
-        string[] envp = GetEnvironmentVariables(options);
+        // Prepare environment array (envp) only if the user has accessed it
+        // If not accessed, pass null to use the current environment (environ)
+        string[]? envp = options.HasEnvironmentBeenAccessed ? GetEnvironmentVariables(options) : null;
 
         // Get file descriptors for stdin/stdout/stderr
         int stdInFd = (int)inputHandle.DangerousGetHandle();
@@ -110,7 +111,7 @@ public partial class SafeChildProcessHandle
         return StartProcessInternal(resolvedPath, argv, envp, options, stdInFd, stdOutFd, stdErrFd);
     }
 
-    private static unsafe SafeChildProcessHandle StartProcessInternal(string resolvedPath, string[] argv, string[] envp,
+    private static unsafe SafeChildProcessHandle StartProcessInternal(string resolvedPath, string[] argv, string[]? envp,
         ProcessStartOptions options, int stdinFd, int stdoutFd, int stderrFd)
     {
         // Allocate native memory BEFORE forking
@@ -122,9 +123,15 @@ public partial class SafeChildProcessHandle
         try
         {
             UnixHelpers.AllocNullTerminatedArray(argv, ref argvPtr);
-            UnixHelpers.AllocNullTerminatedArray(envp, ref envpPtr);
+            
+            // Only allocate envp if the user has accessed the environment
+            if (envp != null)
+            {
+                UnixHelpers.AllocNullTerminatedArray(envp, ref envpPtr);
+            }
 
             // Call native library to spawn process
+            // Pass null for envpPtr if environment wasn't accessed (native code will use environ)
             int pidfd = spawn_process_with_pidfd(
                 resolvedPathPtr,
                 argvPtr,
@@ -149,7 +156,10 @@ public partial class SafeChildProcessHandle
             // Free memory - ONLY parent reaches here (child called _exit or execve)
             NativeMemory.Free(resolvedPathPtr);
             UnixHelpers.FreePointer(workingDirPtr);
-            UnixHelpers.FreeArray(envpPtr, envp.Length);
+            if (envp != null)
+            {
+                UnixHelpers.FreeArray(envpPtr, envp.Length);
+            }
             UnixHelpers.FreeArray(argvPtr, argv.Length);
         }
     }

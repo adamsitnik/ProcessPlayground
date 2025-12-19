@@ -194,6 +194,10 @@ public class SafeChildProcessHandleTests
             };
 #endif
 
+            // Access the Environment property to trigger initialization with current environment
+            // This ensures that environment variables set via Environment.SetEnvironmentVariable are included
+            _ = options.Environment;
+
             using SafeFileHandle nullHandle = File.OpenNullFileHandle();
             
             using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
@@ -209,6 +213,45 @@ public class SafeChildProcessHandleTests
         {
             Environment.SetEnvironmentVariable(testVarName, null);
         }
+    }
+
+#if WINDOWS || LINUX
+    [Fact]
+#endif
+    public void ChildProcess_InheritsOriginalEnvironment_WhenEnvironmentNotAccessed()
+    {
+        // This test verifies that when Environment property is NOT accessed,
+        // the child inherits the original process environment (via environ on Linux)
+        // Note: Environment variables set via Environment.SetEnvironmentVariable after
+        // process start are NOT included when Environment property is not accessed.
+        
+        // Use an environment variable that should already exist (set by the test runner)
+        string testVarName = "PATH"; // PATH should always exist
+        
+#if WINDOWS
+        ProcessStartOptions options = new("cmd.exe")
+        {
+            Arguments = { "/c", "echo", $"%{testVarName}%" }
+        };
+#else
+        ProcessStartOptions options = new("printenv")
+        {
+            Arguments = { testVarName }
+        };
+#endif
+
+        // Do NOT access options.Environment - this should use environ directly
+        
+        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
+        
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
+            options, 
+            input: null, 
+            output: nullHandle, 
+            error: nullHandle);
+        
+        int exitCode = processHandle.WaitForExit();
+        Assert.Equal(0, exitCode); // PATH should exist, so printenv should succeed
     }
 
 #if WINDOWS || LINUX
