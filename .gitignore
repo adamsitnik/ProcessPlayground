@@ -420,3 +420,6 @@ FodyWeavers.xsd
 # Go build artifacts
 BenchmarksGo/BenchmarksGo
 BenchmarksGo/BenchmarksGo.exe
+
+*.so
+*.o
