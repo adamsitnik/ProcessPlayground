@@ -2,13 +2,20 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/syscall.h>
-#include <linux/sched.h>     // Provides struct clone_args
+#include <linux/sched.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <errno.h>
 #include <string.h>
 #include <stdint.h>
+
+// Helper to write errno to pipe and exit (ignores write failures)
+static inline void write_errno_and_exit(int pipe_fd, int err) {
+    // We're about to exit anyway, so ignore write failures
+    (void)write(pipe_fd, &err, sizeof(err));
+    _exit(127);
+}
 
 // clone_args is provided by <linux/sched.h> since kernel 5.3
 
@@ -87,34 +94,26 @@ int spawn_process_with_pidfd(
         // Redirect stdin/stdout/stderr
         if (stdin_fd != 0) {
             if (dup2(stdin_fd, 0) == -1) {
-                int err = errno;
-                write(wait_pipe[1], &err, sizeof(err));
-                _exit(127);
+                write_errno_and_exit(wait_pipe[1], errno);
             }
         }
         
         if (stdout_fd != 1) {
             if (dup2(stdout_fd, 1) == -1) {
-                int err = errno;
-                write(wait_pipe[1], &err, sizeof(err));
-                _exit(127);
+                write_errno_and_exit(wait_pipe[1], errno);
             }
         }
         
         if (stderr_fd != 2) {
             if (dup2(stderr_fd, 2) == -1) {
-                int err = errno;
-                write(wait_pipe[1], &err, sizeof(err));
-                _exit(127);
+                write_errno_and_exit(wait_pipe[1], errno);
             }
         }
         
         // Change working directory if specified
         if (working_dir != NULL) {
             if (chdir(working_dir) == -1) {
-                int err = errno;
-                write(wait_pipe[1], &err, sizeof(err));
-                _exit(127);
+                write_errno_and_exit(wait_pipe[1], errno);
             }
         }
         
@@ -122,9 +121,7 @@ int spawn_process_with_pidfd(
         execve(path, argv, envp);
         
         // If we get here, execve failed
-        int err = errno;
-        write(wait_pipe[1], &err, sizeof(err));
-        _exit(127);
+        write_errno_and_exit(wait_pipe[1], errno);
     }
     
     // ========== PARENT PROCESS ==========
