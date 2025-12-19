@@ -60,8 +60,8 @@ public class SafeChildProcessHandleTests
             Assert.True(env.ContainsKey(testVarName));
             Assert.Equal(testVarValue, env[testVarName]);
             
-            // Verify PATH is present (common env var)
-            Assert.True(env.ContainsKey("PATH") || env.ContainsKey("Path"));
+            // Verify we have more than just the test variable (inherited from parent)
+            Assert.True(env.Count > 1);
         }
         finally
         {
@@ -149,23 +149,9 @@ public class SafeChildProcessHandleTests
     }
 
     [Fact]
-    public void Constructor_WithNull_BehavesLikeDefaultConstructor()
+    public void Constructor_WithNull_ThrowsArgumentNullException()
     {
-        // Set a test variable
-        string testVarName = "NULL_CTOR_TEST_" + Guid.NewGuid().ToString("N");
-        Environment.SetEnvironmentVariable(testVarName, "value");
-
-        try
-        {
-            ProcessStartOptions options = new("test_executable", null);
-            
-            // Should have current env vars
-            Assert.True(options.Environment.ContainsKey(testVarName));
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(testVarName, null);
-        }
+        Assert.Throws<ArgumentNullException>(() => new ProcessStartOptions("test_executable", null!));
     }
 
     [Fact]

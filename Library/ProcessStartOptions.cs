@@ -32,16 +32,14 @@ public sealed class ProcessStartOptions
         _initializeEnvironmentWithCurrentVars = true;
     }
 
-    public ProcessStartOptions(string fileName, IDictionary<string, string?>? environment)
+    public ProcessStartOptions(string fileName, IDictionary<string, string?> environment)
     {
         ArgumentException.ThrowIfNullOrEmpty(fileName);
+        ArgumentNullException.ThrowIfNull(environment);
 
         _fileName = fileName;
-        _initializeEnvironmentWithCurrentVars = environment == null;
-        if (environment != null)
-        {
-            _envVars = new Dictionary<string, string?>(environment);
-        }
+        _initializeEnvironmentWithCurrentVars = false;
+        _envVars = new Dictionary<string, string?>(environment);
     }
 
     private Dictionary<string, string?> InitializeEnvironment()
