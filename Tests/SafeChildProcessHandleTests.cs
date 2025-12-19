@@ -221,9 +221,14 @@ public class SafeChildProcessHandleTests
     public void ChildProcess_InheritsOriginalEnvironment_WhenEnvironmentNotAccessed()
     {
         // This test verifies that when Environment property is NOT accessed,
-        // the child inherits the original process environment (via environ on Linux)
-        // Note: Environment variables set via Environment.SetEnvironmentVariable after
-        // process start are NOT included when Environment property is not accessed.
+        // the child inherits the original process environment (via environ on Linux/Windows).
+        // 
+        // Important: On Linux, .NET's Environment.SetEnvironmentVariable only updates the
+        // managed environment dictionary, not the native environ pointer. Therefore, when
+        // ProcessStartOptions.Environment is NOT accessed, the child process receives the
+        // original native environment that was present when the .NET process started.
+        // Any variables added via Environment.SetEnvironmentVariable will NOT be visible
+        // unless options.Environment is accessed (which copies them to the child's envp).
         
         // Use an environment variable that should already exist (set by the test runner)
         string testVarName = "PATH"; // PATH should always exist

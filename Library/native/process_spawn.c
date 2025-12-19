@@ -127,7 +127,8 @@ int spawn_process_with_pidfd(
         
         // Execute the program
         // If envp is NULL, use the current environment (environ)
-        execve(path, argv, envp != NULL ? envp : environ);
+        char* const* env = (envp != NULL) ? envp : environ;
+        execve(path, argv, env);
         
         // If we get here, execve failed
         write_errno_and_exit(wait_pipe[1], errno);
