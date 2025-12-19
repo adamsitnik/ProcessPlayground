@@ -50,7 +50,7 @@ public class SafeChildProcessHandleTests
 
         try
         {
-            ProcessStartOptions options = new("cmd.exe");
+            ProcessStartOptions options = new("test_executable");
             
             // Access Environment property should initialize it with current env vars
             var env = options.Environment;
@@ -71,7 +71,7 @@ public class SafeChildProcessHandleTests
     [Fact]
     public void Environment_CanAddNewVariable()
     {
-        ProcessStartOptions options = new("cmd.exe");
+        ProcessStartOptions options = new("test_executable");
         
         string newVarName = "NEW_VAR_" + Guid.NewGuid().ToString("N");
         string newVarValue = "new_value";
@@ -90,7 +90,7 @@ public class SafeChildProcessHandleTests
 
         try
         {
-            ProcessStartOptions options = new("cmd.exe");
+            ProcessStartOptions options = new("test_executable");
             
             // Verify it's in the environment
             Assert.True(options.Environment.ContainsKey(testVarName));
@@ -116,7 +116,7 @@ public class SafeChildProcessHandleTests
 
         try
         {
-            ProcessStartOptions options = new("cmd.exe");
+            ProcessStartOptions options = new("test_executable");
             
             // Verify it's in the environment
             Assert.True(options.Environment.ContainsKey(testVarName));
@@ -137,7 +137,7 @@ public class SafeChildProcessHandleTests
     public void Constructor_WithEmptyDictionary_StartsWithNoEnvVars()
     {
         var emptyDict = new System.Collections.Generic.Dictionary<string, string?>();
-        ProcessStartOptions options = new("cmd.exe", emptyDict);
+        ProcessStartOptions options = new("test_executable", emptyDict);
         
         // Environment should be empty
         Assert.Empty(options.Environment);
@@ -156,7 +156,7 @@ public class SafeChildProcessHandleTests
 
         try
         {
-            ProcessStartOptions options = new("cmd.exe", null);
+            ProcessStartOptions options = new("test_executable", null);
             
             // Should have current env vars
             Assert.True(options.Environment.ContainsKey(testVarName));
@@ -176,7 +176,7 @@ public class SafeChildProcessHandleTests
             ["VAR2"] = "value2"
         };
         
-        ProcessStartOptions options = new("cmd.exe", dict);
+        ProcessStartOptions options = new("test_executable", dict);
         
         Assert.Equal("value1", options.Environment["VAR1"]);
         Assert.Equal("value2", options.Environment["VAR2"]);
