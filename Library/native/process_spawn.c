@@ -10,6 +10,12 @@
 #include <string.h>
 #include <stdint.h>
 
+// External variable containing the current environment.
+// This is a standard C global variable that points to the environment array.
+// It's automatically set by the C runtime when the process starts.
+// When envp parameter is NULL, we use this to pass the parent's environment to execve().
+extern char **environ;
+
 // Helper to write errno to pipe and exit (ignores write failures)
 static inline void write_errno_and_exit(int pipe_fd, int err) {
     // We're about to exit anyway, so ignore write failures
@@ -123,7 +129,9 @@ int spawn_process_with_pidfd(
         }
         
         // Execute the program
-        execve(path, argv, envp);
+        // If envp is NULL, use the current environment (environ)
+        char* const* env = (envp != NULL) ? envp : environ;
+        execve(path, argv, env);
         
         // If we get here, execve failed
         write_errno_and_exit(wait_pipe[1], errno);

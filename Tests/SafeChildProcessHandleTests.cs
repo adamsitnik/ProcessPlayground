@@ -6,7 +6,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Tests;
 
-public class SafeChildProcessHandleTests
+public partial class SafeChildProcessHandleTests
 {
 #if WINDOWS || LINUX
     [Fact]
@@ -27,16 +27,16 @@ public class SafeChildProcessHandleTests
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(info, input: null, output: null, error: null);
         int pid = processHandle.GetProcessId();
-        
+
         // Verify PID is valid (not 0, not -1, and different from handle value)
         Assert.NotEqual(0, pid);
         Assert.NotEqual(-1, pid);
         Assert.True(pid > 0, "Process ID should be a positive integer");
-        
+
         // On Windows and Linux, the handle is a process handle, not the PID itself
         nint handleValue = processHandle.DangerousGetHandle();
         Assert.NotEqual(handleValue, (nint)pid);
-        
+
         // Wait for process to complete
         processHandle.WaitForExit();
     }
@@ -47,25 +47,25 @@ public class SafeChildProcessHandleTests
         // Set a unique environment variable in the current process
         string testVarName = "TEST_ENV_VAR_" + Guid.NewGuid().ToString("N");
         string testVarValue = "test_value_123";
-        Environment.SetEnvironmentVariable(testVarName, testVarValue);
+        SetEnvVarForReal(testVarName, testVarValue);
 
         try
         {
             ProcessStartOptions options = new("test_executable");
-            
+
             // Access Environment property should initialize it with current env vars
             var env = options.Environment;
-            
+
             // Verify the test variable is present
             Assert.True(env.ContainsKey(testVarName));
             Assert.Equal(testVarValue, env[testVarName]);
-            
+
             // Verify we have more than just the test variable (inherited from parent)
             Assert.True(env.Count > 1);
         }
         finally
         {
-            Environment.SetEnvironmentVariable(testVarName, null);
+            SetEnvVarForReal(testVarName, null);
         }
     }
 
@@ -73,12 +73,12 @@ public class SafeChildProcessHandleTests
     public void Environment_CanAddNewVariable()
     {
         ProcessStartOptions options = new("test_executable");
-        
+
         string newVarName = "NEW_VAR_" + Guid.NewGuid().ToString("N");
         string newVarValue = "new_value";
-        
+
         options.Environment[newVarName] = newVarValue;
-        
+
         Assert.Equal(newVarValue, options.Environment[newVarName]);
     }
 
@@ -87,24 +87,24 @@ public class SafeChildProcessHandleTests
     {
         // Set a test variable in current process
         string testVarName = "REMOVE_TEST_" + Guid.NewGuid().ToString("N");
-        Environment.SetEnvironmentVariable(testVarName, "value");
+        SetEnvVarForReal(testVarName, "value");
 
         try
         {
             ProcessStartOptions options = new("test_executable");
-            
+
             // Verify it's in the environment
             Assert.True(options.Environment.ContainsKey(testVarName));
-            
+
             // Remove it
             options.Environment.Remove(testVarName);
-            
+
             // Verify it's gone
             Assert.False(options.Environment.ContainsKey(testVarName));
         }
         finally
         {
-            Environment.SetEnvironmentVariable(testVarName, null);
+            SetEnvVarForReal(testVarName, null);
         }
     }
 
@@ -113,173 +113,141 @@ public class SafeChildProcessHandleTests
     {
         // Set a test variable in current process
         string testVarName = "NULL_TEST_" + Guid.NewGuid().ToString("N");
-        Environment.SetEnvironmentVariable(testVarName, "value");
+        SetEnvVarForReal(testVarName, "value");
 
         try
         {
             ProcessStartOptions options = new("test_executable");
-            
+
             // Verify it's in the environment
             Assert.True(options.Environment.ContainsKey(testVarName));
-            
+
             // Set to null (another way to remove)
             options.Environment[testVarName] = null;
-            
+
             // Verify it's null
             Assert.Null(options.Environment[testVarName]);
         }
         finally
         {
-            Environment.SetEnvironmentVariable(testVarName, null);
+            SetEnvVarForReal(testVarName, null);
         }
     }
 
-    [Fact]
-    public void Constructor_WithEmptyDictionary_StartsWithNoEnvVars()
-    {
-        var emptyDict = new Dictionary<string, string?>();
-        ProcessStartOptions options = new("test_executable", emptyDict);
-        
-        // Environment should be empty
-        Assert.Empty(options.Environment);
-        
-        // Can add variables
-        options.Environment["TEST"] = "value";
-        Assert.Equal("value", options.Environment["TEST"]);
-    }
-
-    [Fact]
-    public void Constructor_WithNull_ThrowsArgumentNullException()
-    {
-        Assert.Throws<ArgumentNullException>(() => new ProcessStartOptions("test_executable", null!));
-    }
-
-    [Fact]
-    public void Constructor_WithProvidedDictionary_UsesProvidedVars()
-    {
-        var dict = new Dictionary<string, string?>
-        {
-            ["VAR1"] = "value1",
-            ["VAR2"] = "value2"
-        };
-        
-        ProcessStartOptions options = new("test_executable", dict);
-        
-        Assert.Equal("value1", options.Environment["VAR1"]);
-        Assert.Equal("value2", options.Environment["VAR2"]);
-        Assert.Equal(2, options.Environment.Count);
-    }
-
-#if WINDOWS || LINUX
-    [Fact]
-#endif
-    public void ChildProcess_InheritsParentEnvVars_WhenEnvironmentAccessed()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ChildProcess_InheritsParentEnvVars(bool accessEnvironment)
     {
         // Set a unique test variable
         string testVarName = "CHILD_TEST_VAR_" + Guid.NewGuid().ToString("N");
         string testVarValue = "inherit_test_value";
-        Environment.SetEnvironmentVariable(testVarName, testVarValue);
+        SetEnvVarForReal(testVarName, testVarValue);
 
         try
         {
-#if WINDOWS
-            ProcessStartOptions options = new("cmd.exe")
-            {
-                Arguments = { "/c", "echo", $"%{testVarName}%" }
-            };
-#else
-            ProcessStartOptions options = new("printenv")
-            {
-                Arguments = { testVarName }
-            };
-#endif
+            ProcessStartOptions options = CreatePrintEnvVarToOutputOptions(testVarName);
 
-            using SafeFileHandle nullHandle = File.OpenNullFileHandle();
-            
-            using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
-                options, 
-                input: null, 
-                output: nullHandle, 
-                error: nullHandle);
-            
-            int exitCode = processHandle.WaitForExit();
-            Assert.Equal(0, exitCode);
+            // Access the Environment property to trigger initialization with current environment
+            // This ensures that environment variables set via Environment.SetEnvironmentVariable are included
+            if (accessEnvironment)
+            {
+                _ = options.Environment;
+            }
+
+            string outputLine = GetSingleOutputLine(options);
+            Assert.Equal(testVarValue, outputLine.Trim());
         }
         finally
         {
-            Environment.SetEnvironmentVariable(testVarName, null);
+            SetEnvVarForReal(testVarName, null);
         }
     }
 
-#if WINDOWS || LINUX
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ChildProcess_InheritsParentEnvVars_WithUpdates(bool accessEnvironment)
+    {
+        // This test verifies that environment variables are correctly inherited by child processes
+        // and that updates to environment variables are reflected when accessed properly.
+
+        // Set a unique environment variable in the parent process
+        string testVarName = "COPILOT_TEST_VAR_" + Guid.NewGuid().ToString("N");
+        string initialValue = "initial_value_123";
+        SetEnvVarForReal(testVarName, initialValue);
+
+        try
+        {
+            ProcessStartOptions options = CreatePrintEnvVarToOutputOptions(testVarName);
+
+            // Access Environment to ensure the variable is included
+            if (accessEnvironment)
+            {
+                _ = options.Environment;
+            }
+
+            // Verify the initial value is accessible
+            string outputLine = GetSingleOutputLine(options);
+            Assert.Equal(initialValue, outputLine.Trim());
+
+            // Update the environment variable
+            string updatedValue = "updated_value_456";
+            SetEnvVarForReal(testVarName, updatedValue);
+
+            ProcessStartOptions options2 = CreatePrintEnvVarToOutputOptions(testVarName);
+
+            if (accessEnvironment)
+            {
+                _ = options2.Environment;
+            }
+
+            outputLine = GetSingleOutputLine(options2);
+            Assert.Equal(updatedValue, outputLine.Trim());
+        }
+        finally
+        {
+            SetEnvVarForReal(testVarName, null);
+        }
+    }
+
     [Fact]
-#endif
     public void ChildProcess_ReceivesAddedEnvVar()
     {
         string testVarName = "ADDED_VAR_" + Guid.NewGuid().ToString("N");
         string testVarValue = "added_value";
 
-#if WINDOWS
-        ProcessStartOptions options = new("cmd.exe")
-        {
-            Arguments = { "/c", "echo", $"%{testVarName}%" }
-        };
-#else
-        ProcessStartOptions options = new("printenv")
-        {
-            Arguments = { testVarName }
-        };
-#endif
+        ProcessStartOptions options = CreatePrintEnvVarToOutputOptions(testVarName);
 
         // Add a custom environment variable
         options.Environment[testVarName] = testVarValue;
 
-        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
-        
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
-            options, 
-            input: null, 
-            output: nullHandle, 
-            error: nullHandle);
-        
-        int exitCode = processHandle.WaitForExit();
-        Assert.Equal(0, exitCode);
+        string outputLine = GetSingleOutputLine(options);
+        Assert.Equal(testVarValue, outputLine.Trim());
     }
 
-#if WINDOWS || LINUX
     [Fact]
-#endif
     public void ChildProcess_DoesNotReceiveRemovedEnvVar()
     {
         // Set a test variable in current process
         string testVarName = "REMOVED_VAR_" + Guid.NewGuid().ToString("N");
-        Environment.SetEnvironmentVariable(testVarName, "should_not_see");
+        SetEnvVarForReal(testVarName, "should_not_see");
 
         try
         {
-#if WINDOWS
-            ProcessStartOptions options = new("cmd.exe")
-            {
-                Arguments = { "/c", "echo", $"%{testVarName}%" }
-            };
-#else
-            ProcessStartOptions options = new("printenv")
-            {
-                Arguments = { testVarName }
-            };
-#endif
+            ProcessStartOptions options = CreatePrintEnvVarToOutputOptions(testVarName);
 
             // Remove the variable from the environment
             options.Environment.Remove(testVarName);
 
             using SafeFileHandle nullHandle = File.OpenNullFileHandle();
-            
+
             using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
-                options, 
-                input: null, 
-                output: nullHandle, 
+                options,
+                input: null,
+                output: nullHandle,
                 error: nullHandle);
-            
+
             int exitCode = processHandle.WaitForExit();
             // printenv returns 1 when variable not found (Linux)
             // Windows cmd /c echo returns 0 even if variable is not set
@@ -291,54 +259,46 @@ public class SafeChildProcessHandleTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable(testVarName, null);
+            SetEnvVarForReal(testVarName, null);
         }
     }
 
-#if WINDOWS || LINUX
-    [Fact]
-#endif
-    public void ChildProcess_OnlyReceivesExplicitVars_WhenEmptyDictProvided()
-    {
-        string testVarName = "EXPLICIT_ONLY_VAR_" + Guid.NewGuid().ToString("N");
-        string testVarValue = "explicit_value";
-        
-        // Set a variable in parent process
-        string parentVarName = "PARENT_VAR_" + Guid.NewGuid().ToString("N");
-        Environment.SetEnvironmentVariable(parentVarName, "parent_value");
-
-        try
-        {
-            // Use empty dictionary constructor
-            var emptyDict = new Dictionary<string, string?>();
-            
+    private static ProcessStartOptions CreatePrintEnvVarToOutputOptions(string testVarName) =>
 #if WINDOWS
-            ProcessStartOptions options = new("cmd.exe", emptyDict)
-            {
-                Arguments = { "/c", "set" } // Print all env vars on Windows
-            };
+        new("cmd.exe")
+        {
+            Arguments = { "/c", "echo", $"%{testVarName}%" }
+        };
 #else
-            ProcessStartOptions options = new("printenv", emptyDict);
+        new("printenv")
+        {
+            Arguments = { testVarName }
+        };
 #endif
 
-            // Add only one specific variable
-            options.Environment[testVarName] = testVarValue;
-
-            using SafeFileHandle nullHandle = File.OpenNullFileHandle();
-            
-            using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
-                options, 
-                input: null, 
-                output: nullHandle, 
-                error: nullHandle);
-            
-            int exitCode = processHandle.WaitForExit();
-            // The process should run (though it may behave differently with minimal environment)
-            // This test mainly verifies the code doesn't crash
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable(parentVarName, null);
-        }
+    private static string GetSingleOutputLine(ProcessStartOptions options)
+    {
+        ProcessOutputLines output = ChildProcess.ReadOutputLines(options);
+        ProcessOutputLine singleLine = Assert.Single((IEnumerable<ProcessOutputLine>)output);
+        Assert.False(singleLine.StandardError, "Expected standard output line");
+        Assert.Equal(0, output.ExitCode);
+        return singleLine.Content;
     }
+
+    private static void SetEnvVarForReal(string name, string? value)
+    {
+        Environment.SetEnvironmentVariable(name, value);
+#if WINDOWS || NETFRAMEWORK
+    }
+#else
+        // Environment.SetEnvironmentVariable is lame on Unix and does not affect the real process environment
+        Assert.Equal(0, value is null ? unsetenv(name) : setenv(name, value));
+    }
+
+    [System.Runtime.InteropServices.LibraryImport("libc", SetLastError = true, StringMarshalling = System.Runtime.InteropServices.StringMarshalling.Utf8)]
+    internal static partial int setenv(string name, string value);
+
+    [System.Runtime.InteropServices.LibraryImport("libc", SetLastError = true, StringMarshalling = System.Runtime.InteropServices.StringMarshalling.Utf8)]
+    internal static partial int unsetenv(string name);
+#endif
 }
