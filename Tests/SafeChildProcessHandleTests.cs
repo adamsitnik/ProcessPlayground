@@ -6,7 +6,7 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Tests;
 
-public class SafeChildProcessHandleTests
+public partial class SafeChildProcessHandleTests
 {
 #if WINDOWS || LINUX
     [Fact]
@@ -27,16 +27,16 @@ public class SafeChildProcessHandleTests
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(info, input: null, output: null, error: null);
         int pid = processHandle.GetProcessId();
-        
+
         // Verify PID is valid (not 0, not -1, and different from handle value)
         Assert.NotEqual(0, pid);
         Assert.NotEqual(-1, pid);
         Assert.True(pid > 0, "Process ID should be a positive integer");
-        
+
         // On Windows and Linux, the handle is a process handle, not the PID itself
         nint handleValue = processHandle.DangerousGetHandle();
         Assert.NotEqual(handleValue, (nint)pid);
-        
+
         // Wait for process to complete
         processHandle.WaitForExit();
     }
@@ -47,25 +47,25 @@ public class SafeChildProcessHandleTests
         // Set a unique environment variable in the current process
         string testVarName = "TEST_ENV_VAR_" + Guid.NewGuid().ToString("N");
         string testVarValue = "test_value_123";
-        Environment.SetEnvironmentVariable(testVarName, testVarValue);
+        SetEnvVarForReal(testVarName, testVarValue);
 
         try
         {
             ProcessStartOptions options = new("test_executable");
-            
+
             // Access Environment property should initialize it with current env vars
             var env = options.Environment;
-            
+
             // Verify the test variable is present
             Assert.True(env.ContainsKey(testVarName));
             Assert.Equal(testVarValue, env[testVarName]);
-            
+
             // Verify we have more than just the test variable (inherited from parent)
             Assert.True(env.Count > 1);
         }
         finally
         {
-            Environment.SetEnvironmentVariable(testVarName, null);
+            SetEnvVarForReal(testVarName, null);
         }
     }
 
@@ -73,12 +73,12 @@ public class SafeChildProcessHandleTests
     public void Environment_CanAddNewVariable()
     {
         ProcessStartOptions options = new("test_executable");
-        
+
         string newVarName = "NEW_VAR_" + Guid.NewGuid().ToString("N");
         string newVarValue = "new_value";
-        
+
         options.Environment[newVarName] = newVarValue;
-        
+
         Assert.Equal(newVarValue, options.Environment[newVarName]);
     }
 
@@ -87,24 +87,24 @@ public class SafeChildProcessHandleTests
     {
         // Set a test variable in current process
         string testVarName = "REMOVE_TEST_" + Guid.NewGuid().ToString("N");
-        Environment.SetEnvironmentVariable(testVarName, "value");
+        SetEnvVarForReal(testVarName, "value");
 
         try
         {
             ProcessStartOptions options = new("test_executable");
-            
+
             // Verify it's in the environment
             Assert.True(options.Environment.ContainsKey(testVarName));
-            
+
             // Remove it
             options.Environment.Remove(testVarName);
-            
+
             // Verify it's gone
             Assert.False(options.Environment.ContainsKey(testVarName));
         }
         finally
         {
-            Environment.SetEnvironmentVariable(testVarName, null);
+            SetEnvVarForReal(testVarName, null);
         }
     }
 
@@ -113,24 +113,24 @@ public class SafeChildProcessHandleTests
     {
         // Set a test variable in current process
         string testVarName = "NULL_TEST_" + Guid.NewGuid().ToString("N");
-        Environment.SetEnvironmentVariable(testVarName, "value");
+        SetEnvVarForReal(testVarName, "value");
 
         try
         {
             ProcessStartOptions options = new("test_executable");
-            
+
             // Verify it's in the environment
             Assert.True(options.Environment.ContainsKey(testVarName));
-            
+
             // Set to null (another way to remove)
             options.Environment[testVarName] = null;
-            
+
             // Verify it's null
             Assert.Null(options.Environment[testVarName]);
         }
         finally
         {
-            Environment.SetEnvironmentVariable(testVarName, null);
+            SetEnvVarForReal(testVarName, null);
         }
     }
 
@@ -142,7 +142,7 @@ public class SafeChildProcessHandleTests
         // Set a unique test variable
         string testVarName = "CHILD_TEST_VAR_" + Guid.NewGuid().ToString("N");
         string testVarValue = "inherit_test_value";
-        Environment.SetEnvironmentVariable(testVarName, testVarValue);
+        SetEnvVarForReal(testVarName, testVarValue);
 
         try
         {
@@ -160,7 +160,7 @@ public class SafeChildProcessHandleTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable(testVarName, null);
+            SetEnvVarForReal(testVarName, null);
         }
     }
 
@@ -171,11 +171,11 @@ public class SafeChildProcessHandleTests
     {
         // This test verifies that environment variables are correctly inherited by child processes
         // and that updates to environment variables are reflected when accessed properly.
-        
+
         // Set a unique environment variable in the parent process
         string testVarName = "COPILOT_TEST_VAR_" + Guid.NewGuid().ToString("N");
         string initialValue = "initial_value_123";
-        Environment.SetEnvironmentVariable(testVarName, initialValue);
+        SetEnvVarForReal(testVarName, initialValue);
 
         try
         {
@@ -193,7 +193,7 @@ public class SafeChildProcessHandleTests
 
             // Update the environment variable
             string updatedValue = "updated_value_456";
-            Environment.SetEnvironmentVariable(testVarName, updatedValue);
+            SetEnvVarForReal(testVarName, updatedValue);
 
             ProcessStartOptions options2 = CreatePrintEnvVarToOutputOptions(testVarName);
 
@@ -207,7 +207,7 @@ public class SafeChildProcessHandleTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable(testVarName, null);
+            SetEnvVarForReal(testVarName, null);
         }
     }
 
@@ -231,7 +231,7 @@ public class SafeChildProcessHandleTests
     {
         // Set a test variable in current process
         string testVarName = "REMOVED_VAR_" + Guid.NewGuid().ToString("N");
-        Environment.SetEnvironmentVariable(testVarName, "should_not_see");
+        SetEnvVarForReal(testVarName, "should_not_see");
 
         try
         {
@@ -241,13 +241,13 @@ public class SafeChildProcessHandleTests
             options.Environment.Remove(testVarName);
 
             using SafeFileHandle nullHandle = File.OpenNullFileHandle();
-            
+
             using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
-                options, 
-                input: null, 
-                output: nullHandle, 
+                options,
+                input: null,
+                output: nullHandle,
                 error: nullHandle);
-            
+
             int exitCode = processHandle.WaitForExit();
             // printenv returns 1 when variable not found (Linux)
             // Windows cmd /c echo returns 0 even if variable is not set
@@ -259,7 +259,7 @@ public class SafeChildProcessHandleTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable(testVarName, null);
+            SetEnvVarForReal(testVarName, null);
         }
     }
 
@@ -284,4 +284,21 @@ public class SafeChildProcessHandleTests
         Assert.Equal(0, output.ExitCode);
         return singleLine.Content;
     }
+
+    private static void SetEnvVarForReal(string name, string? value)
+    {
+        Environment.SetEnvironmentVariable(name, value);
+#if WINDOWS || NETFRAMEWORK
+    }
+#else
+        // Environment.SetEnvironmentVariable is lame on Unix and does not affect the real process environment
+        Assert.Equal(0, value is null ? unsetenv(name) : setenv(name, value));
+    }
+
+    [System.Runtime.InteropServices.LibraryImport("libc", SetLastError = true, StringMarshalling = System.Runtime.InteropServices.StringMarshalling.Utf8)]
+    internal static partial int setenv(string name, string value);
+
+    [System.Runtime.InteropServices.LibraryImport("libc", SetLastError = true, StringMarshalling = System.Runtime.InteropServices.StringMarshalling.Utf8)]
+    internal static partial int unsetenv(string name);
+#endif
 }
