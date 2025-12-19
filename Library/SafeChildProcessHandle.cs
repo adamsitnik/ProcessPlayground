@@ -100,7 +100,6 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
 
     private static void Validate(SafeChildProcessHandle processHandle)
     {
-        ArgumentNullException.ThrowIfNull(processHandle);
         if (processHandle.IsInvalid)
         {
             throw new ArgumentException("Invalid process handle.", nameof(processHandle));
