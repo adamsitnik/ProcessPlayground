@@ -12,7 +12,7 @@ internal static partial class Interop
     {
         internal sealed class ProcessWaitHandle : WaitHandle
         {
-            internal ProcessWaitHandle(SafeProcessHandle processHandle)
+            internal ProcessWaitHandle(SafeChildProcessHandle processHandle)
             {
                 IntPtr currentProcHandle = GetCurrentProcess();
                 bool succeeded = DuplicateHandle(

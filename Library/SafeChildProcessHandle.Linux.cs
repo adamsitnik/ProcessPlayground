@@ -16,8 +16,17 @@ namespace Microsoft.Win32.SafeHandles;
 //
 // Based on dotnet/runtime implementation:
 // https://github.com/dotnet/runtime/blob/main/src/native/libs/System.Native/pal_process.c
-public static partial class SafeProcessHandleExtensions
+public partial class SafeChildProcessHandle
 {
+    // Store the PID alongside the pidfd handle
+    private int _pid;
+
+    protected override bool ReleaseHandle()
+    {
+        // Close the pidfd file descriptor
+        return close((int)handle) == 0;
+    }
+
     // P/Invoke declarations for Linux-specific APIs
 
     [LibraryImport("processspawn", SetLastError = true)]
@@ -28,7 +37,8 @@ public static partial class SafeProcessHandleExtensions
         int stdin_fd,
         int stdout_fd,
         int stderr_fd,
-        byte* working_dir);
+        byte* working_dir,
+        out int pid);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct PollFd
@@ -77,7 +87,7 @@ public static partial class SafeProcessHandleExtensions
     private const int WNOHANG = 0x00000001;
     private const int SIGKILL = 9;
 
-    private static SafeProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
+    private static SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
         // Resolve executable path first
         string? resolvedPath = UnixHelpers.ResolvePath(options.FileName);
@@ -100,7 +110,7 @@ public static partial class SafeProcessHandleExtensions
         return StartProcessInternal(resolvedPath, argv, envp, options, stdInFd, stdOutFd, stdErrFd);
     }
 
-    private static unsafe SafeProcessHandle StartProcessInternal(string resolvedPath, string[] argv, string[] envp,
+    private static unsafe SafeChildProcessHandle StartProcessInternal(string resolvedPath, string[] argv, string[] envp,
         ProcessStartOptions options, int stdinFd, int stdoutFd, int stderrFd)
     {
         // Allocate native memory BEFORE forking
@@ -122,14 +132,17 @@ public static partial class SafeProcessHandleExtensions
                 stdinFd,
                 stdoutFd,
                 stderrFd,
-                workingDirPtr);
+                workingDirPtr,
+                out int pid);
 
             if (pidfd < 0)
             {
                 throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to spawn process");
             }
 
-            return new SafeProcessHandle(pidfd, ownsHandle: true);
+            SafeChildProcessHandle handle = new SafeChildProcessHandle(pidfd, ownsHandle: true);
+            handle._pid = pid;
+            return handle;
         }
         finally
         {
@@ -141,17 +154,13 @@ public static partial class SafeProcessHandleExtensions
         }
     }
 
-    private static int GetProcessIdCore(SafeProcessHandle processHandle)
+    private static int GetProcessIdCore(SafeChildProcessHandle processHandle)
     {
-        // The handle contains the pidfd (file descriptor), not the PID
-        // We need to get the PID from the pidfd
-        // For now, return the pidfd itself as a placeholder
-        // TODO: Implement proper PID retrieval from pidfd (e.g., via /proc/self/fdinfo)
-        int pidfd = (int)processHandle.DangerousGetHandle();
-        return pidfd;
+        // Return the stored PID
+        return processHandle._pid;
     }
 
-    private static unsafe int WaitForExitCore(SafeProcessHandle processHandle, int milliseconds)
+    private static unsafe int WaitForExitCore(SafeChildProcessHandle processHandle, int milliseconds)
     {
         int pidfd = (int)processHandle.DangerousGetHandle();
         
@@ -259,7 +268,7 @@ public static partial class SafeProcessHandleExtensions
         }
     }
 
-    private static async Task<int> WaitForExitAsyncCore(SafeProcessHandle processHandle, CancellationToken cancellationToken)
+    private static async Task<int> WaitForExitAsyncCore(SafeChildProcessHandle processHandle, CancellationToken cancellationToken)
     {
         int pidfd = (int)processHandle.DangerousGetHandle();
         

@@ -18,6 +18,6 @@ internal static partial class Interop
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial
 #endif
-         bool TerminateProcess(SafeProcessHandle processHandle, int exitCode);
+         bool TerminateProcess(SafeChildProcessHandle processHandle, int exitCode);
     }
 }

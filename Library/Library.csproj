@@ -31,21 +31,28 @@
     <Compile Remove="Copied/Unix/*.cs" />
     <Compile Remove="**/*.Unix.cs" />
     <Compile Remove="SafeProcessHandle.Linux.cs" />
+    <Compile Remove="SafeProcessHandle.Unix.cs" />
+    <Compile Remove="SafeChildProcessHandle.Linux.cs" />
+    <Compile Remove="SafeChildProcessHandle.Unix.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFrameworkIdentifier)' != '.NETFramework'">
     <Compile Remove="Copied/Windows/*.cs" />
     <Compile Remove="**/*.Windows.cs" />
+    <Compile Remove="SafeProcessHandle.Windows.cs" />
+    <Compile Remove="SafeChildProcessHandle.Windows.cs" />
   </ItemGroup>
 
-  <!-- Linux-specific: Use SafeProcessHandle.Linux.cs -->
+  <!-- Linux-specific: Use SafeChildProcessHandle.Linux.cs -->
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
     <Compile Remove="SafeProcessHandle.Unix.cs" />
+    <Compile Remove="SafeChildProcessHandle.Unix.cs" />
   </ItemGroup>
 
-  <!-- Non-Linux platforms: Use SafeProcessHandle.Unix.cs -->
+  <!-- Non-Linux Unix platforms: Use SafeChildProcessHandle.Unix.cs -->
   <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('Linux'))">
     <Compile Remove="SafeProcessHandle.Linux.cs" />
+    <Compile Remove="SafeChildProcessHandle.Linux.cs" />
   </ItemGroup>
 
   <ItemGroup>

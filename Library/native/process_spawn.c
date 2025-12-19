@@ -21,6 +21,7 @@ static inline void write_errno_and_exit(int pipe_fd, int err) {
 
 // Spawns a process using clone3 to get a pidfd atomically
 // Returns pidfd on success, -1 on error (errno is set)
+// If out_pid is not NULL, the PID of the child process is stored there
 int spawn_process_with_pidfd(
     const char* path,
     char* const argv[],
@@ -28,7 +29,8 @@ int spawn_process_with_pidfd(
     int stdin_fd,
     int stdout_fd,
     int stderr_fd,
-    const char* working_dir)
+    const char* working_dir,
+    int* out_pid)
 {
     int wait_pipe[2];
     int pidfd = -1;
@@ -60,6 +62,9 @@ int spawn_process_with_pidfd(
         errno = saved_errno;
         return -1;
     }
+    
+    // Store the PID if requested (clone_result is the PID in the parent process)
+    pid_t child_pid = (pid_t)clone_result;
     
     if (clone_result == 0) {
         // ========== CHILD PROCESS ==========
@@ -146,7 +151,10 @@ int spawn_process_with_pidfd(
         return -1;
     }
     
-    // Success - return pidfd
+    // Success - return PID if requested, then return pidfd
+    if (out_pid != NULL) {
+        *out_pid = child_pid;
+    }
     return pidfd;
 }
 

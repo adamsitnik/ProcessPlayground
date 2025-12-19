@@ -58,7 +58,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
         using (childErrorHandle)
         using (parentErrorHandle)
         {
-            using SafeProcessHandle procHandle = SafeProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
+            using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
             _processId = procHandle.GetProcessId();
 
             // NOTE: we could get current console Encoding here, it's omitted for the sake of simplicity of the proof of concept.

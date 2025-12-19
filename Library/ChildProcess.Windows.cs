@@ -9,7 +9,7 @@ namespace System.TBA;
 
 public static partial class ChildProcess
 {
-    private static unsafe CombinedOutput ReadAllBytesWithTimeout(SafeFileHandle fileHandle, SafeProcessHandle processHandle, int processId, TimeoutHelper timeout)
+    private static unsafe CombinedOutput ReadAllBytesWithTimeout(SafeFileHandle fileHandle, SafeChildProcessHandle processHandle, int processId, TimeoutHelper timeout)
     {
         int totalBytesRead = 0;
 
@@ -63,7 +63,7 @@ public static partial class ChildProcess
         }
     }
 
-    private static unsafe void HandleTimeout(SafeProcessHandle processHandle, SafeFileHandle fileHandle, NativeOverlapped* overlapped)
+    private static unsafe void HandleTimeout(SafeChildProcessHandle processHandle, SafeFileHandle fileHandle, NativeOverlapped* overlapped)
     {
         try
         {

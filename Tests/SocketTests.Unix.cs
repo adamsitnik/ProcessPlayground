@@ -29,7 +29,7 @@ public class SocketTests
             Arguments = { "Hello from socket" }
         };
 
-        using SafeProcessHandle processHandle = SafeProcessHandle.Start(
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
             options,
             input: null,
             output: writeSocket,

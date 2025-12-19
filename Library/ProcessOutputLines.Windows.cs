@@ -33,7 +33,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             File.CreateNamedPipe(out parentOutputHandle, out childOutputHandle);
             File.CreateNamedPipe(out parentErrorHandle, out childErrorHandle);
 
-            using SafeProcessHandle processHandle = SafeProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
+            using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
             using OverlappedContext outputContext = OverlappedContext.Allocate();
             using OverlappedContext errorContext = OverlappedContext.Allocate();
 

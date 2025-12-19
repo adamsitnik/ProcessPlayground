@@ -52,11 +52,11 @@ public class PipingTests
                 expectedOutput = "test line\nanother test\n";
             }
 
-            using SafeProcessHandle producerHandle = SafeProcessHandle.Start(producer, input: null, output: writePipe, error: null);
+            using SafeChildProcessHandle producerHandle = SafeChildProcessHandle.Start(producer, input: null, output: writePipe, error: null);
 
             using (SafeFileHandle outputHandle = File.OpenHandle("output.txt", FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
             {
-                using SafeProcessHandle consumerHandle = SafeProcessHandle.Start(consumer, readPipe, outputHandle, error: null);
+                using SafeChildProcessHandle consumerHandle = SafeChildProcessHandle.Start(consumer, readPipe, outputHandle, error: null);
 
                 await producerHandle.WaitForExitAsync();
                 await consumerHandle.WaitForExitAsync();
