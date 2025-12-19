@@ -9,7 +9,6 @@ public sealed class ProcessStartOptions
     private readonly string _fileName;
     private List<string>? _arguments;
     private Dictionary<string, string?>? _envVars;
-    private readonly bool _initializeEnvironmentWithCurrentVars;
 
     // More or less same as ProcessStartInfo
     public string FileName => _fileName;
@@ -29,7 +28,6 @@ public sealed class ProcessStartOptions
         ArgumentException.ThrowIfNullOrEmpty(fileName);
 
         _fileName = fileName;
-        _initializeEnvironmentWithCurrentVars = true;
     }
 
     public ProcessStartOptions(string fileName, IDictionary<string, string?> environment)
@@ -38,7 +36,6 @@ public sealed class ProcessStartOptions
         ArgumentNullException.ThrowIfNull(environment);
 
         _fileName = fileName;
-        _initializeEnvironmentWithCurrentVars = false;
         _envVars = new Dictionary<string, string?>(environment);
     }
 
@@ -46,12 +43,9 @@ public sealed class ProcessStartOptions
     {
         Dictionary<string, string?> envDict = new();
         
-        if (_initializeEnvironmentWithCurrentVars)
+        foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
         {
-            foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
-            {
-                envDict[(string)entry.Key] = (string?)entry.Value;
-            }
+            envDict[(string)entry.Key] = (string?)entry.Value;
         }
         
         return envDict;
