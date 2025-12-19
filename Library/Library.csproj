@@ -31,13 +31,11 @@
     <Compile Remove="Copied/Unix/*.cs" />
     <Compile Remove="**/*.Unix.cs" />
     <Compile Remove="SafeChildProcessHandle.Linux.cs" />
-    <Compile Remove="SafeChildProcessHandle.Unix.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFrameworkIdentifier)' != '.NETFramework'">
     <Compile Remove="Copied/Windows/*.cs" />
     <Compile Remove="**/*.Windows.cs" />
-    <Compile Remove="SafeChildProcessHandle.Windows.cs" />
   </ItemGroup>
 
   <!-- Linux-specific: Use SafeChildProcessHandle.Linux.cs -->
