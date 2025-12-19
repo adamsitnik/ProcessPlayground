@@ -207,14 +207,13 @@ public class SafeChildProcessHandleTests
             };
 #endif
 
-            using var output = new System.IO.MemoryStream();
-            using var outputHandle = new SafeFileHandle((nint)1, ownsHandle: false); // stdout
+            using SafeFileHandle nullHandle = File.OpenNullFileHandle();
             
             using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
                 options, 
                 input: null, 
-                output: outputHandle, 
-                error: outputHandle);
+                output: nullHandle, 
+                error: nullHandle);
             
             int exitCode = processHandle.WaitForExit();
             Assert.Equal(0, exitCode);
@@ -248,13 +247,13 @@ public class SafeChildProcessHandleTests
         // Add a custom environment variable
         options.Environment[testVarName] = testVarValue;
 
-        using var outputHandle = new SafeFileHandle((nint)1, ownsHandle: false); // stdout
+        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
         
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
             options, 
             input: null, 
-            output: outputHandle, 
-            error: outputHandle);
+            output: nullHandle, 
+            error: nullHandle);
         
         int exitCode = processHandle.WaitForExit();
         Assert.Equal(0, exitCode);
@@ -286,13 +285,13 @@ public class SafeChildProcessHandleTests
             // Remove the variable from the environment
             options.Environment.Remove(testVarName);
 
-            using var outputHandle = new SafeFileHandle((nint)1, ownsHandle: false); // stdout
+            using SafeFileHandle nullHandle = File.OpenNullFileHandle();
             
             using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
                 options, 
                 input: null, 
-                output: outputHandle, 
-                error: outputHandle);
+                output: nullHandle, 
+                error: nullHandle);
             
             int exitCode = processHandle.WaitForExit();
             // Process should still exit successfully (printenv returns 1 if var not found, but that's expected)
@@ -335,13 +334,13 @@ public class SafeChildProcessHandleTests
             // Add only one specific variable
             options.Environment[testVarName] = testVarValue;
 
-            using var outputHandle = new SafeFileHandle((nint)1, ownsHandle: false); // stdout
+            using SafeFileHandle nullHandle = File.OpenNullFileHandle();
             
             using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
                 options, 
                 input: null, 
-                output: outputHandle, 
-                error: outputHandle);
+                output: nullHandle, 
+                error: nullHandle);
             
             int exitCode = processHandle.WaitForExit();
             // The process should run (though it may behave differently with minimal environment)
