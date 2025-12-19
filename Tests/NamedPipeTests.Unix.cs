@@ -45,7 +45,7 @@ public class NamedPipeTests
                 Arguments = { "Hello from FIFO" }
             };
 
-            using SafeProcessHandle processHandle = SafeProcessHandle.Start(
+            using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
                 options, 
                 input: null, 
                 output: fifoWriteHandle, 

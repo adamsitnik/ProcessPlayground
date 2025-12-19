@@ -51,7 +51,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             File.CreateAnonymousPipe(out parentOutputHandle, out childOutputHandle);
             File.CreateAnonymousPipe(out parentErrorHandle, out childErrorHandle);
 
-            using SafeProcessHandle processHandle = SafeProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
+            using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
 
             _processId = processHandle.GetProcessId();
 

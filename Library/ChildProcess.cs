@@ -26,7 +26,7 @@ public static partial class ChildProcess
         using SafeFileHandle outputHandle = Console.OpenStandardOutputHandle();
         using SafeFileHandle errorHandle = Console.OpenStandardErrorHandle();
 
-        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
+        using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
         return procHandle.WaitForExit(timeout);
     }
 
@@ -43,7 +43,7 @@ public static partial class ChildProcess
         using SafeFileHandle outputHandle = Console.OpenStandardOutputHandle();
         using SafeFileHandle errorHandle = Console.OpenStandardErrorHandle();
 
-        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
+        using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
         return await procHandle.WaitForExitAsync(cancellationToken);
     }
 
@@ -62,7 +62,7 @@ public static partial class ChildProcess
         // It's very expensive! We can provide a native way to do it.
         using SafeFileHandle nullHandle = File.OpenNullFileHandle();
 
-        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
+        using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
         return procHandle.WaitForExit(timeout);
     }
 
@@ -77,7 +77,7 @@ public static partial class ChildProcess
 
         using SafeFileHandle nullHandle = File.OpenNullFileHandle();
 
-        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
+        using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
         return await procHandle.WaitForExitAsync(cancellationToken);
     }
 
@@ -103,7 +103,7 @@ public static partial class ChildProcess
         var handles = OpenFileHandlesForRedirection(inputFile, outputFile, errorFile);
         using SafeFileHandle inputHandle = handles.input, outputHandle = handles.output, errorHandle = handles.error;
 
-        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
+        using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
         return procHandle.WaitForExit(timeout);
     }
 
@@ -122,7 +122,7 @@ public static partial class ChildProcess
         var handles = OpenFileHandlesForRedirection(inputFile, outputFile, errorFile);
         using SafeFileHandle inputHandle = handles.input, outputHandle = handles.output, errorHandle = handles.error;
 
-        using SafeProcessHandle procHandle = SafeProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
+        using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
         return await procHandle.WaitForExitAsync(cancellationToken);
     }
 
@@ -174,7 +174,7 @@ public static partial class ChildProcess
         using (read)
         using (write)
         using (SafeFileHandle inputHandle = input ?? File.OpenNullFileHandle())
-        using (SafeProcessHandle processHandle = SafeProcessHandle.Start(options, inputHandle, output: write, error: write))
+        using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, inputHandle, output: write, error: write))
         {
             int processId = processHandle.GetProcessId();
 
@@ -267,7 +267,7 @@ public static partial class ChildProcess
         using (read)
         using (write)
         using (SafeFileHandle inputHandle = input ?? File.OpenNullFileHandle())
-        using (SafeProcessHandle processHandle = SafeProcessHandle.Start(options, inputHandle, output: write, error: write))
+        using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, inputHandle, output: write, error: write))
         using (FileStream outputStream = new(read, FileAccess.Read, bufferSize: 1, isAsync: isAsyncReadHandle))
         {
             int processId = processHandle.GetProcessId();

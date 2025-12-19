@@ -37,7 +37,7 @@ public class RedirectionTests
         }
 
         // Start the process with both standard output and error redirected to the same handle.
-        using SafeProcessHandle processHandle = SafeProcessHandle.Start(info, input: null, output: write, error: write);
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(info, input: null, output: write, error: write);
 
         using StreamReader reader = new(new FileStream(read, FileAccess.Read, bufferSize: 1, isAsync: isAsync), Encoding.UTF8);
         string allOutput = await reader.ReadToEndAsync();

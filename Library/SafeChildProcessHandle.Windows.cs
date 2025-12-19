@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -8,13 +8,18 @@ using System.TBA;
 
 namespace Microsoft.Win32.SafeHandles;
 
-public static partial class SafeProcessHandleExtensions
+public partial class SafeChildProcessHandle
 {
+    protected override bool ReleaseHandle()
+    {
+        return Interop.Kernel32.CloseHandle(handle);
+    }
+
     // Linux doesn't have a corresponding sys-call just to get exit code of a process by its handle.
     // That is why it's Windows-specific helper.
-    internal static int GetExitCode(this SafeProcessHandle processHandle)
+    internal int GetExitCode()
     {
-        if (!Interop.Kernel32.GetExitCodeProcess(processHandle, out int exitCode))
+        if (!Interop.Kernel32.GetExitCodeProcess(this, out int exitCode))
         {
             throw new InvalidOperationException("Parent process should alway be able to get the exit code.");
         }
@@ -26,7 +31,7 @@ public static partial class SafeProcessHandleExtensions
         return exitCode;
     }
 
-    private static unsafe SafeProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
+    private static unsafe SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
         ValueStringBuilder commandLine = new(stackalloc char[256]);
         ProcessUtils.BuildCommandLine(options, ref commandLine);
@@ -34,7 +39,7 @@ public static partial class SafeProcessHandleExtensions
         Interop.Kernel32.STARTUPINFO startupInfo = default;
         Interop.Kernel32.PROCESS_INFORMATION processInfo = default;
         Interop.Kernel32.SECURITY_ATTRIBUTES unused_SecAttrs = default;
-        SafeProcessHandle? procSH = null;
+        SafeChildProcessHandle? procSH = null;
         IntPtr currentProcHandle = Interop.Kernel32.GetCurrentProcess();
 
         // Take a global lock to synchronize all redirect pipe handle creations and CreateProcess
@@ -139,7 +144,7 @@ public static partial class SafeProcessHandleExtensions
         }
     }
 
-    private static int GetProcessIdCore(SafeProcessHandle processHandle)
+    private static int GetProcessIdCore(SafeChildProcessHandle processHandle)
     {
         int result = Interop.Kernel32.GetProcessId(processHandle);
         if (result == 0)
@@ -149,7 +154,7 @@ public static partial class SafeProcessHandleExtensions
         return result;
     }
 
-    private static int WaitForExitCore(SafeProcessHandle processHandle, int milliseconds)
+    private static int WaitForExitCore(SafeChildProcessHandle processHandle, int milliseconds)
     {
         using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(processHandle);
         if (!processWaitHandle.WaitOne(milliseconds))
@@ -157,10 +162,10 @@ public static partial class SafeProcessHandleExtensions
             Interop.Kernel32.TerminateProcess(processHandle, exitCode: -1);
         }
 
-        return GetExitCode(processHandle);
+        return processHandle.GetExitCode();
     }
 
-    private static async Task<int> WaitForExitAsyncCore(SafeProcessHandle processHandle, CancellationToken cancellationToken)
+    private static async Task<int> WaitForExitAsyncCore(SafeChildProcessHandle processHandle, CancellationToken cancellationToken)
     {
         using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(processHandle);
 
@@ -183,7 +188,7 @@ public static partial class SafeProcessHandleExtensions
                 ctr = cancellationToken.Register(
                     state =>
                     {
-                        var (handle, taskSource) = ((SafeProcessHandle, TaskCompletionSource<bool>))state!;
+                        var (handle, taskSource) = ((SafeChildProcessHandle, TaskCompletionSource<bool>))state!;
                         Interop.Kernel32.TerminateProcess(handle, exitCode: -1);
                         taskSource.TrySetCanceled();
                     },
@@ -198,6 +203,6 @@ public static partial class SafeProcessHandleExtensions
             registeredWaitHandle?.Unregister(null);
         }
 
-        return GetExitCode(processHandle);
+        return processHandle.GetExitCode();
     }
 }
