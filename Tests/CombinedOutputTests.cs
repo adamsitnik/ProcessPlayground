@@ -182,11 +182,8 @@ public class CombinedOutputTests
         using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(500));
         using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
 
-#if NETFRAMEWORK
-        await Assert.ThrowsAsync<TaskCanceledException>(async () =>
-#else
-        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
-#endif
+        // Accept either OperationCanceledException or TaskCanceledException (which derives from it)
+        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
             await ChildProcess.GetCombinedOutputAsync(options, inputHandle, cancellationToken: cts.Token));
     }
 

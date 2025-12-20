@@ -424,3 +424,4 @@ BenchmarksGo/BenchmarksGo.exe
 # Native build artifacts
 *.so
 *.o
+*_codeql_detected_source_root

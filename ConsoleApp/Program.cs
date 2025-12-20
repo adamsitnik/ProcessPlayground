@@ -4,13 +4,10 @@ using System.Diagnostics;
 
 #pragma warning disable  // Local function is declared but never used
 
-ProcessStartOptions info = new("dotnet")
-{
-    Arguments = { "--help" },
-};
+ProcessStartOptions info = new("pwd");
 
-CombinedOutput output = ChildProcess.GetCombinedOutput(info, timeout: TimeSpan.FromSeconds(2));
-Console.WriteLine(output.ExitCode);
+int exitCode = await ChildProcess.ExecuteAsync(info);
+Console.WriteLine(exitCode);
 
 static void LongRunningWithTimeout()
 {

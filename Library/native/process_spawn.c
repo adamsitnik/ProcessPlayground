@@ -28,6 +28,7 @@ static inline void write_errno_and_exit(int pipe_fd, int err) {
 // Spawns a process using clone3 to get a pidfd atomically
 // Returns pidfd on success, -1 on error (errno is set)
 // If out_pid is not NULL, the PID of the child process is stored there
+// If out_exit_pipe_fd is not NULL, the read end of exit monitoring pipe is stored there
 int spawn_process_with_pidfd(
     const char* path,
     char* const argv[],
@@ -36,14 +37,25 @@ int spawn_process_with_pidfd(
     int stdout_fd,
     int stderr_fd,
     const char* working_dir,
-    int* out_pid)
+    int* out_pid,
+    int* out_exit_pipe_fd)
 {
     int wait_pipe[2];
+    int exit_pipe[2];
     int pidfd = -1;
     sigset_t all_signals, old_signals;
     
     // Create pipe for exec synchronization (CLOEXEC so child doesn't inherit it)
     if (pipe2(wait_pipe, O_CLOEXEC) != 0) {
+        return -1;
+    }
+    
+    // Create pipe for exit monitoring (CLOEXEC to avoid other parallel processes inheriting it)
+    if (pipe2(exit_pipe, O_CLOEXEC) != 0) {
+        int saved_errno = errno;
+        close(wait_pipe[0]);
+        close(wait_pipe[1]);
+        errno = saved_errno;
         return -1;
     }
     
@@ -65,6 +77,8 @@ int spawn_process_with_pidfd(
         pthread_sigmask(SIG_SETMASK, &old_signals, NULL);
         close(wait_pipe[0]);
         close(wait_pipe[1]);
+        close(exit_pipe[0]);
+        close(exit_pipe[1]);
         errno = saved_errno;
         return -1;
     }
@@ -99,8 +113,16 @@ int spawn_process_with_pidfd(
             }
         }
         
-        // Close read end of pipe (we only write)
+        // Close read end of wait pipe (we only write)
         close(wait_pipe[0]);
+        
+        // Duplicate exit pipe write end to fd 3 (so it survives execve)
+        // We use fd 3 as it's typically unused by standard streams
+        if (dup2(exit_pipe[1], 3) == -1) {
+            write_errno_and_exit(wait_pipe[1], errno);
+        }
+        close(exit_pipe[0]);
+        close(exit_pipe[1]);
         
         // Redirect stdin/stdout/stderr
         if (stdin_fd != 0) {
@@ -142,8 +164,11 @@ int spawn_process_with_pidfd(
     // Restore signal mask
     pthread_sigmask(SIG_SETMASK, &old_signals, NULL);
     
-    // Close write end of pipe
+    // Close write end of wait pipe
     close(wait_pipe[1]);
+    
+    // Close write end of exit pipe (child owns it)
+    close(exit_pipe[1]);
     
     // Wait for child to exec or fail
     int child_errno = 0;
@@ -151,17 +176,21 @@ int spawn_process_with_pidfd(
     close(wait_pipe[0]);
     
     if (bytes_read == sizeof(child_errno)) {
-        // Child failed to exec - reap it
+        // Child failed to exec - reap it and close exit pipe
         siginfo_t info;
         waitid(P_PIDFD, pidfd, &info, WEXITED);
         close(pidfd);
+        close(exit_pipe[0]);
         errno = child_errno;
         return -1;
     }
     
-    // Success - return PID if requested, then return pidfd
+    // Success - return PID and exit pipe fd if requested, then return pidfd
     if (out_pid != NULL) {
         *out_pid = child_pid;
+    }
+    if (out_exit_pipe_fd != NULL) {
+        *out_exit_pipe_fd = exit_pipe[0];
     }
     return pidfd;
 }
