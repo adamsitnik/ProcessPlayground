@@ -176,6 +176,25 @@ public partial class SafeChildProcessHandle
 
     private int GetProcessIdCore() => _pid;
 
+    private unsafe bool TryGetExitCodeCore(out int exitCode)
+    {
+        siginfo_t siginfo = default;
+        int result = waitid(P_PIDFD, this, &siginfo, WEXITED | WNOHANG);
+
+        // waitid returns 0 when the process has exited or is still running.
+        // Check if siginfo was filled (process actually exited)
+        // si_signo will be non-zero (typically SIGCHLD) if process exited
+        // si_signo will be 0 if process is still running
+        if (result == 0 && siginfo.si_signo != 0)
+        {
+            exitCode = siginfo.si_status;
+            return true;
+        }
+
+        exitCode = -1;
+        return false;
+    }
+
     private unsafe int WaitForExitCore(int milliseconds)
     {
         if (milliseconds == Timeout.Infinite)
