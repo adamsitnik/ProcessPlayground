@@ -98,6 +98,22 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
         return WaitForExitAsyncCore(cancellationToken);
     }
 
+    /// <summary>
+    /// Terminates the process.
+    /// </summary>
+    /// <returns>
+    /// <c>true</c> if the process was successfully killed;
+    /// <c>false</c> if the process has already exited.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
+    /// <exception cref="Win32Exception">Thrown when the kill operation fails for reasons other than the process having already exited.</exception>
+    public bool Kill()
+    {
+        Validate();
+
+        return KillCore();
+    }
+
     private void Validate()
     {
         if (IsInvalid)

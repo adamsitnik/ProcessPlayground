@@ -93,6 +93,7 @@ public partial class SafeChildProcessHandle
     private const short POLLIN = 0x0001;
     private const short POLLHUP = 0x0010;
     private const int EINTR = 4;
+    private const int ESRCH = 3;  // No such process
     private const int P_PIDFD = 3;
     private const int WEXITED = 0x00000004;
     private const int WNOHANG = 0x00000001;
@@ -232,7 +233,7 @@ public partial class SafeChildProcessHandle
                 else if (pollResult == 0)
                 {
                     // Timeout - kill the process using pidfd_send_signal
-                    syscall_pidfd_send_signal(__NR_pidfd_send_signal, this, SIGKILL, 0);
+                    Kill();
                     
                     // Wait for the process to actually exit
                     siginfo_t siginfo = default;
@@ -285,7 +286,7 @@ public partial class SafeChildProcessHandle
         {
             try
             {
-                syscall_pidfd_send_signal(__NR_pidfd_send_signal, this, SIGKILL, 0);
+                Kill();
             }
             catch
             {
@@ -347,5 +348,27 @@ public partial class SafeChildProcessHandle
         }
 
         return envList.ToArray();
+    }
+
+    private bool KillCore()
+    {
+        int result = syscall_pidfd_send_signal(__NR_pidfd_send_signal, this, SIGKILL, 0);
+        
+        if (result == 0)
+        {
+            // Successfully sent the signal
+            return true;
+        }
+        
+        int errno = Marshal.GetLastPInvokeError();
+        
+        // Check if the process has already exited
+        if (errno == ESRCH)
+        {
+            return false;
+        }
+        
+        // Any other error is unexpected
+        throw new Win32Exception(errno, "Failed to kill process");
     }
 }

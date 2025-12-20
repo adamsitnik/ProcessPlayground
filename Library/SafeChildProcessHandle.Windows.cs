@@ -159,7 +159,7 @@ public partial class SafeChildProcessHandle
         using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(this);
         if (!processWaitHandle.WaitOne(milliseconds))
         {
-            Interop.Kernel32.TerminateProcess(this, exitCode: -1);
+            Kill();
         }
 
         return GetExitCode();
@@ -189,7 +189,7 @@ public partial class SafeChildProcessHandle
                     state =>
                     {
                         var (handle, taskSource) = ((SafeChildProcessHandle, TaskCompletionSource<bool>))state!;
-                        Interop.Kernel32.TerminateProcess(handle, exitCode: -1);
+                        handle.Kill();
                         taskSource.TrySetCanceled();
                     },
                     (this, tcs));
@@ -204,5 +204,40 @@ public partial class SafeChildProcessHandle
         }
 
         return GetExitCode();
+    }
+
+    private bool KillCore()
+    {
+        // First check if the process has already exited
+        if (Interop.Kernel32.GetExitCodeProcess(this, out int exitCode))
+        {
+            if (exitCode != Interop.Kernel32.HandleOptions.STILL_ACTIVE)
+            {
+                // Process has already exited
+                return false;
+            }
+        }
+        
+        // Try to terminate the process
+        if (!Interop.Kernel32.TerminateProcess(this, exitCode: -1))
+        {
+            int error = Marshal.GetLastPInvokeError();
+            
+            // ERROR_ACCESS_DENIED (5) might mean the process has already exited
+            // Let's check again
+            if (Interop.Kernel32.GetExitCodeProcess(this, out exitCode))
+            {
+                if (exitCode != Interop.Kernel32.HandleOptions.STILL_ACTIVE)
+                {
+                    // Process has already exited
+                    return false;
+                }
+            }
+            
+            // Any other error is unexpected
+            throw new Win32Exception(error, "Failed to kill process");
+        }
+        
+        return true;
     }
 }

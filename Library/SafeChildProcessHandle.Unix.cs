@@ -52,6 +52,7 @@ public partial class SafeChildProcessHandle
     private const int SIGKILL = 9;
     private const int EINTR = 4;
     private const int ECHILD = 10;
+    private const int ESRCH = 3;  // No such process
     
     private static unsafe SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
@@ -229,7 +230,7 @@ public partial class SafeChildProcessHandle
                     if (now >= endTime)
                     {
                         // Timeout - terminate the process
-                        kill(pid, SIGKILL);
+                        Kill();
                         
                         // Wait for it to actually exit
                         while (true)
@@ -265,7 +266,14 @@ public partial class SafeChildProcessHandle
         // Register cancellation to terminate the process
         using var registration = cancellationToken.Register(() =>
         {
-            kill(pid, SIGKILL);
+            try
+            {
+                Kill();
+            }
+            catch
+            {
+                // Ignore errors during cancellation
+            }
         });
         
         // Poll for process exit asynchronously
@@ -325,5 +333,28 @@ public partial class SafeChildProcessHandle
             // Process was terminated by a signal
             return -1;
         }
+    }
+
+    private bool KillCore()
+    {
+        int pid = GetProcessIdCore();
+        int result = kill(pid, SIGKILL);
+        
+        if (result == 0)
+        {
+            // Successfully sent the signal
+            return true;
+        }
+        
+        int errno = Marshal.GetLastPInvokeError();
+        
+        // Check if the process has already exited
+        if (errno == ESRCH)
+        {
+            return false;
+        }
+        
+        // Any other error is unexpected
+        throw new Win32Exception(errno, "Failed to kill process");
     }
 }

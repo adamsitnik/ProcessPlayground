@@ -301,4 +301,94 @@ public partial class SafeChildProcessHandleTests
     [System.Runtime.InteropServices.LibraryImport("libc", SetLastError = true, StringMarshalling = System.Runtime.InteropServices.StringMarshalling.Utf8)]
     internal static partial int unsetenv(string name);
 #endif
+
+    [Fact]
+    public void Kill_KillsRunningProcess()
+    {
+        // Start a long-running process
+#if WINDOWS
+        ProcessStartOptions options = new("cmd.exe")
+        {
+            Arguments = { "/c", "timeout", "/t", "60", "/nobreak" }
+        };
+#else
+        ProcessStartOptions options = new("sleep")
+        {
+            Arguments = { "60" }
+        };
+#endif
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        
+        // Kill the process
+        bool wasKilled = processHandle.Kill();
+        
+        // Should return true (process was killed)
+        Assert.True(wasKilled, "Kill should return true for a running process");
+        
+        // Process should exit after being killed
+        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+        
+        // Exit code should indicate termination (typically -1 or non-zero)
+        // The exact value depends on the platform
+#if !WINDOWS
+        Assert.Equal(-1, exitCode); // Unix processes killed by signal return -1
+#endif
+    }
+
+    [Fact]
+    public void Kill_ReturnsFalseForAlreadyExitedProcess()
+    {
+        // Start a process that exits immediately
+#if WINDOWS
+        ProcessStartOptions options = new("cmd.exe")
+        {
+            Arguments = { "/c", "exit", "0" }
+        };
+#else
+        ProcessStartOptions options = new("true");
+#endif
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        
+        // Wait for the process to exit
+        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+        Assert.Equal(0, exitCode);
+        
+        // Try to kill the already-exited process
+        bool wasKilled = processHandle.Kill();
+        
+        // Should return false (process already exited)
+        Assert.False(wasKilled, "Kill should return false for an already-exited process");
+    }
+
+    [Fact]
+    public void Kill_CanBeCalledMultipleTimes()
+    {
+        // Start a long-running process
+#if WINDOWS
+        ProcessStartOptions options = new("cmd.exe")
+        {
+            Arguments = { "/c", "timeout", "/t", "60", "/nobreak" }
+        };
+#else
+        ProcessStartOptions options = new("sleep")
+        {
+            Arguments = { "60" }
+        };
+#endif
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        
+        // First kill should succeed
+        bool firstKill = processHandle.Kill();
+        Assert.True(firstKill, "First kill should return true");
+        
+        // Wait a bit for the process to actually exit
+        System.Threading.Thread.Sleep(100);
+        
+        // Second kill should return false (process already exited)
+        bool secondKill = processHandle.Kill();
+        Assert.False(secondKill, "Second kill should return false");
+    }
 }
