@@ -389,15 +389,15 @@ public partial class SafeChildProcessHandleTests
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
-        // First kill should succeed
+        // First attempt should succeed
         bool firstKill = processHandle.Kill();
-        Assert.True(firstKill, "First kill should return true");
+        Assert.True(firstKill, "First attempt should return true");
         
-        // Wait a bit for the process to actually exit
-        System.Threading.Thread.Sleep(100);
+        // Wait for the process to actually exit
+        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
         
-        // Second kill should return false (process already exited)
+        // Second attempt should return false (process already exited)
         bool secondKill = processHandle.Kill();
-        Assert.False(secondKill, "Second kill should return false");
+        Assert.False(secondKill, "Second attempt should return false");
     }
 }

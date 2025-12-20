@@ -99,6 +99,10 @@ public partial class SafeChildProcessHandle
     private const int WEXITED = 0x00000004;
     private const int WNOHANG = 0x00000001;
     private const int SIGKILL = 9;
+    // si_code values for SIGCHLD
+    private const int CLD_EXITED = 1;    // child has exited
+    private const int CLD_KILLED = 2;    // child was killed
+    private const int CLD_DUMPED = 3;    // child terminated abnormally
 
     private static SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
@@ -359,11 +363,12 @@ public partial class SafeChildProcessHandle
         
         if (waitResult == 0)
         {
-            // waitid succeeded, which means the process has exited
-            // Check si_signo to see if we actually got status information
-            if (siginfo.si_signo != 0)
+            // waitid succeeded - check if we got actual status info
+            // si_code indicates the reason for the SIGCHLD signal
+            if (siginfo.si_code == CLD_EXITED || siginfo.si_code == CLD_KILLED || siginfo.si_code == CLD_DUMPED)
             {
-                return false; // Process already exited
+                // Process has already exited
+                return false;
             }
         }
         
@@ -382,13 +387,12 @@ public partial class SafeChildProcessHandle
         // Check if the process has already exited
         // ESRCH (3): No such process
         // EBADF (9): Bad file descriptor (pidfd no longer valid because process exited)
-        // Some other errors that might indicate the process is gone
         if (errno == ESRCH || errno == EBADF)
         {
             return false;
         }
         
-        // For debugging: include the errno in the exception
+        // Any other error is unexpected
         throw new Win32Exception(errno, $"Failed to terminate process (errno={errno})");
     }
 }

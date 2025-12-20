@@ -223,8 +223,8 @@ public partial class SafeChildProcessHandle
         {
             int error = Marshal.GetLastPInvokeError();
             
-            // ERROR_ACCESS_DENIED (5) might mean the process has already exited
-            // Let's check again
+            // TerminateProcess can fail if the process has already exited
+            // Let's check again to see if that's the case
             if (Interop.Kernel32.GetExitCodeProcess(this, out exitCode))
             {
                 if (exitCode != Interop.Kernel32.HandleOptions.STILL_ACTIVE)
@@ -235,7 +235,7 @@ public partial class SafeChildProcessHandle
             }
             
             // Any other error is unexpected
-            throw new Win32Exception(error, "Failed to kill process");
+            throw new Win32Exception(error, "Failed to terminate process");
         }
         
         return true;
