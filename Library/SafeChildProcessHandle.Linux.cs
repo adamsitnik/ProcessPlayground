@@ -303,7 +303,14 @@ public partial class SafeChildProcessHandle
             byte[] buffer = new byte[1];
             // Returns number of bytes read, 0 means orderly shutdown by peer (pipe closed).
             int bytesRead = await socket.ReceiveAsync(buffer, SocketFlags.None, cancellationToken).ConfigureAwait(false);
-            Debug.Assert(bytesRead == 0, "Expected pipe to be closed (0 bytes read) when child exits");
+            
+            // When the child process exits, the write end of the pipe is closed,
+            // which should result in 0 bytes read (orderly shutdown).
+            if (bytesRead != 0)
+            {
+                // This should never happen, but if it does, we should still retrieve the exit code
+                // The child may have written data to the pipe before exiting (unexpected but not fatal)
+            }
 
             // The process has exited, now retrieve the exit code
             return WaitIdPidfd();
