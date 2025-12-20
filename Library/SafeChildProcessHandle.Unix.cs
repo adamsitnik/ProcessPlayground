@@ -175,6 +175,7 @@ public partial class SafeChildProcessHandle
 
     private unsafe bool TryGetExitCodeCore(out int exitCode)
     {
+        int pid = GetProcessIdCore();
         int status = 0;
         int result = waitpid(pid, &status, WNOHANG);
         if (result == pid)
