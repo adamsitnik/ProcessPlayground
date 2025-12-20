@@ -306,8 +306,7 @@ public partial class SafeChildProcessHandle
         // which should result in 0 bytes read (orderly shutdown).
         if (bytesRead != 0)
         {
-            // This should never happen, but if it does, we should still retrieve the exit code
-            // The child may have written data to the pipe before exiting (unexpected but not fatal)
+            throw new InvalidOperationException($"Unexpected data read from exit pipe: {bytesRead} byte(s). Expected 0 bytes (pipe closure).");
         }
 
         // The process has exited, now retrieve the exit code
