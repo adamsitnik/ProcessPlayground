@@ -180,8 +180,6 @@ public partial class SafeChildProcessHandle
                 int result = waitid(P_PIDFD, pidfd, &siginfo, WEXITED);
                 if (result == 0)
                 {
-                    // Process exited - close the pidfd
-                    close(pidfd);
                     return siginfo.si_status;
                 }
                 else
@@ -236,7 +234,6 @@ public partial class SafeChildProcessHandle
                         int result = waitid(P_PIDFD, pidfd, &siginfo, WEXITED);
                         if (result == 0)
                         {
-                            close(pidfd);
                             return siginfo.si_status;
                         }
                         else
@@ -258,7 +255,6 @@ public partial class SafeChildProcessHandle
                         int result = waitid(P_PIDFD, pidfd, &siginfo, WEXITED | WNOHANG);
                         if (result == 0)
                         {
-                            close(pidfd);
                             return siginfo.si_status;
                         }
                         else
@@ -303,7 +299,6 @@ public partial class SafeChildProcessHandle
             {
                 // Process exited, get the exit status
                 int exitStatus = WaitIdPidfd(pidfd);
-                close(pidfd);
                 return exitStatus;
             }
             else if (pollResult < 0)
