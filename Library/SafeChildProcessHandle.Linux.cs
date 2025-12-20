@@ -78,7 +78,7 @@ public partial class SafeChildProcessHandle
     private const int __NR_pidfd_send_signal = 424;
 
     [LibraryImport("libc", EntryPoint = "syscall", SetLastError = true)]
-    private static partial int syscall_pidfd_send_signal(int number, SafeChildProcessHandle pidfd, int sig, nint siginfo);
+    private static partial int syscall_pidfd_send_signal(int number, int pidfd, int sig, nint siginfo, uint flags);
 
     [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial int poll(PollFd* fds, nuint nfds, int timeout);
@@ -94,6 +94,7 @@ public partial class SafeChildProcessHandle
     private const short POLLHUP = 0x0010;
     private const int EINTR = 4;
     private const int ESRCH = 3;  // No such process
+    private const int EBADF = 9;  // Bad file descriptor (can occur if process already exited for pidfd)
     private const int P_PIDFD = 3;
     private const int WEXITED = 0x00000004;
     private const int WNOHANG = 0x00000001;
@@ -350,9 +351,25 @@ public partial class SafeChildProcessHandle
         return envList.ToArray();
     }
 
-    private bool KillCore()
+    private unsafe bool KillCore()
     {
-        int result = syscall_pidfd_send_signal(__NR_pidfd_send_signal, this, SIGKILL, 0);
+        // First, check if the process has already exited using waitid with WNOHANG
+        siginfo_t siginfo = default;
+        int waitResult = waitid(P_PIDFD, this, &siginfo, WEXITED | WNOHANG);
+        
+        if (waitResult == 0)
+        {
+            // waitid succeeded, which means the process has exited
+            // Check si_signo to see if we actually got status information
+            if (siginfo.si_signo != 0)
+            {
+                return false; // Process already exited
+            }
+        }
+        
+        // Process is still running, try to send signal
+        int pidfd = (int)DangerousGetHandle();
+        int result = syscall_pidfd_send_signal(__NR_pidfd_send_signal, pidfd, SIGKILL, 0, 0);
         
         if (result == 0)
         {
@@ -363,12 +380,15 @@ public partial class SafeChildProcessHandle
         int errno = Marshal.GetLastPInvokeError();
         
         // Check if the process has already exited
-        if (errno == ESRCH)
+        // ESRCH (3): No such process
+        // EBADF (9): Bad file descriptor (pidfd no longer valid because process exited)
+        // Some other errors that might indicate the process is gone
+        if (errno == ESRCH || errno == EBADF)
         {
             return false;
         }
         
-        // Any other error is unexpected
-        throw new Win32Exception(errno, "Failed to kill process");
+        // For debugging: include the errno in the exception
+        throw new Win32Exception(errno, $"Failed to terminate process (errno={errno})");
     }
 }

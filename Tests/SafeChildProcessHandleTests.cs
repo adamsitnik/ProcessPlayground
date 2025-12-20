@@ -320,7 +320,7 @@ public partial class SafeChildProcessHandleTests
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
-        // Kill the process
+        // The process should return true for running process
         bool wasKilled = processHandle.Kill();
         
         // Should return true (process was killed)
@@ -329,10 +329,19 @@ public partial class SafeChildProcessHandleTests
         // Process should exit after being killed
         int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
         
-        // Exit code should indicate termination (typically -1 or non-zero)
-        // The exact value depends on the platform
-#if !WINDOWS
-        Assert.Equal(-1, exitCode); // Unix processes killed by signal return -1
+        // Exit code should indicate termination (non-zero or signal number)
+        // On Linux with pidfd, this will be the signal number (9 for SIGKILL)
+        // On Unix with regular kill, this will be -1
+        // On Windows, this will be -1
+#if LINUX
+        // With pidfd on Linux, we get the signal number directly
+        Assert.True(exitCode == 9 || exitCode == -1, $"Exit code should be 9 (SIGKILL) or -1, but was {exitCode}");
+#elif WINDOWS
+        // Windows returns -1
+        Assert.Equal(-1, exitCode);
+#else
+        // Traditional Unix returns -1
+        Assert.Equal(-1, exitCode);
 #endif
     }
 
