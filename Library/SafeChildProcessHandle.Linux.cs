@@ -67,13 +67,13 @@ public partial class SafeChildProcessHandle
     private const int __NR_pidfd_send_signal = 424;
 
     [LibraryImport("libc", EntryPoint = "syscall", SetLastError = true)]
-    private static partial int syscall_pidfd_send_signal(int number, int pidfd, int sig, nint siginfo);
+    private static partial int syscall_pidfd_send_signal(int number, SafeChildProcessHandle pidfd, int sig, nint siginfo);
 
     [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial int poll(PollFd* fds, nuint nfds, int timeout);
 
     [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial int waitid(int idtype, int id, siginfo_t* infop, int options);
+    private static unsafe partial int waitid(int idtype, SafeChildProcessHandle pidfd, siginfo_t* infop, int options);
 
     [LibraryImport("libc", SetLastError = true)]
     private static partial int close(int fd);
@@ -169,15 +169,13 @@ public partial class SafeChildProcessHandle
 
     private static unsafe int WaitForExitCore(SafeChildProcessHandle processHandle, int milliseconds)
     {
-        int pidfd = (int)processHandle.DangerousGetHandle();
-        
         if (milliseconds == Timeout.Infinite)
         {
             // Wait indefinitely using waitid
             siginfo_t siginfo = default;
             while (true)
             {
-                int result = waitid(P_PIDFD, pidfd, &siginfo, WEXITED);
+                int result = waitid(P_PIDFD, processHandle, &siginfo, WEXITED);
                 if (result == 0)
                 {
                     return siginfo.si_status;
@@ -206,7 +204,7 @@ public partial class SafeChildProcessHandle
                 
                 PollFd pollfd = new PollFd
                 {
-                    fd = pidfd,
+                    fd = (int)processHandle.DangerousGetHandle(),
                     events = POLLIN,
                     revents = 0
                 };
@@ -225,13 +223,13 @@ public partial class SafeChildProcessHandle
                 else if (pollResult == 0)
                 {
                     // Timeout - kill the process using pidfd_send_signal
-                    syscall_pidfd_send_signal(__NR_pidfd_send_signal, pidfd, SIGKILL, 0);
+                    syscall_pidfd_send_signal(__NR_pidfd_send_signal, processHandle, SIGKILL, 0);
                     
                     // Wait for the process to actually exit
                     siginfo_t siginfo = default;
                     while (true)
                     {
-                        int result = waitid(P_PIDFD, pidfd, &siginfo, WEXITED);
+                        int result = waitid(P_PIDFD, processHandle, &siginfo, WEXITED);
                         if (result == 0)
                         {
                             return siginfo.si_status;
@@ -252,7 +250,7 @@ public partial class SafeChildProcessHandle
                     siginfo_t siginfo = default;
                     while (true)
                     {
-                        int result = waitid(P_PIDFD, pidfd, &siginfo, WEXITED | WNOHANG);
+                        int result = waitid(P_PIDFD, processHandle, &siginfo, WEXITED | WNOHANG);
                         if (result == 0)
                         {
                             return siginfo.si_status;
@@ -273,14 +271,12 @@ public partial class SafeChildProcessHandle
 
     private static async Task<int> WaitForExitAsyncCore(SafeChildProcessHandle processHandle, CancellationToken cancellationToken)
     {
-        int pidfd = (int)processHandle.DangerousGetHandle();
-        
         // Register cancellation to kill the process using pidfd_send_signal
         using var registration = cancellationToken.Register(() =>
         {
             try
             {
-                syscall_pidfd_send_signal(__NR_pidfd_send_signal, pidfd, SIGKILL, 0);
+                syscall_pidfd_send_signal(__NR_pidfd_send_signal, processHandle, SIGKILL, 0);
             }
             catch
             {
@@ -293,12 +289,12 @@ public partial class SafeChildProcessHandle
         while (!cancellationToken.IsCancellationRequested)
         {
             // Use poll with very short timeout to check if process exited
-            (int pollResult, short revents) = PollPidfd(pidfd);
+            (int pollResult, short revents) = PollPidfd((int)processHandle.DangerousGetHandle());
             
             if (pollResult > 0 && (revents & (POLLIN | POLLHUP)) != 0)
             {
                 // Process exited, get the exit status
-                int exitStatus = WaitIdPidfd(pidfd);
+                int exitStatus = WaitIdPidfd(processHandle);
                 return exitStatus;
             }
             else if (pollResult < 0)
@@ -332,7 +328,7 @@ public partial class SafeChildProcessHandle
         return (pollResult, pollfd.revents);
     }
     
-    private static unsafe int WaitIdPidfd(int pidfd)
+    private static unsafe int WaitIdPidfd(SafeChildProcessHandle pidfd)
     {
         siginfo_t siginfo = default;
         while (true)
