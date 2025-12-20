@@ -1,13 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.TBA;
 using System.Threading;
 using System.Threading.Tasks;
-using System.TBA;
-using System.Text;
-using System.Diagnostics;
 
 namespace Microsoft.Win32.SafeHandles;
 
@@ -20,9 +21,16 @@ public partial class SafeChildProcessHandle
 {
     // Store the PID alongside the pidfd handle
     private int _pid;
+    // Store the exit pipe read fd for async monitoring
+    private int _exitPipeFd;
 
     protected override bool ReleaseHandle()
     {
+        // Close the exit pipe fd if it's valid
+        if (_exitPipeFd >= 0)
+        {
+            close(_exitPipeFd);
+        }
         // Close the pidfd file descriptor
         return close((int)handle) == 0;
     }
@@ -38,7 +46,8 @@ public partial class SafeChildProcessHandle
         int stdout_fd,
         int stderr_fd,
         byte* working_dir,
-        out int pid);
+        out int pid,
+        out int exit_pipe_fd);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct PollFd
@@ -140,7 +149,8 @@ public partial class SafeChildProcessHandle
                 stdoutFd,
                 stderrFd,
                 workingDirPtr,
-                out int pid);
+                out int pid,
+                out int exitPipeFd);
 
             if (pidfd < 0)
             {
@@ -149,6 +159,7 @@ public partial class SafeChildProcessHandle
 
             SafeChildProcessHandle handle = new SafeChildProcessHandle(pidfd, ownsHandle: true);
             handle._pid = pid;
+            handle._exitPipeFd = exitPipeFd;
             return handle;
         }
         finally
@@ -268,7 +279,7 @@ public partial class SafeChildProcessHandle
     private async Task<int> WaitForExitAsyncCore(CancellationToken cancellationToken)
     {
         // Register cancellation to kill the process using pidfd_send_signal
-        using var registration = cancellationToken.Register(() =>
+        using CancellationTokenRegistration registration = !cancellationToken.CanBeCanceled ? default : cancellationToken.Register(() =>
         {
             try
             {
@@ -279,49 +290,29 @@ public partial class SafeChildProcessHandle
                 // Ignore errors during cancellation
             }
         });
-        
-        // Poll for process exit asynchronously
-        int pollDelay = 1;
-        while (!cancellationToken.IsCancellationRequested)
+
+        try
         {
-            // Use poll with very short timeout to check if process exited
-            (int pollResult, short revents) = PollPidfd();
-            
-            if (pollResult > 0 && (revents & (POLLIN | POLLHUP)) != 0)
-            {
-                // Process exited, get the exit status
-                int exitStatus = WaitIdPidfd();
-                return exitStatus;
-            }
-            else if (pollResult < 0)
-            {
-                int errno = Marshal.GetLastPInvokeError();
-                if (errno != EINTR)
-                {
-                    throw new Win32Exception(errno, "poll() failed");
-                }
-            }
-            
-            // Process still running, wait asynchronously with progressive backoff
-            await Task.Delay(pollDelay, cancellationToken).ConfigureAwait(false);
-            pollDelay = Math.Min(pollDelay * 2, 50);
+            // Treat the exit pipe fd as a socket and perform async read
+            // When the child process exits, all its file descriptors are closed,
+            // including the write end of the exit pipe. This will cause the read
+            // to return 0 bytes (orderly shutdown).
+            using SafeSocketHandle safeSocket = new(_exitPipeFd, ownsHandle: false);
+            using Socket socket = new(safeSocket);
+
+            byte[] buffer = new byte[1];
+            // Returns number of bytes read, 0 means orderly shutdown by peer (pipe closed).
+            int bytesRead = await socket.ReceiveAsync(buffer, SocketFlags.None, cancellationToken).ConfigureAwait(false);
+            Debug.Assert(bytesRead == 0, "Expected pipe to be closed (0 bytes read) when child exits");
+
+            // The process has exited, now retrieve the exit code
+            return WaitIdPidfd();
         }
-        
-        // If we get here, we were cancelled
-        throw new OperationCanceledException(cancellationToken);
-    }
-    
-    private unsafe (int result, short revents) PollPidfd()
-    {
-        PollFd pollfd = new PollFd
+        catch (TaskCanceledException)
         {
-            fd = (int)DangerousGetHandle(),
-            events = POLLIN,
-            revents = 0
-        };
-        
-        int pollResult = poll(&pollfd, 1, 0); // Non-blocking poll
-        return (pollResult, pollfd.revents);
+            // Rethrow as OperationCanceledException for consistency
+            throw new OperationCanceledException(cancellationToken);
+        }
     }
     
     private unsafe int WaitIdPidfd()
