@@ -27,7 +27,7 @@ public partial class SafeChildProcessHandle
     protected override bool ReleaseHandle()
     {
         // Close the exit pipe fd if it's valid
-        if (_exitPipeFd >= 0)
+        if (_exitPipeFd > 0)
         {
             close(_exitPipeFd);
         }
@@ -291,35 +291,27 @@ public partial class SafeChildProcessHandle
             }
         });
 
-        try
-        {
-            // Treat the exit pipe fd as a socket and perform async read
-            // When the child process exits, all its file descriptors are closed,
-            // including the write end of the exit pipe. This will cause the read
-            // to return 0 bytes (orderly shutdown).
-            using SafeSocketHandle safeSocket = new(_exitPipeFd, ownsHandle: false);
-            using Socket socket = new(safeSocket);
+        // Treat the exit pipe fd as a socket and perform async read
+        // When the child process exits, all its file descriptors are closed,
+        // including the write end of the exit pipe. This will cause the read
+        // to return 0 bytes (orderly shutdown).
+        using SafeSocketHandle safeSocket = new(_exitPipeFd, ownsHandle: false);
+        using Socket socket = new(safeSocket);
 
-            byte[] buffer = new byte[1];
-            // Returns number of bytes read, 0 means orderly shutdown by peer (pipe closed).
-            int bytesRead = await socket.ReceiveAsync(buffer, SocketFlags.None, cancellationToken).ConfigureAwait(false);
-            
-            // When the child process exits, the write end of the pipe is closed,
-            // which should result in 0 bytes read (orderly shutdown).
-            if (bytesRead != 0)
-            {
-                // This should never happen, but if it does, we should still retrieve the exit code
-                // The child may have written data to the pipe before exiting (unexpected but not fatal)
-            }
-
-            // The process has exited, now retrieve the exit code
-            return WaitIdPidfd();
-        }
-        catch (TaskCanceledException)
+        byte[] buffer = new byte[1];
+        // Returns number of bytes read, 0 means orderly shutdown by peer (pipe closed).
+        int bytesRead = await socket.ReceiveAsync(buffer, SocketFlags.None, cancellationToken).ConfigureAwait(false);
+        
+        // When the child process exits, the write end of the pipe is closed,
+        // which should result in 0 bytes read (orderly shutdown).
+        if (bytesRead != 0)
         {
-            // Rethrow as OperationCanceledException for consistency
-            throw new OperationCanceledException(cancellationToken);
+            // This should never happen, but if it does, we should still retrieve the exit code
+            // The child may have written data to the pipe before exiting (unexpected but not fatal)
         }
+
+        // The process has exited, now retrieve the exit code
+        return WaitIdPidfd();
     }
     
     private unsafe int WaitIdPidfd()

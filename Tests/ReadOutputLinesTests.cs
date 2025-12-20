@@ -314,7 +314,8 @@ public class ReadOutputLinesTests
 
         using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(500));
 
-        await Assert.ThrowsAsync<OperationCanceledException>(async () =>
+        // Accept either OperationCanceledException or TaskCanceledException (which derives from it)
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
             await foreach (var line in ChildProcess.ReadOutputLines(options).WithCancellation(cts.Token))
             {

@@ -50,8 +50,8 @@ int spawn_process_with_pidfd(
         return -1;
     }
     
-    // Create pipe for exit monitoring (NOT CLOEXEC - child needs to inherit it)
-    if (pipe2(exit_pipe, 0) != 0) {
+    // Create pipe for exit monitoring (CLOEXEC to avoid other parallel processes inheriting it)
+    if (pipe2(exit_pipe, O_CLOEXEC) != 0) {
         int saved_errno = errno;
         close(wait_pipe[0]);
         close(wait_pipe[1]);
@@ -116,8 +116,13 @@ int spawn_process_with_pidfd(
         // Close read end of wait pipe (we only write)
         close(wait_pipe[0]);
         
-        // Close read end of exit pipe (we only hold write end)
+        // Duplicate exit pipe write end to fd 3 (so it survives execve)
+        // We use fd 3 as it's typically unused by standard streams
+        if (dup2(exit_pipe[1], 3) == -1) {
+            write_errno_and_exit(wait_pipe[1], errno);
+        }
         close(exit_pipe[0]);
+        close(exit_pipe[1]);
         
         // Redirect stdin/stdout/stderr
         if (stdin_fd != 0) {
