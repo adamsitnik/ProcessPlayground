@@ -171,12 +171,11 @@ public partial class SafeChildProcessHandle
         }
     }
 
-    private static int GetProcessIdCore(SafeChildProcessHandle processHandle)
-        => (int)processHandle.DangerousGetHandle();
+    private int GetProcessIdCore() => (int)DangerousGetHandle();
 
-    private static unsafe int WaitForExitCore(SafeChildProcessHandle processHandle, int milliseconds)
+    private unsafe int WaitForExitCore(int milliseconds)
     {
-        int pid = (int)processHandle.DangerousGetHandle();
+        int pid = GetProcessIdCore();
         int status = 0;
         
         if (milliseconds == Timeout.Infinite)
@@ -259,21 +258,14 @@ public partial class SafeChildProcessHandle
         }
     }
 
-    private static async Task<int> WaitForExitAsyncCore(SafeChildProcessHandle processHandle, CancellationToken cancellationToken)
+    private async Task<int> WaitForExitAsyncCore(CancellationToken cancellationToken)
     {
-        int pid = (int)processHandle.DangerousGetHandle();
+        int pid = GetProcessIdCore();
         
         // Register cancellation to terminate the process
         using var registration = cancellationToken.Register(() =>
         {
-            try
-            {
-                kill(pid, SIGKILL);
-            }
-            catch
-            {
-                // Ignore errors during cancellation
-            }
+            kill(pid, SIGKILL);
         });
         
         // Poll for process exit asynchronously
