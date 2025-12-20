@@ -79,30 +79,30 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
 
     public int GetProcessId()
     {
-        Validate(this);
+        Validate();
 
-        return GetProcessIdCore(this);
+        return GetProcessIdCore();
     }
 
     public int WaitForExit(TimeSpan? timeout = default)
     {
-        Validate(this);
+        Validate();
 
-        return WaitForExitCore(this, GetTimeoutInMilliseconds(timeout));
+        return WaitForExitCore(GetTimeoutInMilliseconds(timeout));
     }
 
-    public async Task<int> WaitForExitAsync(CancellationToken cancellationToken = default)
+    public Task<int> WaitForExitAsync(CancellationToken cancellationToken = default)
     {
-        Validate(this);
+        Validate();
 
-        return await WaitForExitAsyncCore(this, cancellationToken);
+        return WaitForExitAsyncCore(cancellationToken);
     }
 
-    private static void Validate(SafeChildProcessHandle processHandle)
+    private void Validate()
     {
-        if (processHandle.IsInvalid)
+        if (IsInvalid)
         {
-            throw new ArgumentException("Invalid process handle.", nameof(processHandle));
+            throw new InvalidOperationException("Invalid process handle.");
         }
     }
 

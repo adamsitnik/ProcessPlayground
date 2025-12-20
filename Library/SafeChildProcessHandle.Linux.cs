@@ -161,13 +161,9 @@ public partial class SafeChildProcessHandle
         }
     }
 
-    private static int GetProcessIdCore(SafeChildProcessHandle processHandle)
-    {
-        // Return the stored PID
-        return processHandle._pid;
-    }
+    private int GetProcessIdCore() => _pid;
 
-    private static unsafe int WaitForExitCore(SafeChildProcessHandle processHandle, int milliseconds)
+    private unsafe int WaitForExitCore(int milliseconds)
     {
         if (milliseconds == Timeout.Infinite)
         {
@@ -175,7 +171,7 @@ public partial class SafeChildProcessHandle
             siginfo_t siginfo = default;
             while (true)
             {
-                int result = waitid(P_PIDFD, processHandle, &siginfo, WEXITED);
+                int result = waitid(P_PIDFD, this, &siginfo, WEXITED);
                 if (result == 0)
                 {
                     return siginfo.si_status;
@@ -204,7 +200,7 @@ public partial class SafeChildProcessHandle
                 
                 PollFd pollfd = new PollFd
                 {
-                    fd = (int)processHandle.DangerousGetHandle(),
+                    fd = (int)DangerousGetHandle(),
                     events = POLLIN,
                     revents = 0
                 };
@@ -223,13 +219,13 @@ public partial class SafeChildProcessHandle
                 else if (pollResult == 0)
                 {
                     // Timeout - kill the process using pidfd_send_signal
-                    syscall_pidfd_send_signal(__NR_pidfd_send_signal, processHandle, SIGKILL, 0);
+                    syscall_pidfd_send_signal(__NR_pidfd_send_signal, this, SIGKILL, 0);
                     
                     // Wait for the process to actually exit
                     siginfo_t siginfo = default;
                     while (true)
                     {
-                        int result = waitid(P_PIDFD, processHandle, &siginfo, WEXITED);
+                        int result = waitid(P_PIDFD, this, &siginfo, WEXITED);
                         if (result == 0)
                         {
                             return siginfo.si_status;
@@ -250,7 +246,7 @@ public partial class SafeChildProcessHandle
                     siginfo_t siginfo = default;
                     while (true)
                     {
-                        int result = waitid(P_PIDFD, processHandle, &siginfo, WEXITED | WNOHANG);
+                        int result = waitid(P_PIDFD, this, &siginfo, WEXITED | WNOHANG);
                         if (result == 0)
                         {
                             return siginfo.si_status;
@@ -269,14 +265,14 @@ public partial class SafeChildProcessHandle
         }
     }
 
-    private static async Task<int> WaitForExitAsyncCore(SafeChildProcessHandle processHandle, CancellationToken cancellationToken)
+    private async Task<int> WaitForExitAsyncCore(CancellationToken cancellationToken)
     {
         // Register cancellation to kill the process using pidfd_send_signal
         using var registration = cancellationToken.Register(() =>
         {
             try
             {
-                syscall_pidfd_send_signal(__NR_pidfd_send_signal, processHandle, SIGKILL, 0);
+                syscall_pidfd_send_signal(__NR_pidfd_send_signal, this, SIGKILL, 0);
             }
             catch
             {
@@ -289,12 +285,12 @@ public partial class SafeChildProcessHandle
         while (!cancellationToken.IsCancellationRequested)
         {
             // Use poll with very short timeout to check if process exited
-            (int pollResult, short revents) = PollPidfd((int)processHandle.DangerousGetHandle());
+            (int pollResult, short revents) = PollPidfd();
             
             if (pollResult > 0 && (revents & (POLLIN | POLLHUP)) != 0)
             {
                 // Process exited, get the exit status
-                int exitStatus = WaitIdPidfd(processHandle);
+                int exitStatus = WaitIdPidfd();
                 return exitStatus;
             }
             else if (pollResult < 0)
@@ -315,11 +311,11 @@ public partial class SafeChildProcessHandle
         throw new OperationCanceledException(cancellationToken);
     }
     
-    private static unsafe (int result, short revents) PollPidfd(int pidfd)
+    private unsafe (int result, short revents) PollPidfd()
     {
         PollFd pollfd = new PollFd
         {
-            fd = pidfd,
+            fd = (int)DangerousGetHandle(),
             events = POLLIN,
             revents = 0
         };
@@ -328,12 +324,12 @@ public partial class SafeChildProcessHandle
         return (pollResult, pollfd.revents);
     }
     
-    private static unsafe int WaitIdPidfd(SafeChildProcessHandle pidfd)
+    private unsafe int WaitIdPidfd()
     {
         siginfo_t siginfo = default;
         while (true)
         {
-            int result = waitid(P_PIDFD, pidfd, &siginfo, WEXITED | WNOHANG);
+            int result = waitid(P_PIDFD, this, &siginfo, WEXITED | WNOHANG);
             if (result == 0)
             {
                 return siginfo.si_status;

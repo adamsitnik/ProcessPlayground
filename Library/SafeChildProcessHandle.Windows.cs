@@ -144,9 +144,9 @@ public partial class SafeChildProcessHandle
         }
     }
 
-    private static int GetProcessIdCore(SafeChildProcessHandle processHandle)
+    private int GetProcessIdCore()
     {
-        int result = Interop.Kernel32.GetProcessId(processHandle);
+        int result = Interop.Kernel32.GetProcessId(this);
         if (result == 0)
         {
             throw new Win32Exception(Marshal.GetLastPInvokeError());
@@ -154,20 +154,20 @@ public partial class SafeChildProcessHandle
         return result;
     }
 
-    private static int WaitForExitCore(SafeChildProcessHandle processHandle, int milliseconds)
+    private int WaitForExitCore(int milliseconds)
     {
-        using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(processHandle);
+        using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(this);
         if (!processWaitHandle.WaitOne(milliseconds))
         {
-            Interop.Kernel32.TerminateProcess(processHandle, exitCode: -1);
+            Interop.Kernel32.TerminateProcess(this, exitCode: -1);
         }
 
-        return processHandle.GetExitCode();
+        return GetExitCode();
     }
 
-    private static async Task<int> WaitForExitAsyncCore(SafeChildProcessHandle processHandle, CancellationToken cancellationToken)
+    private async Task<int> WaitForExitAsyncCore(CancellationToken cancellationToken)
     {
-        using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(processHandle);
+        using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(this);
 
         TaskCompletionSource<bool> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         RegisteredWaitHandle? registeredWaitHandle = null;
@@ -192,7 +192,7 @@ public partial class SafeChildProcessHandle
                         Interop.Kernel32.TerminateProcess(handle, exitCode: -1);
                         taskSource.TrySetCanceled();
                     },
-                    (processHandle, tcs));
+                    (this, tcs));
             }
 
             await tcs.Task.ConfigureAwait(false);
@@ -203,6 +203,6 @@ public partial class SafeChildProcessHandle
             registeredWaitHandle?.Unregister(null);
         }
 
-        return processHandle.GetExitCode();
+        return GetExitCode();
     }
 }
