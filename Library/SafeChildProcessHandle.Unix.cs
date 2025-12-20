@@ -173,6 +173,20 @@ public partial class SafeChildProcessHandle
 
     private int GetProcessIdCore() => (int)DangerousGetHandle();
 
+    private unsafe bool TryGetExitCodeCore(out int exitCode)
+    {
+        int status = 0;
+        int result = waitpid(pid, &status, WNOHANG);
+        if (result == pid)
+        {
+            exitCode = GetExitCodeFromStatus(status);
+            return true;
+        }
+
+        exitCode = -1;
+        return false;
+    }
+
     private unsafe int WaitForExitCore(int milliseconds)
     {
         int pid = GetProcessIdCore();

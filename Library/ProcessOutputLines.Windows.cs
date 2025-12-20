@@ -190,15 +190,11 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 
             // It's possible for the process to close STD OUT and ERR keep running.
             // We optimize for hot path: process already exited and exit code is available.
-            if (Interop.Kernel32.GetExitCodeProcess(processHandle, out int exitCode)
-                && exitCode != Interop.Kernel32.HandleOptions.STILL_ACTIVE)
+            if (!processHandle.TryGetExitCode(out int exitCode))
             {
-                _exitCode = exitCode;
+                exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow());
             }
-            else
-            {
-                _exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow());
-            }
+            _exitCode = exitCode;
 
             yield break;
         }

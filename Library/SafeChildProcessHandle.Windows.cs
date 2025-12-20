@@ -31,6 +31,10 @@ public partial class SafeChildProcessHandle
         return exitCode;
     }
 
+    private bool TryGetExitCodeCore(out int exitCode)
+        => Interop.Kernel32.GetExitCodeProcess(this, out exitCode)
+            && exitCode != Interop.Kernel32.HandleOptions.STILL_ACTIVE;
+
     private static unsafe SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
         ValueStringBuilder commandLine = new(stackalloc char[256]);

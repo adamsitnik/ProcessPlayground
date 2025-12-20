@@ -143,11 +143,11 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 #endif
             }
 
-#if WINDOWS
-            _exitCode = procHandle.GetExitCode();
-#else
-            _exitCode = await procHandle.WaitForExitAsync(cancellationToken);
-#endif
+            if (cancellationToken.IsCancellationRequested || !procHandle.TryGetExitCode(out int exitCode))
+            {
+                exitCode = await procHandle.WaitForExitAsync(cancellationToken);
+            }
+            _exitCode = exitCode;
         }
     }
 
