@@ -23,6 +23,8 @@ public partial class SafeChildProcessHandle
     private int _pid;
     // Store the exit pipe read fd for async monitoring
     private int _exitPipeFd;
+    // Buffer for reading from exit pipe (reused to avoid allocations)
+    private static readonly byte[] s_exitPipeBuffer = new byte[1];
 
     protected override bool ReleaseHandle()
     {
@@ -298,9 +300,8 @@ public partial class SafeChildProcessHandle
         using SafeSocketHandle safeSocket = new(_exitPipeFd, ownsHandle: false);
         using Socket socket = new(safeSocket);
 
-        byte[] buffer = new byte[1];
         // Returns number of bytes read, 0 means orderly shutdown by peer (pipe closed).
-        int bytesRead = await socket.ReceiveAsync(buffer, SocketFlags.None, cancellationToken).ConfigureAwait(false);
+        int bytesRead = await socket.ReceiveAsync(s_exitPipeBuffer, SocketFlags.None, cancellationToken).ConfigureAwait(false);
         
         // When the child process exits, the write end of the pipe is closed,
         // which should result in 0 bytes read (orderly shutdown).
