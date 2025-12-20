@@ -180,7 +180,12 @@ public partial class SafeChildProcessHandle
     {
         siginfo_t siginfo = default;
         int result = waitid(P_PIDFD, this, &siginfo, WEXITED | WNOHANG);
-        if (result == 0)
+
+        // waitid returns 0 when the process has exited or is still running.
+        // Check if siginfo was filled (process actually exited)
+        // si_signo will be non-zero (typically SIGCHLD) if process exited
+        // si_signo will be 0 if process is still running
+        if (result == 0 && siginfo.si_signo != 0)
         {
             exitCode = siginfo.si_status;
             return true;

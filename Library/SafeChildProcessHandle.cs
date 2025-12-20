@@ -105,8 +105,6 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
     /// So instead of creating expensive async machinery to wait for process exit,
     /// this method attempts to get the exit code directly.
     /// </summary>
-    /// <param name="exitCode"></param>
-    /// <returns></returns>
     internal bool TryGetExitCode(out int exitCode)
     {
         Validate();
