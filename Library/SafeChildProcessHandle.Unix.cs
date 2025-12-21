@@ -41,9 +41,10 @@ public partial class SafeChildProcessHandle
 #endif
     }
 
-    // P/Invoke declarations
+    [LibraryImport("libc", SetLastError = true)]
+    private static partial int close(int fd);
 
-#if LINUX
+    // P/Invoke declarations
     [LibraryImport("processspawn", SetLastError = true)]
     private static unsafe partial int spawn_process(
         byte* path,
@@ -57,6 +58,8 @@ public partial class SafeChildProcessHandle
         out int pidfd,
         out int exit_pipe_fd);
 
+
+#if LINUX
     [StructLayout(LayoutKind.Sequential)]
     private struct PollFd
     {
@@ -92,9 +95,6 @@ public partial class SafeChildProcessHandle
     [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial int waitid(int idtype, SafeChildProcessHandle pidfd, siginfo_t* infop, int options);
 
-    [LibraryImport("libc", SetLastError = true)]
-    private static partial int close(int fd);
-
     // Constants for Linux
     private const short POLLIN = 0x0001;
     private const short POLLHUP = 0x0010;
@@ -106,28 +106,11 @@ public partial class SafeChildProcessHandle
     private const int CLD_KILLED = 2;    // child was killed
     private const int CLD_DUMPED = 3;    // child terminated abnormally
 #else
-    // Non-Linux Unix P/Invoke declarations
-    [LibraryImport("processspawn", SetLastError = true)]
-    private static unsafe partial int spawn_process(
-        byte* path,
-        byte** argv,
-        byte** envp,
-        int stdin_fd,
-        int stdout_fd,
-        int stderr_fd,
-        byte* working_dir,
-        out int pid,
-        out int pidfd,
-        out int exit_pipe_fd);
-
     [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial int waitpid(int pid, int* status, int options);
     
     [LibraryImport("libc", SetLastError = true)]
     private static partial int kill(int pid, int sig);
-
-    [LibraryImport("libc", SetLastError = true)]
-    private static partial int close(int fd);
 
     private const int WNOHANG = 1;
 #endif
@@ -196,9 +179,10 @@ public partial class SafeChildProcessHandle
                 out int pidfd,
                 out int exitPipeFd);
 
-            if (result == 0)
+            if (result == -1)
             {
-                throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to spawn process");
+                int errorCode = Marshal.GetLastPInvokeError();
+                throw new Win32Exception(errorCode, "Failed to spawn process");
             }
 
 #if LINUX
@@ -258,9 +242,6 @@ public partial class SafeChildProcessHandle
             exitCode = siginfo.si_status;
             return true;
         }
-
-        exitCode = -1;
-        return false;
 #else
         int pid = GetProcessIdCore();
         int status = 0;
@@ -270,10 +251,10 @@ public partial class SafeChildProcessHandle
             exitCode = GetExitCodeFromStatus(status);
             return true;
         }
+#endif
 
         exitCode = -1;
         return false;
-#endif
     }
 
     private unsafe int WaitForExitCore(int milliseconds)
@@ -559,6 +540,9 @@ public partial class SafeChildProcessHandle
     {
 #if LINUX
         int result = syscall_pidfd_send_signal(__NR_pidfd_send_signal, this, SIGKILL, 0, 0);
+#else
+        int result = kill(GetProcessIdCore(), SIGKILL);
+#endif
         if (result == 0 || !throwOnError)
         {
             return;
@@ -575,23 +559,5 @@ public partial class SafeChildProcessHandle
         
         // Any other error is unexpected
         throw new Win32Exception(errno, $"Failed to terminate process (errno={errno})");
-#else
-        int result = kill(GetProcessIdCore(), SIGKILL);
-        if (result == 0 || !throwOnError)
-        {
-            return;
-        }
-
-        // Check if the process has already exited
-        // ESRCH (3): No such process
-        int errno = Marshal.GetLastPInvokeError();
-        if (errno == ESRCH)
-        {
-            return;
-        }
-
-        // Any other error is unexpected
-        throw new Win32Exception(errno, $"Failed to terminate process (errno={errno})");
-#endif
     }
 }

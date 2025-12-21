@@ -75,7 +75,7 @@ int spawn_process(
     
     // Create pipe for exec synchronization (CLOEXEC so child doesn't inherit it)
     if (create_cloexec_pipe(wait_pipe) != 0) {
-        return 0;
+        return -1;
     }
     
     // Create pipe for exit monitoring (CLOEXEC to avoid other parallel processes inheriting it)
@@ -84,7 +84,7 @@ int spawn_process(
         close(wait_pipe[0]);
         close(wait_pipe[1]);
         errno = saved_errno;
-        return 0;
+        return -1;
     }
     
     // Block all signals before forking
@@ -111,7 +111,7 @@ int spawn_process(
         close(exit_pipe[0]);
         close(exit_pipe[1]);
         errno = saved_errno;
-        return 0;
+        return -1;
     }
     
     child_pid = (pid_t)clone_result;
@@ -130,7 +130,7 @@ int spawn_process(
         close(exit_pipe[0]);
         close(exit_pipe[1]);
         errno = saved_errno;
-        return 0;
+        return -1;
     }
     
     if (child_pid == 0) {
@@ -235,7 +235,7 @@ int spawn_process(
 #endif
         close(exit_pipe[0]);
         errno = child_errno;
-        return 0;
+        return -1;
     }
     
     // Success - return PID, pidfd, and exit pipe fd if requested
@@ -252,7 +252,7 @@ int spawn_process(
     if (out_exit_pipe_fd != NULL) {
         *out_exit_pipe_fd = exit_pipe[0];
     }
-    return 1;
+    return 0;
 }
 
 #ifdef __linux__
