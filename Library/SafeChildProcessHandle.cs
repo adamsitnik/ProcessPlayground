@@ -99,6 +99,18 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
     }
 
     /// <summary>
+    /// Terminates the process.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
+    /// <exception cref="Win32Exception">Thrown when the kill operation fails for reasons other than the process having already exited.</exception>
+    public void Kill()
+    {
+        Validate();
+
+        KillCore(throwOnError: true);
+    }
+    
+    /// <summary>
     /// This is an INTERNAL method that can be used as PERF optimization
     /// in cases where we know that both STD OUT and STDERR got closed,
     /// and we suspect that the process has exited.

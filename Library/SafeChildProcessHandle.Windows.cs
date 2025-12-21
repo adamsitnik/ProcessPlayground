@@ -163,7 +163,7 @@ public partial class SafeChildProcessHandle
         using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(this);
         if (!processWaitHandle.WaitOne(milliseconds))
         {
-            Interop.Kernel32.TerminateProcess(this, exitCode: -1);
+            KillCore(throwOnError: false);
         }
 
         return GetExitCode();
@@ -193,7 +193,7 @@ public partial class SafeChildProcessHandle
                     state =>
                     {
                         var (handle, taskSource) = ((SafeChildProcessHandle, TaskCompletionSource<bool>))state!;
-                        Interop.Kernel32.TerminateProcess(handle, exitCode: -1);
+                        handle.KillCore(throwOnError: false);
                         taskSource.TrySetCanceled();
                     },
                     (this, tcs));
@@ -208,5 +208,22 @@ public partial class SafeChildProcessHandle
         }
 
         return GetExitCode();
+    }
+
+    private void KillCore(bool throwOnError)
+    {
+        if (!Interop.Kernel32.TerminateProcess(this, exitCode: -1) && throwOnError)
+        {
+            int error = Marshal.GetLastPInvokeError();
+            if (error != Interop.Errors.ERROR_SUCCESS)
+            {
+                if (TryGetExitCode(out _))
+                {
+                    return; // Process has already exited.
+                }
+
+                throw new Win32Exception(error, "Failed to terminate process");
+            }
+        }
     }
 }

@@ -78,7 +78,7 @@ public partial class SafeChildProcessHandle
     private const int __NR_pidfd_send_signal = 424;
 
     [LibraryImport("libc", EntryPoint = "syscall", SetLastError = true)]
-    private static partial int syscall_pidfd_send_signal(int number, SafeChildProcessHandle pidfd, int sig, nint siginfo);
+    private static partial int syscall_pidfd_send_signal(int number, SafeChildProcessHandle pidfd, int sig, nint siginfo, uint flags);
 
     [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial int poll(PollFd* fds, nuint nfds, int timeout);
@@ -93,10 +93,16 @@ public partial class SafeChildProcessHandle
     private const short POLLIN = 0x0001;
     private const short POLLHUP = 0x0010;
     private const int EINTR = 4;
+    private const int ESRCH = 3;  // No such process
+    private const int EBADF = 9;  // Bad file descriptor (can occur if process already exited for pidfd)
     private const int P_PIDFD = 3;
     private const int WEXITED = 0x00000004;
     private const int WNOHANG = 0x00000001;
     private const int SIGKILL = 9;
+    // si_code values for SIGCHLD
+    private const int CLD_EXITED = 1;    // child has exited
+    private const int CLD_KILLED = 2;    // child was killed
+    private const int CLD_DUMPED = 3;    // child terminated abnormally
 
     private static SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
@@ -251,7 +257,7 @@ public partial class SafeChildProcessHandle
                 else if (pollResult == 0)
                 {
                     // Timeout - kill the process using pidfd_send_signal
-                    syscall_pidfd_send_signal(__NR_pidfd_send_signal, this, SIGKILL, 0);
+                    KillCore(throwOnError: false);
                     
                     // Wait for the process to actually exit
                     siginfo_t siginfo = default;
@@ -299,17 +305,10 @@ public partial class SafeChildProcessHandle
 
     private async Task<int> WaitForExitAsyncCore(CancellationToken cancellationToken)
     {
-        // Register cancellation to kill the process using pidfd_send_signal
+        // Register cancellation to kill the process
         using CancellationTokenRegistration registration = !cancellationToken.CanBeCanceled ? default : cancellationToken.Register(() =>
         {
-            try
-            {
-                syscall_pidfd_send_signal(__NR_pidfd_send_signal, this, SIGKILL, 0);
-            }
-            catch
-            {
-                // Ignore errors during cancellation
-            }
+            KillCore(throwOnError: false);
         });
 
         // Treat the exit pipe fd as a socket and perform async read
@@ -366,5 +365,26 @@ public partial class SafeChildProcessHandle
         }
 
         return envList.ToArray();
+    }
+
+    private unsafe void KillCore(bool throwOnError)
+    {
+        int result = syscall_pidfd_send_signal(__NR_pidfd_send_signal, this, SIGKILL, 0, 0);
+        if (result == 0 || !throwOnError)
+        {
+            return;
+        }
+
+        // Check if the process has already exited
+        // ESRCH (3): No such process
+        // EBADF (9): Bad file descriptor (pidfd no longer valid because process exited)
+        int errno = Marshal.GetLastPInvokeError();
+        if (errno == ESRCH || errno == EBADF)
+        {
+            return;
+        }
+        
+        // Any other error is unexpected
+        throw new Win32Exception(errno, $"Failed to terminate process (errno={errno})");
     }
 }

@@ -301,4 +301,71 @@ public partial class SafeChildProcessHandleTests
     [System.Runtime.InteropServices.LibraryImport("libc", SetLastError = true, StringMarshalling = System.Runtime.InteropServices.StringMarshalling.Utf8)]
     internal static partial int unsetenv(string name);
 #endif
+
+    [Fact]
+    public void Kill_KillsRunningProcess()
+    {
+        // Start a long-running process
+#if WINDOWS
+        ProcessStartOptions options = new("cmd.exe")
+        {
+            Arguments = { "/c", "timeout", "/t", "60", "/nobreak" }
+        };
+#else
+        ProcessStartOptions options = new("sleep")
+        {
+            Arguments = { "60" }
+        };
+#endif
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        
+        processHandle.Kill();
+
+        // Process should exit after being killed
+        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+        
+        // Exit code should indicate termination (non-zero or signal number)
+        // On Linux with pidfd, this will be the signal number (9 for SIGKILL)
+        // On Unix with regular kill, this will be -1
+        // On Windows, this will be -1
+#if LINUX
+        // With pidfd on Linux, we get the signal number directly
+        Assert.True(exitCode == 9 || exitCode == -1, $"Exit code should be 9 (SIGKILL) or -1, but was {exitCode}");
+#elif WINDOWS
+        // Windows returns -1
+        Assert.Equal(-1, exitCode);
+#else
+        // Traditional Unix returns -1
+        Assert.Equal(-1, exitCode);
+#endif
+    }
+
+    [Fact]
+    public void Kill_CanBeCalledMultipleTimes()
+    {
+        // Start a long-running process
+#if WINDOWS
+        ProcessStartOptions options = new("cmd.exe")
+        {
+            Arguments = { "/c", "timeout", "/t", "60", "/nobreak" }
+        };
+#else
+        ProcessStartOptions options = new("sleep")
+        {
+            Arguments = { "60" }
+        };
+#endif
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        
+        // First attempt should succeed
+        processHandle.Kill();
+        
+        // Wait for the process to actually exit
+        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+        
+        // Second should not throw
+        processHandle.Kill();
+    }
 }
