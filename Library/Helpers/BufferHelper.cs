@@ -33,4 +33,15 @@ internal static class BufferHelper
             ArrayPool<byte>.Shared.Return(oldBuffer);
         }
     }
+
+    internal static byte[] CreateCopy(byte[] buffer, int totalBytesRead)
+    {
+#if NETFRAMEWORK
+        byte[] resultBuffer = new byte[totalBytesRead];
+#else
+        byte[] resultBuffer = GC.AllocateUninitializedArray<byte>(totalBytesRead);
+#endif
+        Buffer.BlockCopy(buffer, 0, resultBuffer, 0, totalBytesRead);
+        return resultBuffer;
+    }
 }
