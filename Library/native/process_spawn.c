@@ -1,14 +1,17 @@
 #define _GNU_SOURCE
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/syscall.h>
-#include <linux/sched.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <errno.h>
 #include <string.h>
 #include <stdint.h>
+
+#ifdef __linux__
+#include <sys/syscall.h>
+#include <linux/sched.h>
+#endif
 
 // External variable containing the current environment.
 // This is a standard C global variable that points to the environment array.
@@ -23,13 +26,37 @@ static inline void write_errno_and_exit(int pipe_fd, int err) {
     _exit(127);
 }
 
-// clone_args is provided by <linux/sched.h> since kernel 5.3
+// Helper function to create a pipe with CLOEXEC flag
+static int create_cloexec_pipe(int pipefd[2]) {
+#ifdef __linux__
+    // On Linux, use pipe2 for atomic CLOEXEC
+    return pipe2(pipefd, O_CLOEXEC);
+#else
+    // On other Unix systems, use pipe + fcntl
+    if (pipe(pipefd) != 0) {
+        return -1;
+    }
+    
+    // Set CLOEXEC on both ends
+    if (fcntl(pipefd[0], F_SETFD, FD_CLOEXEC) == -1 ||
+        fcntl(pipefd[1], F_SETFD, FD_CLOEXEC) == -1) {
+        int saved_errno = errno;
+        close(pipefd[0]);
+        close(pipefd[1]);
+        errno = saved_errno;
+        return -1;
+    }
+    
+    return 0;
+#endif
+}
 
-// Spawns a process using clone3 to get a pidfd atomically
-// Returns pidfd on success, -1 on error (errno is set)
+// Spawns a process and returns success/failure
+// Returns 1 on success, 0 on error (errno is set)
 // If out_pid is not NULL, the PID of the child process is stored there
+// If out_pidfd is not NULL, the pidfd of the child process is stored there (Linux only, -1 on other platforms)
 // If out_exit_pipe_fd is not NULL, the read end of exit monitoring pipe is stored there
-int spawn_process_with_pidfd(
+int spawn_process(
     const char* path,
     char* const argv[],
     char* const envp[],
@@ -38,6 +65,7 @@ int spawn_process_with_pidfd(
     int stderr_fd,
     const char* working_dir,
     int* out_pid,
+    int* out_pidfd,
     int* out_exit_pipe_fd)
 {
     int wait_pipe[2];
@@ -46,24 +74,27 @@ int spawn_process_with_pidfd(
     sigset_t all_signals, old_signals;
     
     // Create pipe for exec synchronization (CLOEXEC so child doesn't inherit it)
-    if (pipe2(wait_pipe, O_CLOEXEC) != 0) {
-        return -1;
+    if (create_cloexec_pipe(wait_pipe) != 0) {
+        return 0;
     }
     
     // Create pipe for exit monitoring (CLOEXEC to avoid other parallel processes inheriting it)
-    if (pipe2(exit_pipe, O_CLOEXEC) != 0) {
+    if (create_cloexec_pipe(exit_pipe) != 0) {
         int saved_errno = errno;
         close(wait_pipe[0]);
         close(wait_pipe[1]);
         errno = saved_errno;
-        return -1;
+        return 0;
     }
     
     // Block all signals before forking
     sigfillset(&all_signals);
     pthread_sigmask(SIG_SETMASK, &all_signals, &old_signals);
     
-    // Use clone3 to get pidfd atomically with fork
+    pid_t child_pid;
+    
+#ifdef __linux__
+    // On Linux, use clone3 to get pidfd atomically with fork
     struct clone_args args = {0};  // Zero-initialize
     args.flags = CLONE_VFORK | CLONE_PIDFD;
     args.pidfd = (uint64_t)(uintptr_t)&pidfd;
@@ -80,13 +111,30 @@ int spawn_process_with_pidfd(
         close(exit_pipe[0]);
         close(exit_pipe[1]);
         errno = saved_errno;
-        return -1;
+        return 0;
     }
     
-    // Store the PID if requested (clone_result is the PID in the parent process)
-    pid_t child_pid = (pid_t)clone_result;
+    child_pid = (pid_t)clone_result;
     
     if (clone_result == 0) {
+#else
+    // On non-Linux Unix, use vfork
+    child_pid = vfork();
+    
+    if (child_pid == -1) {
+        // Fork failed
+        int saved_errno = errno;
+        pthread_sigmask(SIG_SETMASK, &old_signals, NULL);
+        close(wait_pipe[0]);
+        close(wait_pipe[1]);
+        close(exit_pipe[0]);
+        close(exit_pipe[1]);
+        errno = saved_errno;
+        return 0;
+    }
+    
+    if (child_pid == 0) {
+#endif
         // ========== CHILD PROCESS ==========
         
         // Restore signal mask immediately
@@ -177,25 +225,38 @@ int spawn_process_with_pidfd(
     
     if (bytes_read == sizeof(child_errno)) {
         // Child failed to exec - reap it and close exit pipe
+#ifdef __linux__
         siginfo_t info;
         waitid(P_PIDFD, pidfd, &info, WEXITED);
         close(pidfd);
+#else
+        int status;
+        waitpid(child_pid, &status, 0);
+#endif
         close(exit_pipe[0]);
         errno = child_errno;
-        return -1;
+        return 0;
     }
     
-    // Success - return PID and exit pipe fd if requested, then return pidfd
+    // Success - return PID, pidfd, and exit pipe fd if requested
     if (out_pid != NULL) {
         *out_pid = child_pid;
+    }
+    if (out_pidfd != NULL) {
+#ifdef __linux__
+        *out_pidfd = pidfd;
+#else
+        *out_pidfd = -1;  // pidfd not available on non-Linux platforms
+#endif
     }
     if (out_exit_pipe_fd != NULL) {
         *out_exit_pipe_fd = exit_pipe[0];
     }
-    return pidfd;
+    return 1;
 }
 
-// Wait for process to exit and return exit status
+#ifdef __linux__
+// Wait for process to exit and return exit status (Linux-specific using pidfd)
 // Returns exit status on success, -1 on error (errno is set)
 int wait_for_pidfd(int pidfd) {
     siginfo_t info;
@@ -213,7 +274,8 @@ int wait_for_pidfd(int pidfd) {
     }
 }
 
-// Kill a process via pidfd
+// Kill a process via pidfd (Linux-specific)
 int kill_pidfd(int pidfd, int signal) {
     return syscall(SYS_pidfd_send_signal, pidfd, signal, NULL, 0);
 }
+#endif
