@@ -1,5 +1,4 @@
-﻿using System;
-using System.IO;
+﻿using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
@@ -212,7 +211,7 @@ public static partial class ChildProcess
                     }
                 }
 
-                byte[] resultBuffer = CreateCopy(buffer, totalBytesRead);
+                byte[] resultBuffer = BufferHelper.CreateCopy(buffer, totalBytesRead);
 
                 // It's possible for the process to close STD OUT and ERR keep running.
                 // We optimize for hot path: process already exited and exit code is available.
@@ -245,18 +244,9 @@ public static partial class ChildProcess
         SafeFileHandle? read = null;
         SafeFileHandle? write = null;
 
-        bool isAsyncReadHandle = false;
 #if WINDOWS
-        if (cancellationToken.CanBeCanceled)
-        {
-            // We open ASYNC read handle and sync write handle to allow for cancellation.
-            File.CreateNamedPipe(out read, out write);
-            isAsyncReadHandle = true;
-        }
-        else
-        {
-            File.CreateAnonymousPipe(out read, out write);
-        }
+        // We open ASYNC read handle and sync write handle to allow for cancellation.
+        File.CreateNamedPipe(out read, out write);
 #else
         File.CreateAnonymousPipe(out read, out write);
 #endif
@@ -265,7 +255,7 @@ public static partial class ChildProcess
         using (write)
         using (SafeFileHandle inputHandle = input ?? File.OpenNullFileHandle())
         using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, inputHandle, output: write, error: write))
-        using (FileStream outputStream = new(read, FileAccess.Read, bufferSize: 1, isAsync: isAsyncReadHandle))
+        using (Stream outputStream = StreamHelper.CreateReadStream(read, cancellationToken))
         {
             int processId = processHandle.GetProcessId();
 
@@ -293,10 +283,10 @@ public static partial class ChildProcess
                     }
                 }
 
-                byte[] resultBuffer = CreateCopy(buffer, totalBytesRead);
+                byte[] resultBuffer = BufferHelper.CreateCopy(buffer, totalBytesRead);
                 // It's possible for the process to close STD OUT and ERR keep running.
                 // We optimize for hot path: process already exited and exit code is available.
-                if (cancellationToken.IsCancellationRequested || !processHandle.TryGetExitCode(out int exitCode))
+                if (!processHandle.TryGetExitCode(out int exitCode))
                 {
                     exitCode = await processHandle.WaitForExitAsync(cancellationToken);
                 }
@@ -330,16 +320,5 @@ public static partial class ChildProcess
         };
 
         return (inputHandle, outputHandle, errorHandle);
-    }
-
-    private static byte[] CreateCopy(byte[] buffer, int totalBytesRead)
-    {
-#if NETFRAMEWORK
-        byte[] resultBuffer = new byte[totalBytesRead];
-#else
-        byte[] resultBuffer = GC.AllocateUninitializedArray<byte>(totalBytesRead);
-#endif
-        Buffer.BlockCopy(buffer, 0, resultBuffer, 0, totalBytesRead);
-        return resultBuffer;
     }
 }

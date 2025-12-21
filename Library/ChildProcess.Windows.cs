@@ -49,12 +49,12 @@ public static partial class ChildProcess
                 }
             }
 
-            if (timeout.HasExpired || !processHandle.TryGetExitCode(out int exitCode))
+            if (!processHandle.TryGetExitCode(out int exitCode))
             {
                 exitCode = processHandle.WaitForExit(timeout.GetRemainingOrThrow());
             }
 
-            return new(exitCode, CreateCopy(array, totalBytesRead), processId);
+            return new(exitCode, BufferHelper.CreateCopy(array, totalBytesRead), processId);
         }
         finally
         {

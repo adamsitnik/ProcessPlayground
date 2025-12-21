@@ -63,8 +63,8 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 
             // NOTE: we could get current console Encoding here, it's omitted for the sake of simplicity of the proof of concept.
             Encoding encoding = _encoding ?? Encoding.UTF8;
-            using StreamReader outputReader = new(new FileStream(parentOutputHandle, FileAccess.Read, bufferSize: 1), encoding);
-            using StreamReader errorReader = new(new FileStream(parentErrorHandle, FileAccess.Read, bufferSize: 1), encoding);
+            using StreamReader outputReader = new(StreamHelper.CreateReadStream(parentOutputHandle, cancellationToken), encoding);
+            using StreamReader errorReader = new(StreamHelper.CreateReadStream(parentErrorHandle, cancellationToken), encoding);
 
 #if NETFRAMEWORK
             Task<string?> readOutput = outputReader.ReadLineAsync();
@@ -143,7 +143,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 #endif
             }
 
-            if (cancellationToken.IsCancellationRequested || !procHandle.TryGetExitCode(out int exitCode))
+            if (!procHandle.TryGetExitCode(out int exitCode))
             {
                 exitCode = await procHandle.WaitForExitAsync(cancellationToken);
             }

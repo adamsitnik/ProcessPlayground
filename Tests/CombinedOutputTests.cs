@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 ﻿using Microsoft.Win32.SafeHandles;
 using System.TBA;
 using System.Text;
+using System.Diagnostics;
 
 namespace Tests;
 
@@ -182,9 +183,13 @@ public class CombinedOutputTests
         using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(500));
         using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
 
+        Stopwatch started = Stopwatch.StartNew();
+
         // Accept either OperationCanceledException or TaskCanceledException (which derives from it)
         var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
             await ChildProcess.GetCombinedOutputAsync(options, inputHandle, cancellationToken: cts.Token));
+
+        Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(5));
     }
 
     [Fact]

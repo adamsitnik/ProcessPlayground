@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.TBA;
+using System.Diagnostics;
 
 namespace Tests;
 
@@ -289,6 +290,8 @@ public class ReadOutputLinesTests
             ? new("cmd") { Arguments = { "/c", "timeout /t 10 /nobreak" } }
             : new("sh") { Arguments = { "-c", "sleep 10" } };
 
+        Stopwatch started = Stopwatch.StartNew();
+
         Assert.Throws<TimeoutException>(() =>
         {
             foreach (var line in ChildProcess.ReadOutputLines(options, timeout: TimeSpan.FromMilliseconds(500)))
@@ -296,6 +299,8 @@ public class ReadOutputLinesTests
                 _ = line;
             }
         });
+
+        Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(5));
     }
 
     [Fact]
@@ -314,6 +319,8 @@ public class ReadOutputLinesTests
 
         using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(500));
 
+        Stopwatch started = Stopwatch.StartNew();
+
         // Accept either OperationCanceledException or TaskCanceledException (which derives from it)
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
@@ -322,6 +329,8 @@ public class ReadOutputLinesTests
                 _ = line;
             }
         });
+
+        Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(5));
     }
 
     [Fact]
