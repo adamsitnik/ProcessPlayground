@@ -254,28 +254,3 @@ int spawn_process(
     }
     return 0;
 }
-
-#ifdef __linux__
-// Wait for process to exit and return exit status (Linux-specific using pidfd)
-// Returns exit status on success, -1 on error (errno is set)
-int wait_for_pidfd(int pidfd) {
-    siginfo_t info;
-    
-    while (1) {
-        int result = waitid(P_PIDFD, pidfd, &info, WEXITED);
-        if (result == 0) {
-            close(pidfd);
-            return info.si_status;
-        }
-        
-        if (errno != EINTR) {
-            return -1;
-        }
-    }
-}
-
-// Kill a process via pidfd (Linux-specific)
-int kill_pidfd(int pidfd, int signal) {
-    return syscall(SYS_pidfd_send_signal, pidfd, signal, NULL, 0);
-}
-#endif
