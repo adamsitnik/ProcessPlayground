@@ -55,9 +55,13 @@
 
   <!-- Copy native library to output directory on non-Windows platforms -->
   <ItemGroup Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFrameworkIdentifier)' != '.NETFramework'">
-    <Content Include="native\libprocessspawn.so">
+    <Content Include="native\libprocessspawn.so" Condition="Exists('native\libprocessspawn.so')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>libprocessspawn.so</Link>
+    </Content>
+    <Content Include="native\libprocessspawn.dylib" Condition="Exists('native\libprocessspawn.dylib')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>libprocessspawn.dylib</Link>
     </Content>
   </ItemGroup>
 
