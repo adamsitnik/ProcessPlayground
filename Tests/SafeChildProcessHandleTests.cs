@@ -320,12 +320,8 @@ public partial class SafeChildProcessHandleTests
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
-        // The process should return true for running process
-        bool wasKilled = processHandle.Kill();
-        
-        // Should return true (process was killed)
-        Assert.True(wasKilled, "Kill should return true for a running process");
-        
+        processHandle.Kill();
+
         // Process should exit after being killed
         int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
         
@@ -343,32 +339,6 @@ public partial class SafeChildProcessHandleTests
         // Traditional Unix returns -1
         Assert.Equal(-1, exitCode);
 #endif
-    }
-
-    [Fact]
-    public void Kill_ReturnsFalseForAlreadyExitedProcess()
-    {
-        // Start a process that exits immediately
-#if WINDOWS
-        ProcessStartOptions options = new("cmd.exe")
-        {
-            Arguments = { "/c", "exit", "0" }
-        };
-#else
-        ProcessStartOptions options = new("true");
-#endif
-
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
-        
-        // Wait for the process to exit
-        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
-        Assert.Equal(0, exitCode);
-        
-        // Try to kill the already-exited process
-        bool wasKilled = processHandle.Kill();
-        
-        // Should return false (process already exited)
-        Assert.False(wasKilled, "Kill should return false for an already-exited process");
     }
 
     [Fact]
@@ -390,14 +360,12 @@ public partial class SafeChildProcessHandleTests
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
         // First attempt should succeed
-        bool firstKill = processHandle.Kill();
-        Assert.True(firstKill, "First attempt should return true");
+        processHandle.Kill();
         
         // Wait for the process to actually exit
         int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
         
-        // Second attempt should return false (process already exited)
-        bool secondKill = processHandle.Kill();
-        Assert.False(secondKill, "Second attempt should return false");
+        // Second should not throw
+        processHandle.Kill();
     }
 }

@@ -163,7 +163,7 @@ public partial class SafeChildProcessHandle
         using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(this);
         if (!processWaitHandle.WaitOne(milliseconds))
         {
-            Kill();
+            KillCore(throwOnError: false);
         }
 
         return GetExitCode();
@@ -193,7 +193,7 @@ public partial class SafeChildProcessHandle
                     state =>
                     {
                         var (handle, taskSource) = ((SafeChildProcessHandle, TaskCompletionSource<bool>))state!;
-                        handle.Kill();
+                        handle.KillCore(throwOnError: false);
                         taskSource.TrySetCanceled();
                     },
                     (this, tcs));
@@ -210,38 +210,20 @@ public partial class SafeChildProcessHandle
         return GetExitCode();
     }
 
-    private bool KillCore()
+    private void KillCore(bool throwOnError)
     {
-        // First check if the process has already exited
-        if (Interop.Kernel32.GetExitCodeProcess(this, out int exitCode))
-        {
-            if (exitCode != Interop.Kernel32.HandleOptions.STILL_ACTIVE)
-            {
-                // Process has already exited
-                return false;
-            }
-        }
-        
-        // Try to terminate the process
-        if (!Interop.Kernel32.TerminateProcess(this, exitCode: -1))
+        if (!Interop.Kernel32.TerminateProcess(this, exitCode: -1) && throwOnError)
         {
             int error = Marshal.GetLastPInvokeError();
-            
-            // TerminateProcess can fail if the process has already exited
-            // Let's check again to see if that's the case
-            if (Interop.Kernel32.GetExitCodeProcess(this, out exitCode))
+            if (error != Interop.Errors.ERROR_SUCCESS)
             {
-                if (exitCode != Interop.Kernel32.HandleOptions.STILL_ACTIVE)
+                if (TryGetExitCode(out _))
                 {
-                    // Process has already exited
-                    return false;
+                    return; // Process has already exited.
                 }
+
+                throw new Win32Exception(error, "Failed to terminate process");
             }
-            
-            // Any other error is unexpected
-            throw new Win32Exception(error, "Failed to terminate process");
         }
-        
-        return true;
     }
 }

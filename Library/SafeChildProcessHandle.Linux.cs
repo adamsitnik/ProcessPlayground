@@ -78,7 +78,7 @@ public partial class SafeChildProcessHandle
     private const int __NR_pidfd_send_signal = 424;
 
     [LibraryImport("libc", EntryPoint = "syscall", SetLastError = true)]
-    private static partial int syscall_pidfd_send_signal(int number, int pidfd, int sig, nint siginfo, uint flags);
+    private static partial int syscall_pidfd_send_signal(int number, SafeChildProcessHandle pidfd, int sig, nint siginfo, uint flags);
 
     [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial int poll(PollFd* fds, nuint nfds, int timeout);
@@ -257,7 +257,7 @@ public partial class SafeChildProcessHandle
                 else if (pollResult == 0)
                 {
                     // Timeout - kill the process using pidfd_send_signal
-                    Kill();
+                    KillCore(throwOnError: false);
                     
                     // Wait for the process to actually exit
                     siginfo_t siginfo = default;
@@ -305,17 +305,10 @@ public partial class SafeChildProcessHandle
 
     private async Task<int> WaitForExitAsyncCore(CancellationToken cancellationToken)
     {
-        // Register cancellation to kill the process using pidfd_send_signal
+        // Register cancellation to kill the process
         using CancellationTokenRegistration registration = !cancellationToken.CanBeCanceled ? default : cancellationToken.Register(() =>
         {
-            try
-            {
-                Kill();
-            }
-            catch
-            {
-                // Ignore errors during cancellation
-            }
+            KillCore(throwOnError: false);
         });
 
         // Treat the exit pipe fd as a socket and perform async read
@@ -374,41 +367,21 @@ public partial class SafeChildProcessHandle
         return envList.ToArray();
     }
 
-    private unsafe bool KillCore()
+    private unsafe void KillCore(bool throwOnError)
     {
-        // First, check if the process has already exited using waitid with WNOHANG
-        siginfo_t siginfo = default;
-        int waitResult = waitid(P_PIDFD, this, &siginfo, WEXITED | WNOHANG);
-        
-        if (waitResult == 0)
+        int result = syscall_pidfd_send_signal(__NR_pidfd_send_signal, this, SIGKILL, 0, 0);
+        if (result == 0 || !throwOnError)
         {
-            // waitid succeeded - check if we got actual status info
-            // si_code indicates the reason for the SIGCHLD signal
-            if (siginfo.si_code == CLD_EXITED || siginfo.si_code == CLD_KILLED || siginfo.si_code == CLD_DUMPED)
-            {
-                // Process has already exited
-                return false;
-            }
+            return;
         }
-        
-        // Process is still running, try to send signal
-        int pidfd = (int)DangerousGetHandle();
-        int result = syscall_pidfd_send_signal(__NR_pidfd_send_signal, pidfd, SIGKILL, 0, 0);
-        
-        if (result == 0)
-        {
-            // Successfully sent the signal
-            return true;
-        }
-        
-        int errno = Marshal.GetLastPInvokeError();
-        
+
         // Check if the process has already exited
         // ESRCH (3): No such process
         // EBADF (9): Bad file descriptor (pidfd no longer valid because process exited)
+        int errno = Marshal.GetLastPInvokeError();
         if (errno == ESRCH || errno == EBADF)
         {
-            return false;
+            return;
         }
         
         // Any other error is unexpected

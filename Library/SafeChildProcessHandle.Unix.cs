@@ -245,7 +245,7 @@ public partial class SafeChildProcessHandle
                     if (now >= endTime)
                     {
                         // Timeout - terminate the process
-                        Kill();
+                        KillCore(throwOnError: false);
                         
                         // Wait for it to actually exit
                         while (true)
@@ -281,14 +281,7 @@ public partial class SafeChildProcessHandle
         // Register cancellation to terminate the process
         using var registration = cancellationToken.Register(() =>
         {
-            try
-            {
-                Kill();
-            }
-            catch
-            {
-                // Ignore errors during cancellation
-            }
+            KillCore(throwOnError: false);
         });
         
         // Poll for process exit asynchronously
@@ -350,26 +343,23 @@ public partial class SafeChildProcessHandle
         }
     }
 
-    private bool KillCore()
+    private void KillCore(bool throwOnError)
     {
-        int pid = GetProcessIdCore();
-        int result = kill(pid, SIGKILL);
-        
-        if (result == 0)
+        int result = kill(GetProcessIdCore(), SIGKILL);
+        if (result == 0 || !throwOnError)
         {
-            // Successfully sent the signal
-            return true;
+            return;
         }
-        
-        int errno = Marshal.GetLastPInvokeError();
-        
+
         // Check if the process has already exited
+        // ESRCH (3): No such process
+        int errno = Marshal.GetLastPInvokeError();
         if (errno == ESRCH)
         {
-            return false;
+            return;
         }
-        
+
         // Any other error is unexpected
-        throw new Win32Exception(errno, "Failed to kill process");
+        throw new Win32Exception(errno, $"Failed to terminate process (errno={errno})");
     }
 }
