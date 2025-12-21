@@ -22,6 +22,6 @@ $(TARGET): $(OBJECTS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJECTS) libprocessspawn.so libprocessspawn.dylib
+	rm -f $(OBJECTS) $(TARGET)
 
 .PHONY: all clean
