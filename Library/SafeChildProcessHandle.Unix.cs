@@ -114,9 +114,6 @@ public partial class SafeChildProcessHandle
     [LibraryImport("libc", SetLastError = true)]
     private static partial int kill(int pid, int sig);
 
-    [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial nint read(int fd, byte* buf, nuint count);
-
     private const int WNOHANG = 1;
 #endif
 
@@ -428,30 +425,7 @@ public partial class SafeChildProcessHandle
                 else
                 {
                     // Exit pipe became readable - process has exited
-                    // Try to read from the pipe to verify it's closed
-                    byte dummyByte;
-                    nint bytesRead = read(_exitPipeFd, &dummyByte, 1);
-                    if (bytesRead == 0)
-                    {
-                        // Pipe closed, process has exited - retrieve the exit code
-                        return WaitPidForExitCode();
-                    }
-                    else if (bytesRead < 0)
-                    {
-                        int errno = Marshal.GetLastPInvokeError();
-                        if (errno == EINTR)
-                        {
-                            continue;
-                        }
-                        // Other read errors typically indicate the pipe is closed or broken,
-                        // which happens when the process terminates
-                        return WaitPidForExitCode();
-                    }
-                    else
-                    {
-                        // Unexpected data read from exit pipe
-                        throw new InvalidOperationException($"Unexpected data read from exit pipe: {bytesRead} byte(s). Expected 0 bytes (pipe closure).");
-                    }
+                    return WaitPidForExitCode();
                 }
             }
         }
