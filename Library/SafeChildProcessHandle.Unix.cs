@@ -443,7 +443,8 @@ public partial class SafeChildProcessHandle
                         {
                             continue;
                         }
-                        // Treat other errors as process exit
+                        // Other read errors typically indicate the pipe is closed or broken,
+                        // which happens when the process terminates
                         return WaitPidForExitCode();
                     }
                     else
