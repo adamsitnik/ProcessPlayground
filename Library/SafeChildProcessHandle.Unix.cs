@@ -58,8 +58,7 @@ public partial class SafeChildProcessHandle
         out int pidfd,
         out int exit_pipe_fd);
 
-
-#if LINUX
+    // Shared declarations for both Linux and non-Linux Unix
     [StructLayout(LayoutKind.Sequential)]
     private struct PollFd
     {
@@ -67,7 +66,14 @@ public partial class SafeChildProcessHandle
         public short events;
         public short revents;
     }
-    
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static unsafe partial int poll(PollFd* fds, nuint nfds, int timeout);
+
+    private const short POLLIN = 0x0001;
+
+#if LINUX
+
     [StructLayout(LayoutKind.Sequential, Size = 128)]
     private struct siginfo_t
     {
@@ -90,13 +96,9 @@ public partial class SafeChildProcessHandle
     private static partial int syscall_pidfd_send_signal(int number, SafeChildProcessHandle pidfd, int sig, nint siginfo, uint flags);
 
     [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial int poll(PollFd* fds, nuint nfds, int timeout);
-
-    [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial int waitid(int idtype, SafeChildProcessHandle pidfd, siginfo_t* infop, int options);
 
     // Constants for Linux
-    private const short POLLIN = 0x0001;
     private const short POLLHUP = 0x0010;
     private const int P_PIDFD = 3;
     private const int WEXITED = 0x00000004;
@@ -106,17 +108,6 @@ public partial class SafeChildProcessHandle
     private const int CLD_KILLED = 2;    // child was killed
     private const int CLD_DUMPED = 3;    // child terminated abnormally
 #else
-    [StructLayout(LayoutKind.Sequential)]
-    private struct PollFd
-    {
-        public int fd;
-        public short events;
-        public short revents;
-    }
-
-    [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial int poll(PollFd* fds, nuint nfds, int timeout);
-
     [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial int waitpid(int pid, int* status, int options);
     
@@ -126,7 +117,6 @@ public partial class SafeChildProcessHandle
     [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial nint read(int fd, byte* buf, nuint count);
 
-    private const short POLLIN = 0x0001;
     private const int WNOHANG = 1;
 #endif
 
