@@ -7,6 +7,7 @@
     <IsPackable>false</IsPackable>
     <LangVersion>preview</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);xUnit1013</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(OS)' == 'Windows_NT' OR '$(TargetFrameworkIdentifier)' == '.NETFramework'">
@@ -37,6 +38,11 @@
   <!-- Exclude OperatingSystem polyfill for non-Framework targets -->
   <ItemGroup Condition="'$(TargetFrameworkIdentifier)' != '.NETFramework'">
     <Compile Remove="System/OperatingSystem.cs" />
+  </ItemGroup>
+
+  <!-- Exclude hanging test for Framework targets -->
+  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'">
+    <Compile Remove="SafeChildProcessHandleTests.cs" />
   </ItemGroup>
 
   <ItemGroup>
