@@ -52,7 +52,7 @@ static int create_cloexec_pipe(int pipefd[2]) {
 }
 
 // Spawns a process and returns success/failure
-// Returns 1 on success, 0 on error (errno is set)
+// Returns 0 on success, -1 on error (errno is set)
 // If out_pid is not NULL, the PID of the child process is stored there
 // If out_pidfd is not NULL, the pidfd of the child process is stored there (Linux only, -1 on other platforms)
 // If out_exit_pipe_fd is not NULL, the read end of exit monitoring pipe is stored there
