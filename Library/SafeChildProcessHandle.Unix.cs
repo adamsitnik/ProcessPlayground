@@ -422,23 +422,8 @@ public partial class SafeChildProcessHandle
                     // Timeout - kill the process
                     KillCore(throwOnError: false);
                     
-                    // Wait for the process to actually exit
-                    while (true)
-                    {
-                        int result = waitpid(pid, &status, 0);
-                        if (result == pid)
-                        {
-                            return GetExitCodeFromStatus(status);
-                        }
-                        else if (result == -1)
-                        {
-                            int errno = Marshal.GetLastPInvokeError();
-                            if (errno != EINTR)
-                            {
-                                throw new Win32Exception(errno, "waitpid() failed after timeout");
-                            }
-                        }
-                    }
+                    // Wait for the process to actually exit and return its exit code
+                    return WaitPidForExitCode();
                 }
                 else
                 {
@@ -448,24 +433,8 @@ public partial class SafeChildProcessHandle
                     nint bytesRead = read(_exitPipeFd, &dummyByte, 1);
                     if (bytesRead == 0)
                     {
-                        // Pipe closed, process has exited
-                        // Retrieve the exit code
-                        while (true)
-                        {
-                            int result = waitpid(pid, &status, 0);
-                            if (result == pid)
-                            {
-                                return GetExitCodeFromStatus(status);
-                            }
-                            else if (result == -1)
-                            {
-                                int errno = Marshal.GetLastPInvokeError();
-                                if (errno != EINTR)
-                                {
-                                    throw new Win32Exception(errno, "waitpid() failed");
-                                }
-                            }
-                        }
+                        // Pipe closed, process has exited - retrieve the exit code
+                        return WaitPidForExitCode();
                     }
                     else if (bytesRead < 0)
                     {
@@ -475,22 +444,7 @@ public partial class SafeChildProcessHandle
                             continue;
                         }
                         // Treat other errors as process exit
-                        while (true)
-                        {
-                            int result = waitpid(pid, &status, 0);
-                            if (result == pid)
-                            {
-                                return GetExitCodeFromStatus(status);
-                            }
-                            else if (result == -1)
-                            {
-                                errno = Marshal.GetLastPInvokeError();
-                                if (errno != EINTR)
-                                {
-                                    throw new Win32Exception(errno, "waitpid() failed");
-                                }
-                            }
-                        }
+                        return WaitPidForExitCode();
                     }
                     else
                     {
