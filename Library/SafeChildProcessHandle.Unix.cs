@@ -18,20 +18,20 @@ public partial class SafeChildProcessHandle
 #if LINUX
     // Store the PID alongside the pidfd handle (Linux only)
     private int _pid;
-    // Store the exit pipe read fd for async monitoring (Linux only)
+#endif
+    // Store the exit pipe read fd for async monitoring
     private int _exitPipeFd;
     // Buffer for reading from exit pipe (reused to avoid allocations)
     private static readonly byte[] s_exitPipeBuffer = new byte[1];
-#endif
 
     protected override bool ReleaseHandle()
     {
-#if LINUX
         // Close the exit pipe fd if it's valid
         if (_exitPipeFd > 0)
         {
             close(_exitPipeFd);
         }
+#if LINUX
         // Close the pidfd file descriptor
         return close((int)handle) == 0;
 #else
@@ -208,9 +208,9 @@ public partial class SafeChildProcessHandle
             return handle;
 #else
             // On non-Linux Unix, we don't use pidfd (it's -1), we just use the PID as the handle
-            // Close the exit pipe fd since we won't use it for non-Linux async operations
-            close(exitPipeFd);
-            return new SafeChildProcessHandle(pid, ownsHandle: true);
+            SafeChildProcessHandle handle = new SafeChildProcessHandle(pid, ownsHandle: true);
+            handle._exitPipeFd = exitPipeFd;
+            return handle;
 #endif
         }
         finally
@@ -464,7 +464,6 @@ public partial class SafeChildProcessHandle
 
     private async Task<int> WaitForExitAsyncCore(CancellationToken cancellationToken)
     {
-#if LINUX
         // Register cancellation to kill the process
         using CancellationTokenRegistration registration = !cancellationToken.CanBeCanceled ? default : cancellationToken.Register(() =>
         {
@@ -489,51 +488,10 @@ public partial class SafeChildProcessHandle
         }
 
         // The process has exited, now retrieve the exit code
+#if LINUX
         return WaitIdPidfd();
 #else
-        int pid = GetProcessIdCore();
-        
-        // Register cancellation to terminate the process
-        using var registration = cancellationToken.Register(() =>
-        {
-            KillCore(throwOnError: false);
-        });
-        
-        // Poll for process exit asynchronously
-        int pollDelay = 1; // Start with 1ms
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            // Call the wait function synchronously since it's non-blocking
-            (int result, int status) = WaitPidNonBlocking(pid);
-            
-            if (result == pid)
-            {
-                return GetExitCodeFromStatus(status);
-            }
-            else if (result == -1)
-            {
-                int errno = Marshal.GetLastPInvokeError();
-                if (errno == EINTR)
-                {
-                    continue;
-                }
-                else if (errno == ECHILD) // no child process
-                {
-                    // Process already exited or doesn't exist
-                    return -1;
-                }
-                throw new Win32Exception(errno, "waitpid() failed");
-            }
-            else if (result == 0)
-            {
-                // Process still running, wait asynchronously with progressive backoff
-                await Task.Delay(pollDelay, cancellationToken).ConfigureAwait(false);
-                pollDelay = Math.Min(pollDelay * 2, 50); // Progressive backoff up to 50ms
-            }
-        }
-        
-        // If we get here, we were cancelled
-        throw new OperationCanceledException(cancellationToken);
+        return WaitPidForExitCode();
 #endif
     }
 
@@ -559,11 +517,26 @@ public partial class SafeChildProcessHandle
         }
     }
 #else
-    private static unsafe (int result, int status) WaitPidNonBlocking(int pid)
+    private unsafe int WaitPidForExitCode()
     {
+        int pid = GetProcessIdCore();
         int status = 0;
-        int result = waitpid(pid, &status, WNOHANG);
-        return (result, status);
+        while (true)
+        {
+            int result = waitpid(pid, &status, 0);
+            if (result == pid)
+            {
+                return GetExitCodeFromStatus(status);
+            }
+            else if (result == -1)
+            {
+                int errno = Marshal.GetLastPInvokeError();
+                if (errno != EINTR)
+                {
+                    throw new Win32Exception(errno, "waitpid() failed");
+                }
+            }
+        }
     }
 #endif
     
