@@ -106,12 +106,27 @@ public partial class SafeChildProcessHandle
     private const int CLD_KILLED = 2;    // child was killed
     private const int CLD_DUMPED = 3;    // child terminated abnormally
 #else
+    [StructLayout(LayoutKind.Sequential)]
+    private struct PollFd
+    {
+        public int fd;
+        public short events;
+        public short revents;
+    }
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static unsafe partial int poll(PollFd* fds, nuint nfds, int timeout);
+
     [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial int waitpid(int pid, int* status, int options);
     
     [LibraryImport("libc", SetLastError = true)]
     private static partial int kill(int pid, int sig);
 
+    [LibraryImport("libc", SetLastError = true)]
+    private static unsafe partial nint read(int fd, byte* buf, nuint count);
+
+    private const short POLLIN = 0x0001;
     private const int WNOHANG = 1;
 #endif
 
@@ -385,40 +400,69 @@ public partial class SafeChildProcessHandle
         }
         else
         {
-            // Wait with timeout using polling
+            // Wait with timeout using poll on exit pipe
             long startTime = Environment.TickCount64;
             long endTime = startTime + milliseconds;
             
             while (true)
             {
-                // Non-blocking wait
-                int result = waitpid(pid, &status, WNOHANG);
-                if (result == pid)
+                long now = Environment.TickCount64;
+                int remainingMs = (int)Math.Max(0, endTime - now);
+                
+                PollFd pollfd = new PollFd
                 {
-                    return GetExitCodeFromStatus(status);
-                }
-                else if (result == -1)
+                    fd = _exitPipeFd,
+                    events = POLLIN,
+                    revents = 0
+                };
+                
+                int pollResult = poll(&pollfd, 1, remainingMs);
+                
+                if (pollResult < 0)
                 {
                     int errno = Marshal.GetLastPInvokeError();
                     if (errno == EINTR)
                     {
                         continue;
                     }
-                    throw new Win32Exception(errno, "waitpid() failed");
+                    throw new Win32Exception(errno, "poll() failed");
                 }
-                else if (result == 0)
+                else if (pollResult == 0)
                 {
-                    // Process still running
-                    long now = Environment.TickCount64;
-                    if (now >= endTime)
+                    // Timeout - kill the process
+                    KillCore(throwOnError: false);
+                    
+                    // Wait for the process to actually exit
+                    while (true)
                     {
-                        // Timeout - terminate the process
-                        KillCore(throwOnError: false);
-                        
-                        // Wait for it to actually exit
+                        int result = waitpid(pid, &status, 0);
+                        if (result == pid)
+                        {
+                            return GetExitCodeFromStatus(status);
+                        }
+                        else if (result == -1)
+                        {
+                            int errno = Marshal.GetLastPInvokeError();
+                            if (errno != EINTR)
+                            {
+                                throw new Win32Exception(errno, "waitpid() failed after timeout");
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    // Exit pipe became readable - process has exited
+                    // Try to read from the pipe to verify it's closed
+                    byte dummyByte;
+                    nint bytesRead = read(_exitPipeFd, &dummyByte, 1);
+                    if (bytesRead == 0)
+                    {
+                        // Pipe closed, process has exited
+                        // Retrieve the exit code
                         while (true)
                         {
-                            result = waitpid(pid, &status, 0);
+                            int result = waitpid(pid, &status, 0);
                             if (result == pid)
                             {
                                 return GetExitCodeFromStatus(status);
@@ -428,15 +472,41 @@ public partial class SafeChildProcessHandle
                                 int errno = Marshal.GetLastPInvokeError();
                                 if (errno != EINTR)
                                 {
-                                    throw new Win32Exception(errno, "waitpid() failed after timeout");
+                                    throw new Win32Exception(errno, "waitpid() failed");
                                 }
                             }
                         }
                     }
-                    
-                    // Sleep before polling again, using progressive backoff
-                    int sleepMs = Math.Min((int)(now - startTime) / 10 + 1, 50);
-                    Thread.Sleep(sleepMs);
+                    else if (bytesRead < 0)
+                    {
+                        int errno = Marshal.GetLastPInvokeError();
+                        if (errno == EINTR)
+                        {
+                            continue;
+                        }
+                        // Treat other errors as process exit
+                        while (true)
+                        {
+                            int result = waitpid(pid, &status, 0);
+                            if (result == pid)
+                            {
+                                return GetExitCodeFromStatus(status);
+                            }
+                            else if (result == -1)
+                            {
+                                errno = Marshal.GetLastPInvokeError();
+                                if (errno != EINTR)
+                                {
+                                    throw new Win32Exception(errno, "waitpid() failed");
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Unexpected data read from exit pipe
+                        throw new InvalidOperationException($"Unexpected data read from exit pipe: {bytesRead} byte(s). Expected 0 bytes (pipe closure).");
+                    }
                 }
             }
         }
