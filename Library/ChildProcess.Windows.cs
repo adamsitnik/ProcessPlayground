@@ -49,8 +49,7 @@ public static partial class ChildProcess
                 }
             }
 
-            if (!Interop.Kernel32.GetExitCodeProcess(processHandle, out int exitCode)
-                || exitCode == Interop.Kernel32.HandleOptions.STILL_ACTIVE)
+            if (timeout.HasExpired || !processHandle.TryGetExitCode(out int exitCode))
             {
                 exitCode = processHandle.WaitForExit(timeout.GetRemainingOrThrow());
             }

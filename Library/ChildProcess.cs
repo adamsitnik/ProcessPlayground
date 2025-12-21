@@ -213,16 +213,13 @@ public static partial class ChildProcess
                 }
 
                 byte[] resultBuffer = CreateCopy(buffer, totalBytesRead);
-#if WINDOWS
+
                 // It's possible for the process to close STD OUT and ERR keep running.
                 // We optimize for hot path: process already exited and exit code is available.
-                if (Interop.Kernel32.GetExitCodeProcess(processHandle, out int fasPathExitCode)
-                    && fasPathExitCode != Interop.Kernel32.HandleOptions.STILL_ACTIVE)
+                if (timeoutHelper.HasExpired || !processHandle.TryGetExitCode(out int exitCode))
                 {
-                    return new(fasPathExitCode, resultBuffer, processId);
+                    exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow());
                 }
-#endif
-                int exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow());
                 return new(exitCode, resultBuffer, processId);
             }
             finally
@@ -297,16 +294,12 @@ public static partial class ChildProcess
                 }
 
                 byte[] resultBuffer = CreateCopy(buffer, totalBytesRead);
-#if WINDOWS
                 // It's possible for the process to close STD OUT and ERR keep running.
                 // We optimize for hot path: process already exited and exit code is available.
-                if (Interop.Kernel32.GetExitCodeProcess(processHandle, out int fasPathExitCode)
-                    && fasPathExitCode != Interop.Kernel32.HandleOptions.STILL_ACTIVE)
+                if (cancellationToken.IsCancellationRequested || !processHandle.TryGetExitCode(out int exitCode))
                 {
-                    return new(fasPathExitCode, resultBuffer, processId);
+                    exitCode = await processHandle.WaitForExitAsync(cancellationToken);
                 }
-#endif
-                int exitCode = await processHandle.WaitForExitAsync(cancellationToken);
                 return new(exitCode, resultBuffer, processId);
             }
             finally

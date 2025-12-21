@@ -111,7 +111,21 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
     {
         Validate();
 
-        return KillCore();
+        return KillCore();   
+    }
+    
+    /// <summary>
+    /// This is an INTERNAL method that can be used as PERF optimization
+    /// in cases where we know that both STD OUT and STDERR got closed,
+    /// and we suspect that the process has exited.
+    /// So instead of creating expensive async machinery to wait for process exit,
+    /// this method attempts to get the exit code directly.
+    /// </summary>
+    internal bool TryGetExitCode(out int exitCode)
+    {
+        Validate();
+
+        return TryGetExitCodeCore(out exitCode);
     }
 
     private void Validate()
