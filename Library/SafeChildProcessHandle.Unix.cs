@@ -44,7 +44,7 @@ public partial class SafeChildProcessHandle
     [LibraryImport("libc", SetLastError = true)]
     private static partial int close(int fd);
 
-    // P/Invoke declarations
+    // Shared declarations for both Linux and non-Linux Unix
     [LibraryImport("processspawn", SetLastError = true)]
     private static unsafe partial int spawn_process(
         byte* path,
@@ -58,35 +58,36 @@ public partial class SafeChildProcessHandle
         out int pidfd,
         out int exit_pipe_fd);
 
-    // Shared declarations for both Linux and non-Linux Unix
-    [StructLayout(LayoutKind.Sequential)]
-    private struct PollFd
-    {
-        public int fd;
-        public short events;
-        public short revents;
-    }
-
-    [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial int poll(PollFd* fds, nuint nfds, int timeout);
-
-    private const short POLLIN = 0x0001;
-
 #if LINUX
+    // Native wait functions for Linux (using pidfd)
+    [LibraryImport("processspawn", SetLastError = true)]
+    private static partial int try_get_exit_code_native(int pidfd, out int exit_code);
 
-    [StructLayout(LayoutKind.Sequential, Size = 128)]
-    private struct siginfo_t
-    {
-        public int si_signo;     // offset 0
-        public int si_errno;     // offset 4
-        public int si_code;      // offset 8
-        private int _pad0;       // offset 12 (padding)
-        public int si_pid;       // offset 16
-        public int si_uid;       // offset 20
-        public int si_status;    // offset 24
-        // Rest of the structure is padding to make total size 128 bytes
-    }
+    [LibraryImport("processspawn", SetLastError = true)]
+    private static partial int wait_for_exit_no_timeout_native(int pidfd);
 
+    [LibraryImport("processspawn", SetLastError = true)]
+    private static partial int wait_for_exit_native(int pidfd, int timeout_ms, int kill_on_timeout, out int timed_out);
+
+    [LibraryImport("processspawn", SetLastError = true)]
+    private static partial int get_exit_code_after_exit_native(int pidfd);
+#else
+    // Native wait functions for non-Linux Unix (using PID)
+    [LibraryImport("processspawn", SetLastError = true)]
+    private static partial int try_get_exit_code_native(int pid, out int exit_code);
+
+    [LibraryImport("processspawn", SetLastError = true)]
+    private static partial int wait_for_exit_no_timeout_native(int pid);
+
+    [LibraryImport("processspawn", SetLastError = true)]
+    private static partial int wait_for_exit_native(int pid, int exit_pipe_fd, int timeout_ms, int kill_on_timeout, out int timed_out);
+
+    [LibraryImport("processspawn", SetLastError = true)]
+    private static partial int get_exit_code_after_exit_native(int pid);
+#endif
+
+    // Shared declarations for both Linux and non-Linux Unix
+#if LINUX
     // System call numbers for x86_64 Linux
     // Note: ARM64 Linux uses different syscall numbers:
     // - pidfd_send_signal: 424 (same as x86_64)
@@ -94,33 +95,13 @@ public partial class SafeChildProcessHandle
 
     [LibraryImport("libc", EntryPoint = "syscall", SetLastError = true)]
     private static partial int syscall_pidfd_send_signal(int number, SafeChildProcessHandle pidfd, int sig, nint siginfo, uint flags);
-
-    [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial int waitid(int idtype, SafeChildProcessHandle pidfd, siginfo_t* infop, int options);
-
-    // Constants for Linux
-    private const short POLLHUP = 0x0010;
-    private const int P_PIDFD = 3;
-    private const int WEXITED = 0x00000004;
-    private const int WNOHANG = 0x00000001;
-    // si_code values for SIGCHLD
-    private const int CLD_EXITED = 1;    // child has exited
-    private const int CLD_KILLED = 2;    // child was killed
-    private const int CLD_DUMPED = 3;    // child terminated abnormally
 #else
     [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial int waitpid(int pid, int* status, int options);
-    
-    [LibraryImport("libc", SetLastError = true)]
     private static partial int kill(int pid, int sig);
-
-    private const int WNOHANG = 1;
 #endif
 
     // Common constants
     private const int SIGKILL = 9;
-    private const int EINTR = 4;
-    private const int ECHILD = 10;
     private const int ESRCH = 3;  // No such process
     private const int EBADF = 9;  // Bad file descriptor
     
@@ -229,205 +210,79 @@ public partial class SafeChildProcessHandle
     private int GetProcessIdCore() => (int)DangerousGetHandle();
 #endif
 
-    private unsafe bool TryGetExitCodeCore(out int exitCode)
+    private bool TryGetExitCodeCore(out int exitCode)
     {
 #if LINUX
-        siginfo_t siginfo = default;
-        int result = waitid(P_PIDFD, this, &siginfo, WEXITED | WNOHANG);
-
-        // waitid returns 0 when the process has exited or is still running.
-        // Check if siginfo was filled (process actually exited)
-        // si_signo will be non-zero (typically SIGCHLD) if process exited
-        // si_signo will be 0 if process is still running
-        if (result == 0 && siginfo.si_signo != 0)
-        {
-            exitCode = siginfo.si_status;
-            return true;
-        }
+        int result = try_get_exit_code_native((int)DangerousGetHandle(), out exitCode);
 #else
-        int pid = GetProcessIdCore();
-        int status = 0;
-        int result = waitpid(pid, &status, WNOHANG);
-        if (result == pid)
+        int result = try_get_exit_code_native(GetProcessIdCore(), out exitCode);
+#endif
+        if (result == 1)
         {
-            exitCode = GetExitCodeFromStatus(status);
+            // Exit code retrieved
             return true;
         }
-#endif
-
-        exitCode = -1;
-        return false;
-    }
-
-    private unsafe int WaitForExitCore(int milliseconds)
-    {
-#if LINUX
-        if (milliseconds == Timeout.Infinite)
+        else if (result == 0)
         {
-            // Wait indefinitely using waitid
-            siginfo_t siginfo = default;
-            while (true)
-            {
-                int result = waitid(P_PIDFD, this, &siginfo, WEXITED);
-                if (result == 0)
-                {
-                    return siginfo.si_status;
-                }
-                else
-                {
-                    int errno = Marshal.GetLastPInvokeError();
-                    if (errno == EINTR)
-                    {
-                        continue;
-                    }
-                    throw new Win32Exception(errno, "waitid() failed");
-                }
-            }
+            // Process still running
+            exitCode = -1;
+            return false;
         }
         else
         {
-            // Wait with timeout using poll
-            long startTime = Environment.TickCount64;
-            long endTime = startTime + milliseconds;
-            
-            while (true)
-            {
-                long now = Environment.TickCount64;
-                int remainingMs = (int)Math.Max(0, endTime - now);
-                
-                PollFd pollfd = new PollFd
-                {
-                    fd = (int)DangerousGetHandle(),
-                    events = POLLIN,
-                    revents = 0
-                };
-                
-                int pollResult = poll(&pollfd, 1, remainingMs);
-                
-                if (pollResult < 0)
-                {
-                    int errno = Marshal.GetLastPInvokeError();
-                    if (errno == EINTR)
-                    {
-                        continue;
-                    }
-                    throw new Win32Exception(errno, "poll() failed");
-                }
-                else if (pollResult == 0)
-                {
-                    // Timeout - kill the process using pidfd_send_signal
-                    KillCore(throwOnError: false);
-                    
-                    // Wait for the process to actually exit
-                    siginfo_t siginfo = default;
-                    while (true)
-                    {
-                        int result = waitid(P_PIDFD, this, &siginfo, WEXITED);
-                        if (result == 0)
-                        {
-                            return siginfo.si_status;
-                        }
-                        else
-                        {
-                            int errno = Marshal.GetLastPInvokeError();
-                            if (errno != EINTR)
-                            {
-                                throw new Win32Exception(errno, "waitid() failed after timeout");
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    // Process exited
-                    siginfo_t siginfo = default;
-                    while (true)
-                    {
-                        int result = waitid(P_PIDFD, this, &siginfo, WEXITED | WNOHANG);
-                        if (result == 0)
-                        {
-                            return siginfo.si_status;
-                        }
-                        else
-                        {
-                            int errno = Marshal.GetLastPInvokeError();
-                            if (errno != EINTR)
-                            {
-                                throw new Win32Exception(errno, "waitid() failed");
-                            }
-                        }
-                    }
-                }
-            }
+            // Error occurred - treat as not exited
+            exitCode = -1;
+            return false;
         }
-#else
-        int pid = GetProcessIdCore();
-        int status = 0;
-        
+    }
+
+    private int WaitForExitCore(int milliseconds)
+    {
+#if LINUX
         if (milliseconds == Timeout.Infinite)
         {
             // Wait indefinitely
-            while (true)
+            int exitCode = wait_for_exit_no_timeout_native((int)DangerousGetHandle());
+            if (exitCode == -1)
             {
-                int result = waitpid(pid, &status, 0);
-                if (result == pid)
-                {
-                    return GetExitCodeFromStatus(status);
-                }
-                else if (result == -1)
-                {
-                    int errno = Marshal.GetLastPInvokeError();
-                    if (errno == EINTR) // interrupted system call, retry
-                    {
-                        continue;
-                    }
-                    throw new Win32Exception(errno, "waitpid() failed");
-                }
+                int errno = Marshal.GetLastPInvokeError();
+                throw new Win32Exception(errno, "wait_for_exit_no_timeout_native() failed");
             }
+            return exitCode;
         }
         else
         {
-            // Wait with timeout using poll on exit pipe
-            long startTime = Environment.TickCount64;
-            long endTime = startTime + milliseconds;
-            
-            while (true)
+            // Wait with timeout
+            int exitCode = wait_for_exit_native((int)DangerousGetHandle(), milliseconds, kill_on_timeout: 1, out int timedOut);
+            if (exitCode == -1)
             {
-                long now = Environment.TickCount64;
-                int remainingMs = (int)Math.Max(0, endTime - now);
-                
-                PollFd pollfd = new PollFd
-                {
-                    fd = _exitPipeFd,
-                    events = POLLIN,
-                    revents = 0
-                };
-                
-                int pollResult = poll(&pollfd, 1, remainingMs);
-                
-                if (pollResult < 0)
-                {
-                    int errno = Marshal.GetLastPInvokeError();
-                    if (errno == EINTR)
-                    {
-                        continue;
-                    }
-                    throw new Win32Exception(errno, "poll() failed");
-                }
-                else if (pollResult == 0)
-                {
-                    // Timeout - kill the process
-                    KillCore(throwOnError: false);
-                    
-                    // Wait for the process to actually exit and return its exit code
-                    return WaitPidForExitCode();
-                }
-                else
-                {
-                    // Exit pipe became readable - process has exited
-                    return WaitPidForExitCode();
-                }
+                int errno = Marshal.GetLastPInvokeError();
+                throw new Win32Exception(errno, "wait_for_exit_native() failed");
             }
+            return exitCode;
+        }
+#else
+        if (milliseconds == Timeout.Infinite)
+        {
+            // Wait indefinitely
+            int exitCode = wait_for_exit_no_timeout_native(GetProcessIdCore());
+            if (exitCode == -1)
+            {
+                int errno = Marshal.GetLastPInvokeError();
+                throw new Win32Exception(errno, "wait_for_exit_no_timeout_native() failed");
+            }
+            return exitCode;
+        }
+        else
+        {
+            // Wait with timeout
+            int exitCode = wait_for_exit_native(GetProcessIdCore(), _exitPipeFd, milliseconds, kill_on_timeout: 1, out int timedOut);
+            if (exitCode == -1)
+            {
+                int errno = Marshal.GetLastPInvokeError();
+                throw new Win32Exception(errno, "wait_for_exit_native() failed");
+            }
+            return exitCode;
         }
 #endif
     }
@@ -459,70 +314,16 @@ public partial class SafeChildProcessHandle
 
         // The process has exited, now retrieve the exit code
 #if LINUX
-        return WaitIdPidfd();
+        int exitCode = get_exit_code_after_exit_native((int)DangerousGetHandle());
 #else
-        return WaitPidForExitCode();
+        int exitCode = get_exit_code_after_exit_native(GetProcessIdCore());
 #endif
-    }
-
-#if LINUX
-    private unsafe int WaitIdPidfd()
-    {
-        siginfo_t siginfo = default;
-        while (true)
+        if (exitCode == -1)
         {
-            int result = waitid(P_PIDFD, this, &siginfo, WEXITED | WNOHANG);
-            if (result == 0)
-            {
-                return siginfo.si_status;
-            }
-            else
-            {
-                int errno = Marshal.GetLastPInvokeError();
-                if (errno != EINTR)
-                {
-                    throw new Win32Exception(errno, "waitid() failed");
-                }
-            }
+            int errno = Marshal.GetLastPInvokeError();
+            throw new Win32Exception(errno, "get_exit_code_after_exit_native() failed");
         }
-    }
-#else
-    private unsafe int WaitPidForExitCode()
-    {
-        int pid = GetProcessIdCore();
-        int status = 0;
-        while (true)
-        {
-            int result = waitpid(pid, &status, 0);
-            if (result == pid)
-            {
-                return GetExitCodeFromStatus(status);
-            }
-            else if (result == -1)
-            {
-                int errno = Marshal.GetLastPInvokeError();
-                if (errno != EINTR)
-                {
-                    throw new Win32Exception(errno, "waitpid() failed");
-                }
-            }
-        }
-    }
-#endif
-    
-    private static int GetExitCodeFromStatus(int status)
-    {
-        // Check if the process exited normally
-        if ((status & 0x7F) == 0)
-        {
-            // WIFEXITED - process exited normally
-            return (status & 0xFF00) >> 8; // WEXITSTATUS
-        }
-        else
-        {
-            // Process was terminated by a signal
-            return -1;
-        }
+        return exitCode;
     }
 
     private void KillCore(bool throwOnError)

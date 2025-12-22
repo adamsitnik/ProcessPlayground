@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdint.h>
+#include <poll.h>
 
 #ifdef __linux__
 #include <sys/syscall.h>
@@ -254,3 +255,239 @@ int spawn_process(
     }
     return 0;
 }
+
+#ifdef __linux__
+// Helper function to extract exit code from status returned by waitpid
+// This is not needed on Linux because we use siginfo_t which gives us the exit code directly
+#else
+// Helper function to extract exit code from status returned by waitpid
+static int get_exit_code_from_status(int status) {
+    // Check if the process exited normally
+    if (WIFEXITED(status)) {
+        // Process exited normally, return exit code
+        return WEXITSTATUS(status);
+    } else {
+        // Process was terminated by a signal
+        return -1;
+    }
+}
+#endif
+
+#ifdef __linux__
+// Tries to get the exit code of a process without blocking (Linux with pidfd)
+// Returns 1 if exit code was retrieved, 0 if process is still running, -1 on error (errno is set)
+int try_get_exit_code_native(int pidfd, int* out_exit_code) {
+    siginfo_t siginfo;
+    memset(&siginfo, 0, sizeof(siginfo));
+    
+    int result = waitid(P_PIDFD, pidfd, &siginfo, WEXITED | WNOHANG);
+    
+    if (result == 0) {
+        // waitid returns 0 when the process has exited or is still running.
+        // Check if siginfo was filled (process actually exited)
+        // si_signo will be non-zero (typically SIGCHLD) if process exited
+        // si_signo will be 0 if process is still running
+        if (siginfo.si_signo != 0) {
+            if (out_exit_code != NULL) {
+                *out_exit_code = siginfo.si_status;
+            }
+            return 1;  // Exit code retrieved
+        }
+        return 0;  // Process still running
+    }
+    
+    // Error occurred
+    return -1;
+}
+
+// Waits for a process to exit without timeout (Linux with pidfd)
+// Returns exit code on success, -1 on error (errno is set)
+int wait_for_exit_no_timeout_native(int pidfd) {
+    siginfo_t siginfo;
+    
+    while (1) {
+        memset(&siginfo, 0, sizeof(siginfo));
+        int result = waitid(P_PIDFD, pidfd, &siginfo, WEXITED);
+        if (result == 0) {
+            return siginfo.si_status;
+        } else {
+            if (errno != EINTR) {
+                return -1;
+            }
+            // EINTR - interrupted by signal, retry
+        }
+    }
+}
+
+// Waits for a process to exit with timeout (Linux with pidfd)
+// Returns exit code on success, -1 on error (errno is set)
+// If timeout occurs, returns exit code after killing the process
+// Parameters:
+//   pidfd: process file descriptor
+//   timeout_ms: timeout in milliseconds
+//   kill_on_timeout: if non-zero, kill the process on timeout
+//   out_timed_out: if not NULL, set to 1 if timeout occurred, 0 otherwise
+int wait_for_exit_native(int pidfd, int timeout_ms, int kill_on_timeout, int* out_timed_out) {
+    struct pollfd pollfd;
+    pollfd.fd = pidfd;
+    pollfd.events = POLLIN;
+    pollfd.revents = 0;
+    
+    while (1) {
+        int poll_result = poll(&pollfd, 1, timeout_ms);
+        
+        if (poll_result < 0) {
+            if (errno == EINTR) {
+                continue;  // Interrupted by signal, retry
+            }
+            return -1;  // Error
+        } else if (poll_result == 0) {
+            // Timeout
+            if (out_timed_out != NULL) {
+                *out_timed_out = 1;
+            }
+            
+            if (kill_on_timeout) {
+                // Kill the process using pidfd_send_signal
+                syscall(SYS_pidfd_send_signal, pidfd, SIGKILL, NULL, 0);
+            }
+            
+            // Wait for the process to actually exit
+            return wait_for_exit_no_timeout_native(pidfd);
+        } else {
+            // Process exited
+            if (out_timed_out != NULL) {
+                *out_timed_out = 0;
+            }
+            
+            // Retrieve exit code
+            siginfo_t siginfo;
+            while (1) {
+                memset(&siginfo, 0, sizeof(siginfo));
+                int result = waitid(P_PIDFD, pidfd, &siginfo, WEXITED | WNOHANG);
+                if (result == 0) {
+                    return siginfo.si_status;
+                } else {
+                    if (errno != EINTR) {
+                        return -1;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Reads the exit code after the process has already exited (Linux with pidfd)
+// This is called when we know the process has exited (e.g., exit pipe was closed)
+// Returns exit code on success, -1 on error (errno is set)
+int get_exit_code_after_exit_native(int pidfd) {
+    siginfo_t siginfo;
+    
+    while (1) {
+        memset(&siginfo, 0, sizeof(siginfo));
+        int result = waitid(P_PIDFD, pidfd, &siginfo, WEXITED | WNOHANG);
+        if (result == 0) {
+            return siginfo.si_status;
+        } else {
+            if (errno != EINTR) {
+                return -1;
+            }
+        }
+    }
+}
+
+#else  // Non-Linux Unix
+
+// Tries to get the exit code of a process without blocking (non-Linux Unix)
+// Returns 1 if exit code was retrieved, 0 if process is still running, -1 on error (errno is set)
+int try_get_exit_code_native(int pid, int* out_exit_code) {
+    int status = 0;
+    int result = waitpid(pid, &status, WNOHANG);
+    
+    if (result == pid) {
+        // Process has exited
+        if (out_exit_code != NULL) {
+            *out_exit_code = get_exit_code_from_status(status);
+        }
+        return 1;  // Exit code retrieved
+    } else if (result == 0) {
+        // Process still running
+        return 0;
+    }
+    
+    // Error occurred
+    return -1;
+}
+
+// Waits for a process to exit without timeout (non-Linux Unix)
+// Returns exit code on success, -1 on error (errno is set)
+int wait_for_exit_no_timeout_native(int pid) {
+    int status = 0;
+    
+    while (1) {
+        int result = waitpid(pid, &status, 0);
+        if (result == pid) {
+            return get_exit_code_from_status(status);
+        } else if (result == -1) {
+            if (errno != EINTR) {
+                return -1;
+            }
+            // EINTR - interrupted by signal, retry
+        }
+    }
+}
+
+// Waits for a process to exit with timeout (non-Linux Unix)
+// Returns exit code on success, -1 on error (errno is set)
+// If timeout occurs, returns exit code after killing the process
+// Parameters:
+//   pid: process ID
+//   exit_pipe_fd: file descriptor for exit monitoring pipe
+//   timeout_ms: timeout in milliseconds
+//   kill_on_timeout: if non-zero, kill the process on timeout
+//   out_timed_out: if not NULL, set to 1 if timeout occurred, 0 otherwise
+int wait_for_exit_native(int pid, int exit_pipe_fd, int timeout_ms, int kill_on_timeout, int* out_timed_out) {
+    struct pollfd pollfd;
+    pollfd.fd = exit_pipe_fd;
+    pollfd.events = POLLIN;
+    pollfd.revents = 0;
+    
+    while (1) {
+        int poll_result = poll(&pollfd, 1, timeout_ms);
+        
+        if (poll_result < 0) {
+            if (errno == EINTR) {
+                continue;  // Interrupted by signal, retry
+            }
+            return -1;  // Error
+        } else if (poll_result == 0) {
+            // Timeout
+            if (out_timed_out != NULL) {
+                *out_timed_out = 1;
+            }
+            
+            if (kill_on_timeout) {
+                // Kill the process
+                kill(pid, SIGKILL);
+            }
+            
+            // Wait for the process to actually exit and return its exit code
+            return wait_for_exit_no_timeout_native(pid);
+        } else {
+            // Exit pipe became readable - process has exited
+            if (out_timed_out != NULL) {
+                *out_timed_out = 0;
+            }
+            return wait_for_exit_no_timeout_native(pid);
+        }
+    }
+}
+
+// Reads the exit code after the process has already exited (non-Linux Unix)
+// This is called when we know the process has exited (e.g., exit pipe was closed)
+// Returns exit code on success, -1 on error (errno is set)
+int get_exit_code_after_exit_native(int pid) {
+    return wait_for_exit_no_timeout_native(pid);
+}
+
+#endif
