@@ -14,6 +14,8 @@
 #include <linux/sched.h>
 
 // P_PIDFD is not defined in all system headers yet, so define it if missing
+// This constant is defined in the Linux kernel as idtype for waitid() to accept pidfd
+// See: https://man7.org/linux/man-pages/man2/waitid.2.html
 #ifndef P_PIDFD
 #define P_PIDFD 3
 #endif
@@ -262,8 +264,7 @@ int spawn_process(
 }
 
 #ifdef __linux__
-// Helper function to extract exit code from status returned by waitpid
-// This is not needed on Linux because we use siginfo_t which gives us the exit code directly
+// No helper function needed on Linux because we use siginfo_t which gives us the exit code directly
 #else
 // Helper function to extract exit code from status returned by waitpid
 static int get_exit_code_from_status(int status) {
@@ -354,6 +355,7 @@ int wait_for_exit_native(int pidfd, int timeout_ms, int kill_on_timeout, int* ou
             
             if (kill_on_timeout) {
                 // Kill the process using pidfd_send_signal
+                // Ignore errors - process may have already exited
                 syscall(SYS_pidfd_send_signal, pidfd, SIGKILL, NULL, 0);
             }
             
@@ -473,6 +475,7 @@ int wait_for_exit_native(int pid, int exit_pipe_fd, int timeout_ms, int kill_on_
             
             if (kill_on_timeout) {
                 // Kill the process
+                // Ignore errors - process may have already exited
                 kill(pid, SIGKILL);
             }
             
