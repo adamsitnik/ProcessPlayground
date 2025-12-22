@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <poll.h>
+#include <pthread.h>
 
 #ifdef __linux__
 #include <sys/syscall.h>
