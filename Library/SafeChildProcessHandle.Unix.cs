@@ -58,8 +58,7 @@ public partial class SafeChildProcessHandle
         out int pidfd,
         out int exit_pipe_fd);
 
-
-#if LINUX
+    // Shared declarations for both Linux and non-Linux Unix
     [StructLayout(LayoutKind.Sequential)]
     private struct PollFd
     {
@@ -67,7 +66,14 @@ public partial class SafeChildProcessHandle
         public short events;
         public short revents;
     }
-    
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static unsafe partial int poll(PollFd* fds, nuint nfds, int timeout);
+
+    private const short POLLIN = 0x0001;
+
+#if LINUX
+
     [StructLayout(LayoutKind.Sequential, Size = 128)]
     private struct siginfo_t
     {
@@ -90,13 +96,9 @@ public partial class SafeChildProcessHandle
     private static partial int syscall_pidfd_send_signal(int number, SafeChildProcessHandle pidfd, int sig, nint siginfo, uint flags);
 
     [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial int poll(PollFd* fds, nuint nfds, int timeout);
-
-    [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial int waitid(int idtype, SafeChildProcessHandle pidfd, siginfo_t* infop, int options);
 
     // Constants for Linux
-    private const short POLLIN = 0x0001;
     private const short POLLHUP = 0x0010;
     private const int P_PIDFD = 3;
     private const int WEXITED = 0x00000004;
@@ -385,58 +387,45 @@ public partial class SafeChildProcessHandle
         }
         else
         {
-            // Wait with timeout using polling
+            // Wait with timeout using poll on exit pipe
             long startTime = Environment.TickCount64;
             long endTime = startTime + milliseconds;
             
             while (true)
             {
-                // Non-blocking wait
-                int result = waitpid(pid, &status, WNOHANG);
-                if (result == pid)
+                long now = Environment.TickCount64;
+                int remainingMs = (int)Math.Max(0, endTime - now);
+                
+                PollFd pollfd = new PollFd
                 {
-                    return GetExitCodeFromStatus(status);
-                }
-                else if (result == -1)
+                    fd = _exitPipeFd,
+                    events = POLLIN,
+                    revents = 0
+                };
+                
+                int pollResult = poll(&pollfd, 1, remainingMs);
+                
+                if (pollResult < 0)
                 {
                     int errno = Marshal.GetLastPInvokeError();
                     if (errno == EINTR)
                     {
                         continue;
                     }
-                    throw new Win32Exception(errno, "waitpid() failed");
+                    throw new Win32Exception(errno, "poll() failed");
                 }
-                else if (result == 0)
+                else if (pollResult == 0)
                 {
-                    // Process still running
-                    long now = Environment.TickCount64;
-                    if (now >= endTime)
-                    {
-                        // Timeout - terminate the process
-                        KillCore(throwOnError: false);
-                        
-                        // Wait for it to actually exit
-                        while (true)
-                        {
-                            result = waitpid(pid, &status, 0);
-                            if (result == pid)
-                            {
-                                return GetExitCodeFromStatus(status);
-                            }
-                            else if (result == -1)
-                            {
-                                int errno = Marshal.GetLastPInvokeError();
-                                if (errno != EINTR)
-                                {
-                                    throw new Win32Exception(errno, "waitpid() failed after timeout");
-                                }
-                            }
-                        }
-                    }
+                    // Timeout - kill the process
+                    KillCore(throwOnError: false);
                     
-                    // Sleep before polling again, using progressive backoff
-                    int sleepMs = Math.Min((int)(now - startTime) / 10 + 1, 50);
-                    Thread.Sleep(sleepMs);
+                    // Wait for the process to actually exit and return its exit code
+                    return WaitPidForExitCode();
+                }
+                else
+                {
+                    // Exit pipe became readable - process has exited
+                    return WaitPidForExitCode();
                 }
             }
         }
