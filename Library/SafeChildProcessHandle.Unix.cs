@@ -58,33 +58,18 @@ public partial class SafeChildProcessHandle
         out int pidfd,
         out int exit_pipe_fd);
 
-#if LINUX
-    // Native wait functions for Linux (using pidfd)
+    // Native wait functions - SafeChildProcessHandle is marshalled as pidfd on Linux, PID on other Unix
     [LibraryImport("processspawn", SetLastError = true)]
-    private static partial int try_get_exit_code_native(int pidfd, out int exit_code);
+    private static partial int try_get_exit_code_native(SafeChildProcessHandle handle, out int exit_code);
 
     [LibraryImport("processspawn", SetLastError = true)]
-    private static partial int wait_for_exit_no_timeout_native(int pidfd);
+    private static partial int wait_for_exit_no_timeout_native(SafeChildProcessHandle handle);
 
     [LibraryImport("processspawn", SetLastError = true)]
-    private static partial int wait_for_exit_native(int pidfd, int timeout_ms, int kill_on_timeout, out int timed_out);
+    private static partial int wait_for_exit_native(SafeChildProcessHandle handle, int exit_pipe_fd, int timeout_ms, int kill_on_timeout, out int timed_out);
 
     [LibraryImport("processspawn", SetLastError = true)]
-    private static partial int get_exit_code_after_exit_native(int pidfd);
-#else
-    // Native wait functions for non-Linux Unix (using PID)
-    [LibraryImport("processspawn", SetLastError = true)]
-    private static partial int try_get_exit_code_native(int pid, out int exit_code);
-
-    [LibraryImport("processspawn", SetLastError = true)]
-    private static partial int wait_for_exit_no_timeout_native(int pid);
-
-    [LibraryImport("processspawn", SetLastError = true)]
-    private static partial int wait_for_exit_native(int pid, int exit_pipe_fd, int timeout_ms, int kill_on_timeout, out int timed_out);
-
-    [LibraryImport("processspawn", SetLastError = true)]
-    private static partial int get_exit_code_after_exit_native(int pid);
-#endif
+    private static partial int get_exit_code_after_exit_native(SafeChildProcessHandle handle);
 
     // Shared declarations for both Linux and non-Linux Unix
 #if LINUX
@@ -212,11 +197,7 @@ public partial class SafeChildProcessHandle
 
     private bool TryGetExitCodeCore(out int exitCode)
     {
-#if LINUX
-        int result = try_get_exit_code_native((int)DangerousGetHandle(), out exitCode);
-#else
-        int result = try_get_exit_code_native(GetProcessIdCore(), out exitCode);
-#endif
+        int result = try_get_exit_code_native(this, out exitCode);
         if (result == 1)
         {
             // Exit code retrieved
@@ -238,11 +219,10 @@ public partial class SafeChildProcessHandle
 
     private int WaitForExitCore(int milliseconds)
     {
-#if LINUX
         if (milliseconds == Timeout.Infinite)
         {
             // Wait indefinitely
-            int exitCode = wait_for_exit_no_timeout_native((int)DangerousGetHandle());
+            int exitCode = wait_for_exit_no_timeout_native(this);
             if (exitCode == -1)
             {
                 int errno = Marshal.GetLastPInvokeError();
@@ -253,7 +233,7 @@ public partial class SafeChildProcessHandle
         else
         {
             // Wait with timeout
-            int exitCode = wait_for_exit_native((int)DangerousGetHandle(), milliseconds, kill_on_timeout: 1, out int timedOut);
+            int exitCode = wait_for_exit_native(this, _exitPipeFd, milliseconds, kill_on_timeout: 1, out int timedOut);
             if (exitCode == -1)
             {
                 int errno = Marshal.GetLastPInvokeError();
@@ -261,30 +241,6 @@ public partial class SafeChildProcessHandle
             }
             return exitCode;
         }
-#else
-        if (milliseconds == Timeout.Infinite)
-        {
-            // Wait indefinitely
-            int exitCode = wait_for_exit_no_timeout_native(GetProcessIdCore());
-            if (exitCode == -1)
-            {
-                int errno = Marshal.GetLastPInvokeError();
-                throw new Win32Exception(errno, "wait_for_exit_no_timeout_native() failed");
-            }
-            return exitCode;
-        }
-        else
-        {
-            // Wait with timeout
-            int exitCode = wait_for_exit_native(GetProcessIdCore(), _exitPipeFd, milliseconds, kill_on_timeout: 1, out int timedOut);
-            if (exitCode == -1)
-            {
-                int errno = Marshal.GetLastPInvokeError();
-                throw new Win32Exception(errno, "wait_for_exit_native() failed");
-            }
-            return exitCode;
-        }
-#endif
     }
 
     private async Task<int> WaitForExitAsyncCore(CancellationToken cancellationToken)
@@ -313,11 +269,7 @@ public partial class SafeChildProcessHandle
         }
 
         // The process has exited, now retrieve the exit code
-#if LINUX
-        int exitCode = get_exit_code_after_exit_native((int)DangerousGetHandle());
-#else
-        int exitCode = get_exit_code_after_exit_native(GetProcessIdCore());
-#endif
+        int exitCode = get_exit_code_after_exit_native(this);
         if (exitCode == -1)
         {
             int errno = Marshal.GetLastPInvokeError();

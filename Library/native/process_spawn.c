@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <poll.h>
 #include <pthread.h>
+#include <sys/time.h>
 
 #ifdef __linux__
 #include <sys/syscall.h>
@@ -264,6 +265,13 @@ int spawn_process(
     return 0;
 }
 
+// Helper function to get current time in milliseconds
+static long long get_time_ms(void) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (long long)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
+
 #ifdef __linux__
 // No helper function needed on Linux because we use siginfo_t which gives us the exit code directly
 #else
@@ -331,21 +339,34 @@ int wait_for_exit_no_timeout_native(int pidfd) {
 // If timeout occurs, returns exit code after killing the process
 // Parameters:
 //   pidfd: process file descriptor
+//   exit_pipe_fd: unused on Linux, kept for API consistency
 //   timeout_ms: timeout in milliseconds
 //   kill_on_timeout: if non-zero, kill the process on timeout
 //   out_timed_out: if not NULL, set to 1 if timeout occurred, 0 otherwise
-int wait_for_exit_native(int pidfd, int timeout_ms, int kill_on_timeout, int* out_timed_out) {
+int wait_for_exit_native(int pidfd, int exit_pipe_fd, int timeout_ms, int kill_on_timeout, int* out_timed_out) {
+    // On Linux, we poll the pidfd directly, exit_pipe_fd is ignored
     struct pollfd pollfd;
     pollfd.fd = pidfd;
     pollfd.events = POLLIN;
-    pollfd.revents = 0;
+    
+    long long start_time = get_time_ms();
+    long long end_time = start_time + timeout_ms;
     
     while (1) {
-        int poll_result = poll(&pollfd, 1, timeout_ms);
+        pollfd.revents = 0;
+        
+        // Calculate remaining timeout
+        long long now = get_time_ms();
+        int remaining_ms = (int)(end_time - now);
+        if (remaining_ms < 0) {
+            remaining_ms = 0;
+        }
+        
+        int poll_result = poll(&pollfd, 1, remaining_ms);
         
         if (poll_result < 0) {
             if (errno == EINTR) {
-                continue;  // Interrupted by signal, retry
+                continue;  // Interrupted by signal, retry with recalculated timeout
             }
             return -1;  // Error
         } else if (poll_result == 0) {
@@ -458,14 +479,25 @@ int wait_for_exit_native(int pid, int exit_pipe_fd, int timeout_ms, int kill_on_
     struct pollfd pollfd;
     pollfd.fd = exit_pipe_fd;
     pollfd.events = POLLIN;
-    pollfd.revents = 0;
+    
+    long long start_time = get_time_ms();
+    long long end_time = start_time + timeout_ms;
     
     while (1) {
-        int poll_result = poll(&pollfd, 1, timeout_ms);
+        pollfd.revents = 0;
+        
+        // Calculate remaining timeout
+        long long now = get_time_ms();
+        int remaining_ms = (int)(end_time - now);
+        if (remaining_ms < 0) {
+            remaining_ms = 0;
+        }
+        
+        int poll_result = poll(&pollfd, 1, remaining_ms);
         
         if (poll_result < 0) {
             if (errno == EINTR) {
-                continue;  // Interrupted by signal, retry
+                continue;  // Interrupted by signal, retry with recalculated timeout
             }
             return -1;  // Error
         } else if (poll_result == 0) {
