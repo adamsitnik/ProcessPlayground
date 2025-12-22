@@ -12,6 +12,11 @@
 #ifdef __linux__
 #include <sys/syscall.h>
 #include <linux/sched.h>
+
+// P_PIDFD is not defined in all system headers yet, so define it if missing
+#ifndef P_PIDFD
+#define P_PIDFD 3
+#endif
 #endif
 
 // External variable containing the current environment.
