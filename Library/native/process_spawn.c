@@ -453,16 +453,30 @@ int try_get_exit_code_native(int pid, int* out_exit_code) {
 int wait_for_exit_no_timeout_native(int pid) {
     int status = 0;
     
+    // Sanity check: pid should be positive
+    if (pid <= 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    
     while (1) {
         int result = waitpid(pid, &status, 0);
         if (result == pid) {
             return get_exit_code_from_status(status);
         } else if (result == -1) {
-            if (errno != EINTR) {
-                return -1;
+            if (errno == EINTR) {
+                // EINTR - interrupted by signal, retry
+                continue;
             }
-            // EINTR - interrupted by signal, retry
+            // For any other error (including ECHILD), return -1
+            // errno is already set by waitpid
+            return -1;
+        } else if (result == 0) {
+            // This shouldn't happen with flags=0 (blocking wait)
+            // but if it does, keep trying
+            continue;
         }
+        // result is some other PID - shouldn't happen, but keep trying
     }
 }
 
