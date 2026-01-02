@@ -144,7 +144,7 @@ public class SameFileDescriptorTests
             // Read the output from the file
             string output = System.IO.File.ReadAllText(tempFile);
 
-            Assert.Equal("Test Line\n", output.Trim() + "\n");
+            Assert.Equal("Test Line\nTest Line\n", output, ignoreLineEndingDifferences: true);
         }
         finally
         {
@@ -189,7 +189,7 @@ public class SameFileDescriptorTests
             await processHandle.WaitForExitAsync();
 
             string output = System.IO.File.ReadAllText(tempFile);
-            Assert.Equal("Test Line\n", output.Trim() + "\n");
+            Assert.Equal("Test Line\nTest Line\n", output, ignoreLineEndingDifferences: true);
         }
         finally
         {
