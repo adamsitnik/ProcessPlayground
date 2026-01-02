@@ -73,8 +73,9 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
                 outputDisposed = true;
             }
 
-            // Only dispose error if it's a pipe and it's not the same handle as output
-            if (error.IsPipe() && (!outputDisposed || !ReferenceEquals(error, output)))
+            // Only dispose error if it's a pipe and it's not the same underlying handle as output
+            // Compare the actual handle values, not just reference equality, since different SafeFileHandle instances can wrap the same handle
+            if (error.IsPipe() && (!outputDisposed || error.DangerousGetHandle() != output.DangerousGetHandle()))
             {
                 error.Dispose();
             }

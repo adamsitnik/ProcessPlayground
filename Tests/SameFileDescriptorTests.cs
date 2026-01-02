@@ -112,6 +112,9 @@ public class SameFileDescriptorTests
         string tempFile = Path.GetTempFileName();
         try
         {
+            // Write test data to the file before opening the handle to avoid lock conflicts
+            System.IO.File.WriteAllText(tempFile, "Test Line\n");
+
             // Open file with read/write access
             using SafeFileHandle fileHandle = File.OpenHandle(
                 tempFile,
@@ -125,9 +128,6 @@ public class SameFileDescriptorTests
             {
                 Arguments = { "/c", "findstr", ".*" }
             };
-
-            // Write test data to the file before starting the process
-            System.IO.File.WriteAllText(tempFile, "Test Line\n");
 
             // Both stdin and stdout use the same file handle
             using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
@@ -160,15 +160,15 @@ public class SameFileDescriptorTests
         string tempFile = Path.GetTempFileName();
         try
         {
+            // Write test data to the file before opening the handle to avoid lock conflicts
+            System.IO.File.WriteAllText(tempFile, "Test Line\n");
+
             // Open file with read/write access
             using SafeFileHandle fileHandle = File.OpenHandle(
                 tempFile,
                 FileMode.OpenOrCreate,
                 FileAccess.ReadWrite,
                 FileShare.ReadWrite);
-
-            // Write test data
-            System.IO.File.WriteAllText(tempFile, "Test Line\n");
 
             ProcessStartOptions options = new("cmd.exe")
             {
