@@ -113,7 +113,7 @@ public class SameFileDescriptorTests
         try
         {
             // Open file with read/write access
-            using SafeFileHandle fileHandle = File.OpenFileHandle(
+            using SafeFileHandle fileHandle = File.OpenHandle(
                 tempFile,
                 FileMode.OpenOrCreate,
                 FileAccess.ReadWrite,
@@ -126,6 +126,9 @@ public class SameFileDescriptorTests
                 Arguments = { "/c", "findstr", ".*" }
             };
 
+            // Write test data to the file before starting the process
+            System.IO.File.WriteAllText(tempFile, "Test Line\n");
+
             // Both stdin and stdout use the same file handle
             using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
                 options,
@@ -133,16 +136,13 @@ public class SameFileDescriptorTests
                 output: fileHandle,
                 error: null);
 
-            // Write test data to the file before starting
-            await System.IO.File.WriteAllTextAsync(tempFile, "Test Line\n");
-
             // Wait for process to complete
             await processHandle.WaitForExitAsync();
 
             // Read the output from the file
-            string output = await System.IO.File.ReadAllTextAsync(tempFile);
+            string output = System.IO.File.ReadAllText(tempFile);
 
-            Assert.Contains("Test Line", output);
+            Assert.Equal("Test Line\n", output.Trim() + "\n");
         }
         finally
         {
@@ -161,14 +161,14 @@ public class SameFileDescriptorTests
         try
         {
             // Open file with read/write access
-            using SafeFileHandle fileHandle = File.OpenFileHandle(
+            using SafeFileHandle fileHandle = File.OpenHandle(
                 tempFile,
                 FileMode.OpenOrCreate,
                 FileAccess.ReadWrite,
                 FileShare.ReadWrite);
 
             // Write test data
-            await System.IO.File.WriteAllTextAsync(tempFile, "Test Line\n");
+            System.IO.File.WriteAllText(tempFile, "Test Line\n");
 
             ProcessStartOptions options = new("cmd.exe")
             {
@@ -184,8 +184,8 @@ public class SameFileDescriptorTests
 
             await processHandle.WaitForExitAsync();
 
-            string output = await System.IO.File.ReadAllTextAsync(tempFile);
-            Assert.Contains("Test Line", output);
+            string output = System.IO.File.ReadAllText(tempFile);
+            Assert.Equal("Test Line\n", output.Trim() + "\n");
         }
         finally
         {
