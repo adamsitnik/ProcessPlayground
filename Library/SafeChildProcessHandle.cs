@@ -63,12 +63,18 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
             // DESIGN: avoid deadlocks and the need of users being aware of how pipes work by closing the child handles in the parent process.
             // Close the child handles in the parent process, so the pipe will signal EOF when the child exits.
             // Otherwise, the parent process will keep the write end of the pipe open, and any read operations will hang.
+            
+            // Track which handles we've already disposed to avoid double-disposal when the same handle is used for multiple streams
+            bool outputDisposed = false;
+            
             if (output.IsPipe())
             {
                 output.Dispose();
+                outputDisposed = true;
             }
 
-            if (error.IsPipe())
+            // Only dispose error if it's a pipe and it's not the same handle as output
+            if (error.IsPipe() && (!outputDisposed || !ReferenceEquals(error, output)))
             {
                 error.Dispose();
             }
