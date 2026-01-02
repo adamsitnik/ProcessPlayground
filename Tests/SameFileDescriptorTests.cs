@@ -115,8 +115,7 @@ public class SameFileDescriptorTests
             // Write test data to the file before opening the handle to avoid lock conflicts
             System.IO.File.WriteAllText(tempFile, "Test Line\n");
 
-            // Open file with read/write access
-            using SafeFileHandle fileHandle = File.OpenHandle(
+            SafeFileHandle fileHandle = File.OpenHandle(
                 tempFile,
                 FileMode.OpenOrCreate,
                 FileAccess.ReadWrite,
@@ -135,6 +134,9 @@ public class SameFileDescriptorTests
                 input: fileHandle,
                 output: fileHandle,
                 error: null);
+
+            // Close the file handle after starting the process to avoid file locking issues
+            fileHandle.Dispose();
 
             // Wait for process to complete
             await processHandle.WaitForExitAsync();
@@ -163,8 +165,7 @@ public class SameFileDescriptorTests
             // Write test data to the file before opening the handle to avoid lock conflicts
             System.IO.File.WriteAllText(tempFile, "Test Line\n");
 
-            // Open file with read/write access
-            using SafeFileHandle fileHandle = File.OpenHandle(
+            SafeFileHandle fileHandle = File.OpenHandle(
                 tempFile,
                 FileMode.OpenOrCreate,
                 FileAccess.ReadWrite,
@@ -181,6 +182,9 @@ public class SameFileDescriptorTests
                 input: fileHandle,
                 output: fileHandle,
                 error: fileHandle);
+
+            // Close the file handle after starting the process to avoid file locking issues
+            fileHandle.Dispose();
 
             await processHandle.WaitForExitAsync();
 
