@@ -54,14 +54,18 @@ public partial class SafeChildProcessHandle
         {
             // In certain scenarios, the same handle may be passed for multiple stdio streams:
             // - NUL file for all three
-            // - A single pipe for both stdout and stderr
+            // - A single pipe/socket for both stdout and stderr (for combined output)
+            // - A single pipe/socket for stdin and stdout (for terminal emulation)
+            // - A single handle for all three streams
             using SafeFileHandle duplicatedInput = Duplicate(inputHandle, currentProcHandle);
             using SafeFileHandle duplicatedOutput = inputHandle.DangerousGetHandle() == outputHandle.DangerousGetHandle()
                 ? duplicatedInput
                 : Duplicate(outputHandle, currentProcHandle);
             using SafeFileHandle duplicatedError = outputHandle.DangerousGetHandle() == errorHandle.DangerousGetHandle()
                 ? duplicatedOutput
-                : Duplicate(errorHandle, currentProcHandle);
+                : (inputHandle.DangerousGetHandle() == errorHandle.DangerousGetHandle()
+                    ? duplicatedInput
+                    : Duplicate(errorHandle, currentProcHandle));
 
             try
             {
