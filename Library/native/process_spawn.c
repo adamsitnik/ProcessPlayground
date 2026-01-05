@@ -214,11 +214,7 @@ int spawn_process(
             // This ensures we stop before execve
             pid_t my_pid = getpid();
             pid_t my_tid = syscall(SYS_gettid);
-            // const char msg[] = "SIGSTOP\n";
-            // write(2, msg, sizeof(msg)-1);
             syscall(SYS_tgkill, my_pid, my_tid, SIGSTOP);
-            // const char msg2[] = "RESUMED\n";
-            // write(2, msg2, sizeof(msg2)-1);
         }
         
         // Execute the program
@@ -241,31 +237,35 @@ int spawn_process(
     // Close write end of exit pipe (child owns it)
     close(exit_pipe[1]);
     
-    // Wait for child to exec or fail
-    int child_errno = 0;
-    ssize_t bytes_read = read(wait_pipe[0], &child_errno, sizeof(child_errno));
-    close(wait_pipe[0]);
-    
-    if (bytes_read == sizeof(child_errno)) {
-        // Child failed to exec - reap it and close exit pipe
+    // If create_suspended, we don't wait for the wait_pipe because the child
+    // will stop before exec. We'll wait for SIGSTOP instead.
+    if (!create_suspended) {
+        // Wait for child to exec or fail
+        int child_errno = 0;
+        ssize_t bytes_read = read(wait_pipe[0], &child_errno, sizeof(child_errno));
+        close(wait_pipe[0]);
+        
+        if (bytes_read == sizeof(child_errno)) {
+            // Child failed to exec - reap it and close exit pipe
 #ifdef __linux__
-        siginfo_t info;
-        waitid(P_PIDFD, pidfd, &info, WEXITED);
-        close(pidfd);
+            siginfo_t info;
+            waitid(P_PIDFD, pidfd, &info, WEXITED);
+            close(pidfd);
 #else
-        int status;
-        waitpid(child_pid, &status, 0);
+            int status;
+            waitpid(child_pid, &status, 0);
 #endif
-        close(exit_pipe[0]);
-        errno = child_errno;
-        return -1;
+            close(exit_pipe[0]);
+            errno = child_errno;
+            return -1;
+        }
+    } else {
+        // For suspended processes, close the wait pipe immediately
+        close(wait_pipe[0]);
     }
     
     // If create_suspended, wait for child to stop itself
     if (create_suspended) {
-        // const char msg[] = "Parent: waiting for child to stop\n";
-        // write(2, msg, sizeof(msg)-1);
-        
         int status;
         // Use waitpid with WUNTRACED to wait for the child to stop
         // Note: We use child_pid here, not pidfd, as WUNTRACED works with PIDs
@@ -294,9 +294,6 @@ int spawn_process(
             errno = ECHILD;
             return -1;
         }
-        
-        // const char msg2[] = "Parent: child stopped successfully\n";
-        // write(2, msg2, sizeof(msg2)-1);
     }
     
     // Success - return PID, pidfd, and exit pipe fd if requested
