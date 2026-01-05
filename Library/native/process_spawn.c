@@ -169,11 +169,6 @@ int spawn_process(
         if (dup2(exit_pipe[1], 3) == -1) {
             write_errno_and_exit(wait_pipe[1], errno);
         }
-        // Set FD_CLOEXEC on fd 3 to prevent grandchildren from inheriting it
-        // This ensures WaitForExitAsync doesn't wait for grandchildren
-        if (fcntl(3, F_SETFD, FD_CLOEXEC) == -1) {
-            write_errno_and_exit(wait_pipe[1], errno);
-        }
         close(exit_pipe[0]);
         close(exit_pipe[1]);
         

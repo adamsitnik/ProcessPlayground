@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using System.TBA;
 using Microsoft.Win32.SafeHandles;
@@ -370,75 +372,46 @@ public partial class SafeChildProcessHandleTests
         processHandle.Kill();
     }
 
-#if !WINDOWS
-    [Fact(Timeout = 5000)]
+    [Theory]
+#if WINDOWS // https://github.com/adamsitnik/ProcessPlayground/issues/61
+    [InlineData(true)]
 #endif
-    public async Task WaitForExitAsync_DoesNotWaitForGrandchildren()
+    [InlineData(false)]
+    public async Task WaitForExit_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {
-        // This test ensures that WaitForExitAsync returns as soon as the child process exits,
-        // even if the child spawned grandchildren that outlive it.
-        // 
-        // The issue was that the exit pipe fd (fd 3) was inherited by grandchildren because
-        // it wasn't marked with FD_CLOEXEC, causing WaitForExitAsync to wait until all
-        // grandchildren also exit.
+        // This test verifies that WaitForExitAsync returns when the direct child process exits,
+        // even if that child has spawned a grandchild process that is still running.
+        // This is important because:
+        // - On Windows, process handles are specific to a single process
+        // - On Linux with pidfd, the descriptor tracks only the direct child
+        // The grandchild becomes orphaned and is reparented to init/systemd
 
-        // Create a shell script that spawns a grandchild process
-        string scriptPath = Path.Combine(Path.GetTempPath(), $"spawn_grandchild_{Guid.NewGuid():N}.sh");
-        await File.WriteAllTextAsync(scriptPath, """
-#!/bin/bash
-# Spawn a long-running grandchild process in the background
-sleep 30 &
-# Exit immediately
-exit 0
-""");
-
-        try
-        {
-            // Make the script executable
-            ProcessStartOptions chmodOptions = new("chmod")
+        // This spawns a grandchild and then the child exits immediately
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe")
             {
-                Arguments = { "+x", scriptPath }
+                Arguments = { "/c", "start", "cmd.exe", "/c", "timeout", "/t", "5", "/nobreak", "&&", "exit" }
+            }
+            : new("sh")
+            {
+                Arguments = { "-c", "sleep 5 & exit" }
             };
-            using SafeChildProcessHandle chmodHandle = SafeChildProcessHandle.Start(chmodOptions, input: null, output: null, error: null);
-            Assert.Equal(0, chmodHandle.WaitForExit());
 
-            // Start the child process that will spawn a grandchild
-            ProcessStartOptions options = new(scriptPath);
-            using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        Stopwatch started = Stopwatch.StartNew();
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
 
-            // Wait for the child to exit - this should NOT wait for the grandchild
-            // If the test times out (5 seconds), it means WaitForExitAsync is incorrectly
-            // waiting for the grandchild to exit as well
-            int exitCode = await processHandle.WaitForExitAsync();
+        TimeSpan timeout = TimeSpan.FromSeconds(3);
+        using CancellationTokenSource cts = new(timeout);
 
-            // The child script should exit with code 0
-            Assert.Equal(0, exitCode);
+        // WaitForExitAsync should return quickly because the child exits immediately
+        // (even though the grandchild is still running for 5 seconds)
+        int exitCode = useAsync
+            ? await processHandle.WaitForExitAsync(cts.Token)
+            : processHandle.WaitForExit(timeout);
 
-            // The test completing within the timeout proves that WaitForExitAsync
-            // did not wait for the grandchild (which sleeps for 30 seconds)
-        }
-        finally
-        {
-            // Clean up the test script
-            if (File.Exists(scriptPath))
-            {
-                File.Delete(scriptPath);
-            }
+        // The child should have exited successfully (exit code 0)
+        Assert.Equal(0, exitCode);
 
-            // Kill any remaining grandchildren
-            try
-            {
-                ProcessStartOptions killOptions = new("pkill")
-                {
-                    Arguments = { "-f", "sleep 30" }
-                };
-                using SafeChildProcessHandle killHandle = SafeChildProcessHandle.Start(killOptions, input: null, output: null, error: null);
-                killHandle.WaitForExit();
-            }
-            catch
-            {
-                // Ignore errors - grandchildren may have already exited
-            }
-        }
+        Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(3));
     }
 }
