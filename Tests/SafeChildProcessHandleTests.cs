@@ -336,7 +336,9 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Theory]
+#if WINDOWS // https://github.com/adamsitnik/ProcessPlayground/issues/61
     [InlineData(true)]
+#endif
     [InlineData(false)]
     public async Task WaitForExit_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {
