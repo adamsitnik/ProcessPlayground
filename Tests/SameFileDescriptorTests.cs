@@ -10,8 +10,7 @@ namespace Tests;
 
 public class SameFileDescriptorTests
 {
-#if !WINDOWS
-    [Fact]
+    [Fact(Skip = ConditionalTests.UnixOnly)]
     public async Task CanUseSameSocketForStdinAndStdout_Unix()
     {
         // Create a socket pair - socket[0] and socket[1] are bidirectional
@@ -53,7 +52,7 @@ public class SameFileDescriptorTests
         Assert.Equal("Hello World\n", output);
     }
 
-    [Fact]
+    [Fact(Skip = ConditionalTests.UnixOnly)]
     public async Task CanUseSameSocketForStdinStdoutAndStderr_Unix()
     {
         // Create a socket pair
@@ -102,10 +101,8 @@ public class SameFileDescriptorTests
 
     [DllImport("libc", SetLastError = true)]
     private static extern int shutdown(int sockfd, int how);
-#endif
 
-#if WINDOWS
-    [Fact]
+    [Fact(Skip = ConditionalTests.WindowsOnly)]
     public async Task CanUseSameHandleForStdinAndStdout_Windows()
     {
         // Create a temporary file for bidirectional I/O
@@ -155,7 +152,7 @@ public class SameFileDescriptorTests
         }
     }
 
-    [Fact]
+    [Fact(Skip = ConditionalTests.WindowsOnly)]
     public async Task CanUseSameHandleForAllThreeStreams_Windows()
     {
         // Create a temporary file for bidirectional I/O
@@ -199,5 +196,4 @@ public class SameFileDescriptorTests
             }
         }
     }
-#endif
 }
