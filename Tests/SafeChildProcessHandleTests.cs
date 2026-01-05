@@ -383,12 +383,13 @@ public partial class SafeChildProcessHandleTests
 
         // Create a shell script that spawns a grandchild process
         string scriptPath = Path.Combine(Path.GetTempPath(), $"spawn_grandchild_{Guid.NewGuid():N}.sh");
-        await System.IO.File.WriteAllTextAsync(scriptPath, @"#!/bin/bash
+        await System.IO.File.WriteAllTextAsync(scriptPath, """
+#!/bin/bash
 # Spawn a long-running grandchild process in the background
 sleep 30 &
 # Exit immediately
 exit 0
-");
+""");
 
         try
         {
