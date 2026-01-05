@@ -54,6 +54,7 @@ public partial class SafeChildProcessHandle
         int stdout_fd,
         int stderr_fd,
         byte* working_dir,
+        int create_suspended,
         out int pid,
         out int pidfd,
         out int exit_pipe_fd);
@@ -119,6 +120,7 @@ public partial class SafeChildProcessHandle
 
     // Common constants
     private const int SIGKILL = 9;
+    private const int SIGCONT = 18;  // Continue signal
     private const int EINTR = 4;
     private const int ECHILD = 10;
     private const int ESRCH = 3;  // No such process
@@ -177,6 +179,7 @@ public partial class SafeChildProcessHandle
                 stdoutFd,
                 stderrFd,
                 workingDirPtr,
+                options.CreateSuspended ? 1 : 0,
                 out int pid,
                 out int pidfd,
                 out int exitPipeFd);
@@ -548,5 +551,26 @@ public partial class SafeChildProcessHandle
         
         // Any other error is unexpected
         throw new Win32Exception(errno, $"Failed to terminate process (errno={errno})");
+    }
+
+    private void ResumeCore()
+    {
+#if LINUX
+        // Use pidfd_send_signal to send SIGCONT
+        int result = syscall_pidfd_send_signal(__NR_pidfd_send_signal, this, SIGCONT, 0, 0);
+#else
+        // Use traditional kill to send SIGCONT
+        int result = kill(GetProcessIdCore(), SIGCONT);
+#endif
+        
+        if (result != 0)
+        {
+            int errno = Marshal.GetLastPInvokeError();
+            // ESRCH means the process doesn't exist - it may have already exited
+            if (errno != ESRCH)
+            {
+                throw new Win32Exception(errno, $"Failed to resume process (errno={errno})");
+            }
+        }
     }
 }

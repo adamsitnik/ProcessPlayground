@@ -21,6 +21,9 @@ public sealed class ProcessStartOptions
     // New: User very often implement it on their own.
     public bool KillOnParentDeath { get; set; }
 
+    // New: Create process in suspended state
+    public bool CreateSuspended { get; set; }
+
     // Internal property to check if environment was explicitly set
     internal bool HasEnvironmentBeenAccessed => _envVars != null;
 

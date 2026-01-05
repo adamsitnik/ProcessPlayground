@@ -116,6 +116,18 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
 
         KillCore(throwOnError: true);
     }
+
+    /// <summary>
+    /// Resumes a process that was started in suspended state.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when the handle is invalid or the process was not created suspended.</exception>
+    /// <exception cref="Win32Exception">Thrown when the resume operation fails.</exception>
+    public void Resume()
+    {
+        Validate();
+
+        ResumeCore();
+    }
     
     /// <summary>
     /// This is an INTERNAL method that can be used as PERF optimization

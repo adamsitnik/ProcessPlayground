@@ -11,6 +11,12 @@
 #ifdef __linux__
 #include <sys/syscall.h>
 #include <linux/sched.h>
+
+// waitid constants
+#ifndef WSTOPPED
+#define WSTOPPED 0x00000002
+#endif
+
 #endif
 
 // External variable containing the current environment.
@@ -56,6 +62,7 @@ static int create_cloexec_pipe(int pipefd[2]) {
 // If out_pid is not NULL, the PID of the child process is stored there
 // If out_pidfd is not NULL, the pidfd of the child process is stored there (Linux only, -1 on other platforms)
 // If out_exit_pipe_fd is not NULL, the read end of exit monitoring pipe is stored there
+// If create_suspended is non-zero, the child will stop itself with SIGSTOP before execve
 int spawn_process(
     const char* path,
     char* const argv[],
@@ -64,6 +71,7 @@ int spawn_process(
     int stdout_fd,
     int stderr_fd,
     const char* working_dir,
+    int create_suspended,
     int* out_pid,
     int* out_pidfd,
     int* out_exit_pipe_fd)
@@ -96,7 +104,9 @@ int spawn_process(
 #ifdef __linux__
     // On Linux, use clone3 to get pidfd atomically with fork
     struct clone_args args = {0};  // Zero-initialize
-    args.flags = CLONE_VFORK | CLONE_PIDFD;
+    // Use CLONE_VFORK for performance unless create_suspended is requested
+    // With create_suspended, we need the parent to wait for SIGSTOP, not vfork semantics
+    args.flags = (create_suspended ? 0 : CLONE_VFORK) | CLONE_PIDFD;
     args.pidfd = (uint64_t)(uintptr_t)&pidfd;
     args.exit_signal = SIGCHLD;
     
@@ -118,8 +128,8 @@ int spawn_process(
     
     if (clone_result == 0) {
 #else
-    // On non-Linux Unix, use vfork
-    child_pid = vfork();
+    // On non-Linux Unix, use regular fork when create_suspended, otherwise vfork for performance
+    child_pid = create_suspended ? fork() : vfork();
     
     if (child_pid == -1) {
         // Fork failed
@@ -198,6 +208,19 @@ int spawn_process(
             }
         }
         
+        // If create_suspended is requested, stop ourselves before execve
+        if (create_suspended) {
+            // Use tgkill to send SIGSTOP to ourselves
+            // This ensures we stop before execve
+            pid_t my_pid = getpid();
+            pid_t my_tid = syscall(SYS_gettid);
+            // const char msg[] = "SIGSTOP\n";
+            // write(2, msg, sizeof(msg)-1);
+            syscall(SYS_tgkill, my_pid, my_tid, SIGSTOP);
+            // const char msg2[] = "RESUMED\n";
+            // write(2, msg2, sizeof(msg2)-1);
+        }
+        
         // Execute the program
         // If envp is NULL, use the current environment (environ)
         char* const* env = (envp != NULL) ? envp : environ;
@@ -236,6 +259,44 @@ int spawn_process(
         close(exit_pipe[0]);
         errno = child_errno;
         return -1;
+    }
+    
+    // If create_suspended, wait for child to stop itself
+    if (create_suspended) {
+        // const char msg[] = "Parent: waiting for child to stop\n";
+        // write(2, msg, sizeof(msg)-1);
+        
+        int status;
+        // Use waitpid with WUNTRACED to wait for the child to stop
+        // Note: We use child_pid here, not pidfd, as WUNTRACED works with PIDs
+        if (waitpid(child_pid, &status, WUNTRACED) == -1) {
+            int saved_errno = errno;
+            // Clean up
+#ifdef __linux__
+            siginfo_t info;
+            waitid(P_PIDFD, pidfd, &info, WEXITED | WNOHANG);
+            close(pidfd);
+#else
+            waitpid(child_pid, &status, WNOHANG);
+#endif
+            close(exit_pipe[0]);
+            errno = saved_errno;
+            return -1;
+        }
+        
+        // Verify the child actually stopped
+        if (!WIFSTOPPED(status)) {
+            // Child exited or something unexpected happened
+#ifdef __linux__
+            close(pidfd);
+#endif
+            close(exit_pipe[0]);
+            errno = ECHILD;
+            return -1;
+        }
+        
+        // const char msg2[] = "Parent: child stopped successfully\n";
+        // write(2, msg2, sizeof(msg2)-1);
     }
     
     // Success - return PID, pidfd, and exit pipe fd if requested
