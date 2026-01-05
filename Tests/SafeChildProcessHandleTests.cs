@@ -13,17 +13,9 @@ public partial class SafeChildProcessHandleTests
 #endif
     public void GetProcessId_ReturnsValidPid_NotHandleOrDescriptor()
     {
-#if WINDOWS
-        ProcessStartOptions info = new("cmd.exe")
-        {
-            Arguments = { "/c", "echo test" },
-        };
-#else
-        ProcessStartOptions info = new("echo")
-        {
-            Arguments = { "test" },
-        };
-#endif
+        ProcessStartOptions info = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "echo test" } }
+            : new("echo") { Arguments = { "test" } };
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(info, input: null, output: null, error: null);
         int pid = processHandle.GetProcessId();
@@ -251,11 +243,7 @@ public partial class SafeChildProcessHandleTests
             int exitCode = processHandle.WaitForExit();
             // printenv returns 1 when variable not found (Linux)
             // Windows cmd /c echo returns 0 even if variable is not set
-#if !WINDOWS
-            Assert.Equal(1, exitCode); 
-#else
-            Assert.Equal(0, exitCode);
-#endif
+            Assert.Equal(OperatingSystem.IsWindows() ? 0 : 1, exitCode);
         }
         finally
         {
@@ -263,18 +251,9 @@ public partial class SafeChildProcessHandleTests
         }
     }
 
-    private static ProcessStartOptions CreatePrintEnvVarToOutputOptions(string testVarName) =>
-#if WINDOWS
-        new("cmd.exe")
-        {
-            Arguments = { "/c", "echo", $"%{testVarName}%" }
-        };
-#else
-        new("printenv")
-        {
-            Arguments = { testVarName }
-        };
-#endif
+    private static ProcessStartOptions CreatePrintEnvVarToOutputOptions(string testVarName) => OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "echo", $"%{testVarName}%" } }
+            : new("printenv") { Arguments = { testVarName } };
 
     private static string GetSingleOutputLine(ProcessStartOptions options)
     {
@@ -306,17 +285,9 @@ public partial class SafeChildProcessHandleTests
     public void Kill_KillsRunningProcess()
     {
         // Start a long-running process
-#if WINDOWS
-        ProcessStartOptions options = new("cmd.exe")
-        {
-            Arguments = { "/c", "timeout", "/t", "60", "/nobreak" }
-        };
-#else
-        ProcessStartOptions options = new("sleep")
-        {
-            Arguments = { "60" }
-        };
-#endif
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "timeout", "/t", "60", "/nobreak" } }
+            : new("sleep") { Arguments = { "60" } };
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
@@ -345,17 +316,9 @@ public partial class SafeChildProcessHandleTests
     public void Kill_CanBeCalledMultipleTimes()
     {
         // Start a long-running process
-#if WINDOWS
-        ProcessStartOptions options = new("cmd.exe")
-        {
-            Arguments = { "/c", "timeout", "/t", "60", "/nobreak" }
-        };
-#else
-        ProcessStartOptions options = new("sleep")
-        {
-            Arguments = { "60" }
-        };
-#endif
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "timeout", "/t", "60", "/nobreak" } }
+            : new("sleep") { Arguments = { "60" } };
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         

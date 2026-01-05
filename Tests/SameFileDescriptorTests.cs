@@ -10,9 +10,17 @@ namespace Tests;
 
 public class SameFileDescriptorTests
 {
+    public static TheoryData<bool> AndStdErrorData => new()
+    {
+        true,
+        false
+    };
+
 #if !WINDOWS
-    [Fact]
-    public async Task CanUseSameSocketForStdinAndStdout_Unix()
+    [Theory]
+#endif
+    [MemberData(nameof(AndStdErrorData))]
+    public async Task CanUseSameSocketForStdinAndStdout_Unix(bool andStdError)
     {
         // Create a socket pair - socket[0] and socket[1] are bidirectional
         int[] fds = new int[2];
@@ -30,7 +38,7 @@ public class SameFileDescriptorTests
             options,
             input: childSocket,
             output: childSocket,
-            error: null);
+            error: andStdError ? childSocket : null);
 
         // Note: childSocket is disposed by Start for output pipes
 
@@ -53,45 +61,6 @@ public class SameFileDescriptorTests
         Assert.Equal("Hello World\n", output);
     }
 
-    [Fact]
-    public async Task CanUseSameSocketForStdinStdoutAndStderr_Unix()
-    {
-        // Create a socket pair
-        int[] fds = new int[2];
-        Assert.Equal(0, socketpair(AF_UNIX, SOCK_STREAM, 0, fds));
-
-        using SafeFileHandle parentSocket = new((IntPtr)fds[0], ownsHandle: true);
-        using SafeFileHandle childSocket = new((IntPtr)fds[1], ownsHandle: true);
-
-        // Start a process with all three streams using the same socket
-        ProcessStartOptions options = new("cat");
-
-        // All three stdio streams use the same file descriptor
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
-            options,
-            input: childSocket,
-            output: childSocket,
-            error: childSocket);
-
-        // Write and read data
-        using FileStream parentStream = new(parentSocket, FileAccess.ReadWrite, bufferSize: 1, isAsync: false);
-        byte[] messageBytes = Encoding.UTF8.GetBytes("Test Message\n");
-        await parentStream.WriteAsync(messageBytes, 0, messageBytes.Length);
-        await parentStream.FlushAsync();
-
-        // Shutdown write side to signal EOF
-        Assert.Equal(0, shutdown((int)parentSocket.DangerousGetHandle(), SHUT_WR));
-
-        // Read back
-        byte[] buffer = new byte[1024];
-        int bytesRead = await parentStream.ReadAsync(buffer, 0, buffer.Length);
-        string output = Encoding.UTF8.GetString(buffer, 0, bytesRead);
-
-        await processHandle.WaitForExitAsync();
-
-        Assert.Equal("Test Message\n", output);
-    }
-
     // P/Invoke for Unix socketpair and shutdown
     private const int AF_UNIX = 1;
     private const int SOCK_STREAM = 1;
@@ -102,18 +71,19 @@ public class SameFileDescriptorTests
 
     [DllImport("libc", SetLastError = true)]
     private static extern int shutdown(int sockfd, int how);
-#endif
 
 #if WINDOWS
-    [Fact]
-    public async Task CanUseSameHandleForStdinAndStdout_Windows()
+    [Theory]
+#endif
+    [MemberData(nameof(AndStdErrorData))]
+    public async Task CanUseSameHandleForStdinAndStdout_Windows(bool andStdError)
     {
         // Create a temporary file for bidirectional I/O
         string tempFile = Path.GetTempFileName();
         try
         {
             // Write test data to the file before opening the handle to avoid lock conflicts
-            System.IO.File.WriteAllText(tempFile, "Test Line\n");
+            File.WriteAllText(tempFile, "Test Line\n");
 
             SafeFileHandle fileHandle = File.OpenHandle(
                 tempFile,
@@ -133,7 +103,7 @@ public class SameFileDescriptorTests
                 options,
                 input: fileHandle,
                 output: fileHandle,
-                error: null);
+                error: andStdError ? fileHandle : null);
 
             // Close the file handle after starting the process to avoid file locking issues
             fileHandle.Dispose();
@@ -142,62 +112,16 @@ public class SameFileDescriptorTests
             await processHandle.WaitForExitAsync();
 
             // Read the output from the file
-            string output = System.IO.File.ReadAllText(tempFile);
+            string output = File.ReadAllText(tempFile);
 
             Assert.Equal("Test Line\nTest Line\n", output, ignoreLineEndingDifferences: true);
         }
         finally
         {
-            if (System.IO.File.Exists(tempFile))
+            if (File.Exists(tempFile))
             {
-                System.IO.File.Delete(tempFile);
+                File.Delete(tempFile);
             }
         }
     }
-
-    [Fact]
-    public async Task CanUseSameHandleForAllThreeStreams_Windows()
-    {
-        // Create a temporary file for bidirectional I/O
-        string tempFile = Path.GetTempFileName();
-        try
-        {
-            // Write test data to the file before opening the handle to avoid lock conflicts
-            System.IO.File.WriteAllText(tempFile, "Test Line\n");
-
-            SafeFileHandle fileHandle = File.OpenHandle(
-                tempFile,
-                FileMode.OpenOrCreate,
-                FileAccess.ReadWrite,
-                FileShare.ReadWrite);
-
-            ProcessStartOptions options = new("cmd.exe")
-            {
-                Arguments = { "/c", "findstr", ".*" }
-            };
-
-            // All three stdio streams use the same file handle
-            using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
-                options,
-                input: fileHandle,
-                output: fileHandle,
-                error: fileHandle);
-
-            // Close the file handle after starting the process to avoid file locking issues
-            fileHandle.Dispose();
-
-            await processHandle.WaitForExitAsync();
-
-            string output = System.IO.File.ReadAllText(tempFile);
-            Assert.Equal("Test Line\nTest Line\n", output, ignoreLineEndingDifferences: true);
-        }
-        finally
-        {
-            if (System.IO.File.Exists(tempFile))
-            {
-                System.IO.File.Delete(tempFile);
-            }
-        }
-    }
-#endif
 }
