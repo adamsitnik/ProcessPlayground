@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.TBA;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
 
 namespace Tests;
@@ -330,5 +333,46 @@ public partial class SafeChildProcessHandleTests
         
         // Second should not throw
         processHandle.Kill();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task WaitForExit_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
+    {
+        // This test verifies that WaitForExitAsync returns when the direct child process exits,
+        // even if that child has spawned a grandchild process that is still running.
+        // This is important because:
+        // - On Windows, process handles are specific to a single process
+        // - On Linux with pidfd, the descriptor tracks only the direct child
+        // The grandchild becomes orphaned and is reparented to init/systemd
+
+        // This spawns a grandchild and then the child exits immediately
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe")
+            {
+                Arguments = { "/c", "start", "cmd.exe", "/c", "timeout", "/t", "5", "/nobreak", "&&", "exit" }
+            }
+            : new("sh")
+            {
+                Arguments = { "-c", "sleep 5 & exit" }
+            };
+
+        Stopwatch started = Stopwatch.StartNew();
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+
+        TimeSpan timeout = TimeSpan.FromSeconds(3);
+        using CancellationTokenSource cts = new(timeout);
+
+        // WaitForExitAsync should return quickly because the child exits immediately
+        // (even though the grandchild is still running for 5 seconds)
+        int exitCode = useAsync
+            ? await processHandle.WaitForExitAsync(cts.Token)
+            : processHandle.WaitForExit(timeout);
+
+        // The child should have exited successfully (exit code 0)
+        Assert.Equal(0, exitCode);
+
+        Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(3));
     }
 }
