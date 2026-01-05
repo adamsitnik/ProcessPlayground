@@ -12,6 +12,9 @@ public partial class SafeChildProcessHandle
 {
     // Static job object used for KillOnParentDeath functionality
     // All child processes with KillOnParentDeath=true are assigned to this job
+    // Note: The job handle is intentionally never closed - it should live for the
+    // lifetime of the process. When this process exits, the job object is destroyed
+    // by the OS, which terminates all child processes in the job.
     private static readonly Lazy<IntPtr> s_killOnParentDeathJob = new(CreateKillOnParentDeathJob);
 
     private static IntPtr CreateKillOnParentDeathJob()
@@ -127,26 +130,20 @@ public partial class SafeChildProcessHandle
                         }
 
                         // Update the attribute list with the job handle
-                        IntPtr jobHandlePtr = Marshal.AllocHGlobal(IntPtr.Size);
-                        try
+                        // Use stack allocation for the job handle pointer
+                        IntPtr* pJobHandle = stackalloc IntPtr[1];
+                        pJobHandle[0] = jobHandle;
+                        
+                        if (!Interop.Kernel32.UpdateProcThreadAttribute(
+                            attributeList,
+                            0,
+                            Interop.Kernel32.PROC_THREAD_ATTRIBUTE_JOB_LIST,
+                            (IntPtr)pJobHandle,
+                            (nuint)IntPtr.Size,
+                            IntPtr.Zero,
+                            IntPtr.Zero))
                         {
-                            Marshal.WriteIntPtr(jobHandlePtr, jobHandle);
-                            
-                            if (!Interop.Kernel32.UpdateProcThreadAttribute(
-                                attributeList,
-                                0,
-                                Interop.Kernel32.PROC_THREAD_ATTRIBUTE_JOB_LIST,
-                                jobHandlePtr,
-                                (nuint)IntPtr.Size,
-                                IntPtr.Zero,
-                                IntPtr.Zero))
-                            {
-                                throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to update proc thread attribute");
-                            }
-                        }
-                        finally
-                        {
-                            Marshal.FreeHGlobal(jobHandlePtr);
+                            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to update proc thread attribute");
                         }
 
                         // Set up the STARTUPINFOEX structure

@@ -152,6 +152,9 @@ int spawn_process(
             }
             
             // Close the race: parent may have already died before prctl() ran.
+            // Note: This checks if we've been reparented to init (PID 1).
+            // In containers or systems with different init systems, this may not
+            // work perfectly, but it's the standard approach for this functionality.
             if (getppid() == 1) {
                 // Parent already gone; we've been reparented to init.
                 // Exit immediately to honor the kill-on-parent-death contract.
