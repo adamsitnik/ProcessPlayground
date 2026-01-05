@@ -56,7 +56,8 @@ public partial class SafeChildProcessHandle
         byte* working_dir,
         out int pid,
         out int pidfd,
-        out int exit_pipe_fd);
+        out int exit_pipe_fd,
+        int kill_on_parent_death);
 
     // Shared declarations for both Linux and non-Linux Unix
     [StructLayout(LayoutKind.Sequential)]
@@ -179,7 +180,8 @@ public partial class SafeChildProcessHandle
                 workingDirPtr,
                 out int pid,
                 out int pidfd,
-                out int exitPipeFd);
+                out int exitPipeFd,
+                options.KillOnParentDeath ? 1 : 0);
 
             if (result == -1)
             {

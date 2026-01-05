@@ -10,6 +10,25 @@ namespace Microsoft.Win32.SafeHandles;
 
 public partial class SafeChildProcessHandle
 {
+    // Static job object used for KillOnParentDeath functionality
+    // All child processes with KillOnParentDeath=true are assigned to this job
+    private static readonly Lazy<IntPtr> s_killOnParentDeathJob = new(CreateKillOnParentDeathJob);
+
+    private static IntPtr CreateKillOnParentDeathJob()
+    {
+        // Create a job object without a name (anonymous)
+        IntPtr jobHandle = Interop.Kernel32.CreateJobObjectW(IntPtr.Zero, IntPtr.Zero);
+        if (jobHandle == IntPtr.Zero)
+        {
+            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to create job object for KillOnParentDeath");
+        }
+
+        // When the last process handle in the job is closed (this process exits),
+        // all processes in the job are terminated automatically.
+        // This is the default behavior of job objects, so we don't need to configure anything else.
+        return jobHandle;
+    }
+
     protected override bool ReleaseHandle()
     {
         return Interop.Kernel32.CloseHandle(handle);
@@ -40,7 +59,6 @@ public partial class SafeChildProcessHandle
         ValueStringBuilder commandLine = new(stackalloc char[256]);
         ProcessUtils.BuildCommandLine(options, ref commandLine);
 
-        Interop.Kernel32.STARTUPINFO startupInfo = default;
         Interop.Kernel32.PROCESS_INFORMATION processInfo = default;
         Interop.Kernel32.SECURITY_ATTRIBUTES unused_SecAttrs = default;
         SafeChildProcessHandle? procSH = null;
@@ -69,14 +87,6 @@ public partial class SafeChildProcessHandle
 
             try
             {
-                startupInfo.cb = sizeof(Interop.Kernel32.STARTUPINFO);
-
-                startupInfo.hStdInput = duplicatedInput.DangerousGetHandle();
-                startupInfo.hStdOutput = duplicatedOutput.DangerousGetHandle();
-                startupInfo.hStdError = duplicatedError.DangerousGetHandle();
-
-                startupInfo.dwFlags = Interop.Advapi32.StartupInfoOptions.STARTF_USESTDHANDLES;
-
                 int creationFlags = 0;
                 if (options.CreateNoWindow) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NO_WINDOW;
 
@@ -91,23 +101,120 @@ public partial class SafeChildProcessHandle
                 int errorCode = 0;
 
                 commandLine.NullTerminate();
-                fixed (char* environmentBlockPtr = environmentBlock)
-                fixed (char* commandLinePtr = &commandLine.GetPinnableReference())
+
+                if (options.KillOnParentDeath)
                 {
-                    bool retVal = Interop.Kernel32.CreateProcess(
-                        null,                // we don't need this since all the info is in commandLine
-                        commandLinePtr,      // pointer to the command line string
-                        ref unused_SecAttrs, // address to process security attributes, we don't need to inherit the handle
-                        ref unused_SecAttrs, // address to thread security attributes.
-                        true,                // handle inheritance flag
-                        creationFlags,       // creation flags
-                        (IntPtr)environmentBlockPtr, // pointer to new environment block
-                        workingDirectory,    // pointer to current directory name
-                        ref startupInfo,     // pointer to STARTUPINFO
-                        ref processInfo      // pointer to PROCESS_INFORMATION
-                    );
-                    if (!retVal)
-                        errorCode = Marshal.GetLastPInvokeError();
+                    // Use STARTUPINFOEX with job list attribute
+                    Interop.Kernel32.STARTUPINFOEX startupInfoEx = default;
+                    IntPtr attributeList = IntPtr.Zero;
+
+                    try
+                    {
+                        // Get the job handle (creates it on first access)
+                        IntPtr jobHandle = s_killOnParentDeathJob.Value;
+
+                        // Determine the size needed for the attribute list
+                        nuint size = 0;
+                        Interop.Kernel32.InitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
+                        
+                        // Allocate the attribute list
+                        attributeList = Marshal.AllocHGlobal((int)size);
+                        
+                        // Initialize the attribute list
+                        if (!Interop.Kernel32.InitializeProcThreadAttributeList(attributeList, 1, 0, ref size))
+                        {
+                            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to initialize proc thread attribute list");
+                        }
+
+                        // Update the attribute list with the job handle
+                        IntPtr jobHandlePtr = Marshal.AllocHGlobal(IntPtr.Size);
+                        try
+                        {
+                            Marshal.WriteIntPtr(jobHandlePtr, jobHandle);
+                            
+                            if (!Interop.Kernel32.UpdateProcThreadAttribute(
+                                attributeList,
+                                0,
+                                Interop.Kernel32.PROC_THREAD_ATTRIBUTE_JOB_LIST,
+                                jobHandlePtr,
+                                (nuint)IntPtr.Size,
+                                IntPtr.Zero,
+                                IntPtr.Zero))
+                            {
+                                throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to update proc thread attribute");
+                            }
+                        }
+                        finally
+                        {
+                            Marshal.FreeHGlobal(jobHandlePtr);
+                        }
+
+                        // Set up the STARTUPINFOEX structure
+                        startupInfoEx.StartupInfo.cb = sizeof(Interop.Kernel32.STARTUPINFOEX);
+                        startupInfoEx.StartupInfo.hStdInput = duplicatedInput.DangerousGetHandle();
+                        startupInfoEx.StartupInfo.hStdOutput = duplicatedOutput.DangerousGetHandle();
+                        startupInfoEx.StartupInfo.hStdError = duplicatedError.DangerousGetHandle();
+                        startupInfoEx.StartupInfo.dwFlags = Interop.Advapi32.StartupInfoOptions.STARTF_USESTDHANDLES;
+                        startupInfoEx.lpAttributeList = attributeList;
+
+                        creationFlags |= Interop.Advapi32.StartupInfoOptions.EXTENDED_STARTUPINFO_PRESENT;
+
+                        fixed (char* environmentBlockPtr = environmentBlock)
+                        fixed (char* commandLinePtr = &commandLine.GetPinnableReference())
+                        {
+                            bool retVal = Interop.Kernel32.CreateProcessWithStartupInfoEx(
+                                null,                // we don't need this since all the info is in commandLine
+                                commandLinePtr,      // pointer to the command line string
+                                ref unused_SecAttrs, // address to process security attributes, we don't need to inherit the handle
+                                ref unused_SecAttrs, // address to thread security attributes.
+                                true,                // handle inheritance flag
+                                creationFlags,       // creation flags
+                                (IntPtr)environmentBlockPtr, // pointer to new environment block
+                                workingDirectory,    // pointer to current directory name
+                                ref startupInfoEx,   // pointer to STARTUPINFOEX
+                                ref processInfo      // pointer to PROCESS_INFORMATION
+                            );
+                            if (!retVal)
+                                errorCode = Marshal.GetLastPInvokeError();
+                        }
+                    }
+                    finally
+                    {
+                        if (attributeList != IntPtr.Zero)
+                        {
+                            Interop.Kernel32.DeleteProcThreadAttributeList(attributeList);
+                            Marshal.FreeHGlobal(attributeList);
+                        }
+                    }
+                }
+                else
+                {
+                    // Use regular STARTUPINFO
+                    Interop.Kernel32.STARTUPINFO startupInfo = default;
+                    startupInfo.cb = sizeof(Interop.Kernel32.STARTUPINFO);
+                    startupInfo.hStdInput = duplicatedInput.DangerousGetHandle();
+                    startupInfo.hStdOutput = duplicatedOutput.DangerousGetHandle();
+                    startupInfo.hStdError = duplicatedError.DangerousGetHandle();
+                    startupInfo.dwFlags = Interop.Advapi32.StartupInfoOptions.STARTF_USESTDHANDLES;
+
+                    fixed (char* environmentBlockPtr = environmentBlock)
+                    fixed (char* commandLinePtr = &commandLine.GetPinnableReference())
+                    {
+                        bool retVal = Interop.Kernel32.CreateProcess(
+                            null,                // we don't need this since all the info is in commandLine
+                            commandLinePtr,      // pointer to the command line string
+                            ref unused_SecAttrs, // address to process security attributes, we don't need to inherit the handle
+                            ref unused_SecAttrs, // address to thread security attributes.
+                            true,                // handle inheritance flag
+                            creationFlags,       // creation flags
+                            (IntPtr)environmentBlockPtr, // pointer to new environment block
+                            workingDirectory,    // pointer to current directory name
+                            ref startupInfo,     // pointer to STARTUPINFO
+                            ref processInfo      // pointer to PROCESS_INFORMATION
+                        );
+                        if (!retVal)
+                            errorCode = Marshal.GetLastPInvokeError();
+                    }
                 }
 
                 if (processInfo.hProcess != IntPtr.Zero && processInfo.hProcess != new IntPtr(-1))
