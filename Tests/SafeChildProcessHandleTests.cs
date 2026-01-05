@@ -372,6 +372,7 @@ public partial class SafeChildProcessHandleTests
 
 #if !WINDOWS
     [Fact(Timeout = 5000)]
+#endif
     public async Task WaitForExitAsync_DoesNotWaitForGrandchildren()
     {
         // This test ensures that WaitForExitAsync returns as soon as the child process exits,
@@ -383,7 +384,7 @@ public partial class SafeChildProcessHandleTests
 
         // Create a shell script that spawns a grandchild process
         string scriptPath = Path.Combine(Path.GetTempPath(), $"spawn_grandchild_{Guid.NewGuid():N}.sh");
-        await System.IO.File.WriteAllTextAsync(scriptPath, """
+        await File.WriteAllTextAsync(scriptPath, """
 #!/bin/bash
 # Spawn a long-running grandchild process in the background
 sleep 30 &
@@ -399,11 +400,10 @@ exit 0
                 Arguments = { "+x", scriptPath }
             };
             using SafeChildProcessHandle chmodHandle = SafeChildProcessHandle.Start(chmodOptions, input: null, output: null, error: null);
-            chmodHandle.WaitForExit();
+            Assert.Equal(0, chmodHandle.WaitForExit());
 
             // Start the child process that will spawn a grandchild
             ProcessStartOptions options = new(scriptPath);
-
             using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
 
             // Wait for the child to exit - this should NOT wait for the grandchild
@@ -420,9 +420,9 @@ exit 0
         finally
         {
             // Clean up the test script
-            if (System.IO.File.Exists(scriptPath))
+            if (File.Exists(scriptPath))
             {
-                System.IO.File.Delete(scriptPath);
+                File.Delete(scriptPath);
             }
 
             // Kill any remaining grandchildren
@@ -441,5 +441,4 @@ exit 0
             }
         }
     }
-#endif
 }
