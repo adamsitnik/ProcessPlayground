@@ -7,7 +7,7 @@
     <IsPackable>false</IsPackable>
     <LangVersion>preview</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <NoWarn>$(NoWarn);xUnit1013</NoWarn>
+    <NoWarn>$(NoWarn);xUnit1013;xUnit1008</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(OS)' == 'Windows_NT' OR '$(TargetFrameworkIdentifier)' == '.NETFramework'">
