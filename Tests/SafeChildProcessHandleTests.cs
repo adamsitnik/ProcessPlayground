@@ -379,4 +379,32 @@ public partial class SafeChildProcessHandleTests
 
         Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(3));
     }
+
+    [Fact]
+    public void KillOnParentDeath_CanBeSetToTrue()
+    {
+        // Simple test to verify the property can be set
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "echo test" }, KillOnParentDeath = true }
+            : new("echo") { Arguments = { "test" }, KillOnParentDeath = true };
+
+        Assert.True(options.KillOnParentDeath);
+
+        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
+            options,
+            input: null,
+            output: nullHandle,
+            error: nullHandle);
+
+        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+        Assert.Equal(0, exitCode);
+    }
+
+    [Fact]
+    public void KillOnParentDeath_DefaultsToFalse()
+    {
+        ProcessStartOptions options = new("test");
+        Assert.False(options.KillOnParentDeath);
+    }
 }
