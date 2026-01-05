@@ -1,11 +1,7 @@
-using System.Text;
 using System.IO;
-using System.Threading;
-using System.Linq;
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-﻿using System.TBA;
+using System.TBA;
 using Microsoft.Win32.SafeHandles;
 
 namespace Tests;
@@ -62,11 +58,7 @@ public class PipingTests
                 await consumerHandle.WaitForExitAsync();
             }
 
-#if NETFRAMEWORK
             string result = File.ReadAllText("output.txt");
-#else
-            string result = await File.ReadAllTextAsync("output.txt");
-#endif
             Assert.Equal(expectedOutput, result, ignoreLineEndingDifferences: true);
         }
     }

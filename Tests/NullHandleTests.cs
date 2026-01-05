@@ -1,11 +1,6 @@
-using System.Text;
 using System.IO;
-using System.Threading;
-using System.Linq;
-using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-﻿using Microsoft.Win32.SafeHandles;
+using Microsoft.Win32.SafeHandles;
 
 namespace Tests;
 
@@ -39,11 +34,7 @@ public class NullHandleTests
         using SafeFileHandle handle = File.OpenNullFileHandle();
         using FileStream stream = new(handle, FileAccess.Write, bufferSize: 1);
 
-#if NETFRAMEWORK
         await stream.WriteAsync(new byte[100], 0, 100);
-#else
-        await stream.WriteAsync(new byte[100]);
-#endif
         stream.Write(new byte[100], 0, 100);
     }
 
