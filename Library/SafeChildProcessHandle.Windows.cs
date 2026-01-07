@@ -87,7 +87,7 @@ public partial class SafeChildProcessHandle
             Interop.Kernel32.InitializeProcThreadAttributeList(emptyList, 1, 0, ref size);
             
             attributeListBuffer = Marshal.AllocHGlobal(size);
-            attributeList.AttributeList = (void*)attributeListBuffer;
+            attributeList.AttributeList = attributeListBuffer;
             
             // Actually initialize the attribute list
             if (!Interop.Kernel32.InitializeProcThreadAttributeList(attributeList, 1, 0, ref size))
@@ -139,7 +139,7 @@ public partial class SafeChildProcessHandle
                     ref unused_SecAttrs, // address to thread security attributes.
                     true,                // handle inheritance flag (but only handles in attribute list will be inherited)
                     creationFlags,       // creation flags (includes EXTENDED_STARTUPINFO_PRESENT)
-                    (IntPtr)environmentBlockPtr, // pointer to new environment block
+                    environmentBlockPtr, // pointer to new environment block
                     workingDirectory,    // pointer to current directory name
                     ref startupInfoEx,   // pointer to STARTUPINFOEX
                     ref processInfo      // pointer to PROCESS_INFORMATION
@@ -177,6 +177,10 @@ public partial class SafeChildProcessHandle
 
         static SafeFileHandle Duplicate(SafeFileHandle sourceHandle, nint currentProcHandle)
         {
+            // From https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute:
+            // PROC_THREAD_ATTRIBUTE_HANDLE_LIST: "These handles must be created as inheritable handles and must not include pseudo handles".
+            // To ensure the handles we pass are inheritable, they are duplicated here.
+
             if (!Interop.Kernel32.DuplicateHandle(
                 currentProcHandle,
                 sourceHandle,
