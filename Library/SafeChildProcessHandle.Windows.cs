@@ -46,6 +46,7 @@ public partial class SafeChildProcessHandle
         SafeChildProcessHandle? procSH = null;
         IntPtr currentProcHandle = Interop.Kernel32.GetCurrentProcess();
         IntPtr attributeListBuffer = IntPtr.Zero;
+        Interop.Kernel32.LPPROC_THREAD_ATTRIBUTE_LIST attributeList = default;
 
         // In certain scenarios, the same handle may be passed for multiple stdio streams:
         // - NUL file for all three
@@ -82,13 +83,13 @@ public partial class SafeChildProcessHandle
             IntPtr size = IntPtr.Zero;
             Interop.Kernel32.LPPROC_THREAD_ATTRIBUTE_LIST emptyList = default;
             
-            // Get required size for attribute list
+            // Get required size for attribute list (first call is expected to fail)
             Interop.Kernel32.InitializeProcThreadAttributeList(emptyList, 1, 0, ref size);
             
             attributeListBuffer = Marshal.AllocHGlobal(size);
-            Interop.Kernel32.LPPROC_THREAD_ATTRIBUTE_LIST attributeList = default;
             attributeList.AttributeList = (void*)attributeListBuffer;
             
+            // Actually initialize the attribute list
             if (!Interop.Kernel32.InitializeProcThreadAttributeList(attributeList, 1, 0, ref size))
             {
                 throw new Win32Exception();
@@ -166,8 +167,6 @@ public partial class SafeChildProcessHandle
         {
             if (attributeListBuffer != IntPtr.Zero)
             {
-                Interop.Kernel32.LPPROC_THREAD_ATTRIBUTE_LIST attributeList = default;
-                attributeList.AttributeList = (void*)attributeListBuffer;
                 Interop.Kernel32.DeleteProcThreadAttributeList(attributeList);
                 Marshal.FreeHGlobal(attributeListBuffer);
             }
