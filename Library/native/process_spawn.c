@@ -100,9 +100,9 @@ int spawn_process(
     }
     
     // Create resume pipe if create_suspended is requested
-    // Note: This pipe should NOT have CLOEXEC so the child can use it
+    // Use CLOEXEC so the pipe is automatically closed after execve
     if (create_suspended) {
-        if (pipe(resume_pipe) != 0) {
+        if (create_cloexec_pipe(resume_pipe) != 0) {
             int saved_errno = errno;
             close(wait_pipe[0]);
             close(wait_pipe[1]);
@@ -123,7 +123,7 @@ int spawn_process(
     // On Linux, use clone3 to get pidfd atomically with fork
     struct clone_args args = {0};  // Zero-initialize
     // Use CLONE_VFORK for performance unless create_suspended is requested
-    // With create_suspended, we need the parent to wait for SIGSTOP, not vfork semantics
+    // With create_suspended, we need the parent to be able to write to resume pipe while child is blocked reading
     args.flags = (create_suspended ? 0 : CLONE_VFORK) | CLONE_PIDFD;
     args.pidfd = (uint64_t)(uintptr_t)&pidfd;
     args.exit_signal = SIGCHLD;
