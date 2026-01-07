@@ -63,7 +63,8 @@ static int create_cloexec_pipe(int pipefd[2]) {
 // If out_pid is not NULL, the PID of the child process is stored there
 // If out_pidfd is not NULL, the pidfd of the child process is stored there (Linux only, -1 on other platforms)
 // If out_exit_pipe_fd is not NULL, the read end of exit monitoring pipe is stored there
-// If create_suspended is non-zero, the child will stop itself with SIGSTOP before execve
+// If create_suspended is non-zero, the child will block on a pipe read before execve
+// If out_resume_pipe_fd is not NULL and create_suspended is non-zero, the write end of the resume pipe is stored there
 int spawn_process(
     const char* path,
     char* const argv[],
@@ -75,10 +76,12 @@ int spawn_process(
     int create_suspended,
     int* out_pid,
     int* out_pidfd,
-    int* out_exit_pipe_fd)
+    int* out_exit_pipe_fd,
+    int* out_resume_pipe_fd)
 {
     int wait_pipe[2];
     int exit_pipe[2];
+    int resume_pipe[2] = {-1, -1};
     int pidfd = -1;
     sigset_t all_signals, old_signals;
     
@@ -94,6 +97,20 @@ int spawn_process(
         close(wait_pipe[1]);
         errno = saved_errno;
         return -1;
+    }
+    
+    // Create resume pipe if create_suspended is requested
+    // Note: This pipe should NOT have CLOEXEC so the child can use it
+    if (create_suspended) {
+        if (pipe(resume_pipe) != 0) {
+            int saved_errno = errno;
+            close(wait_pipe[0]);
+            close(wait_pipe[1]);
+            close(exit_pipe[0]);
+            close(exit_pipe[1]);
+            errno = saved_errno;
+            return -1;
+        }
     }
     
     // Block all signals before forking
@@ -121,6 +138,10 @@ int spawn_process(
         close(wait_pipe[1]);
         close(exit_pipe[0]);
         close(exit_pipe[1]);
+        if (resume_pipe[0] != -1) {
+            close(resume_pipe[0]);
+            close(resume_pipe[1]);
+        }
         errno = saved_errno;
         return -1;
     }
@@ -140,6 +161,10 @@ int spawn_process(
         close(wait_pipe[1]);
         close(exit_pipe[0]);
         close(exit_pipe[1]);
+        if (resume_pipe[0] != -1) {
+            close(resume_pipe[0]);
+            close(resume_pipe[1]);
+        }
         errno = saved_errno;
         return -1;
     }
@@ -209,18 +234,21 @@ int spawn_process(
             }
         }
         
-        // If create_suspended is requested, stop ourselves before execve
+        // If create_suspended, block on resume pipe before execve
         if (create_suspended) {
-#ifdef __linux__
-            // On Linux, use tgkill to send SIGSTOP to the specific thread
-            // This ensures we stop before execve
-            pid_t my_pid = getpid();
-            pid_t my_tid = syscall(SYS_gettid);
-            syscall(SYS_tgkill, my_pid, my_tid, SIGSTOP);
-#else
-            // On macOS and other systems with pthreads
-            pthread_kill(pthread_self(), SIGSTOP);
-#endif
+            // Close write end of resume pipe (parent owns it)
+            close(resume_pipe[1]);
+            
+            // Perform blocking read from resume pipe
+            // This will block until parent writes to the pipe (Resume() is called)
+            char dummy;
+            (void)read(resume_pipe[0], &dummy, 1);
+            
+            // Close read end after unblocking
+            close(resume_pipe[0]);
+            
+            // If read failed (shouldn't happen in normal operation), proceed anyway
+            // The process will exec regardless
         }
         
         // Execute the program
@@ -243,8 +271,13 @@ int spawn_process(
     // Close write end of exit pipe (child owns it)
     close(exit_pipe[1]);
     
+    // Close read end of resume pipe if created (parent only needs write end)
+    if (resume_pipe[0] != -1) {
+        close(resume_pipe[0]);
+    }
+    
     // If create_suspended, we don't wait for the wait_pipe because the child
-    // will stop before exec. We'll wait for SIGSTOP instead.
+    // will be blocked on the resume pipe before exec. We'll return immediately.
     if (!create_suspended) {
         // Wait for child to exec or fail
         int child_errno = 0;
@@ -262,6 +295,9 @@ int spawn_process(
             waitpid(child_pid, &status, 0);
 #endif
             close(exit_pipe[0]);
+            if (resume_pipe[1] != -1) {
+                close(resume_pipe[1]);
+            }
             errno = child_errno;
             return -1;
         }
@@ -270,39 +306,7 @@ int spawn_process(
         close(wait_pipe[0]);
     }
     
-    // If create_suspended, wait for child to stop itself
-    if (create_suspended) {
-        int status;
-        // Use waitpid with WUNTRACED to wait for the child to stop
-        // Note: We use child_pid here, not pidfd, as WUNTRACED works with PIDs
-        if (waitpid(child_pid, &status, WUNTRACED) == -1) {
-            int saved_errno = errno;
-            // Clean up
-#ifdef __linux__
-            siginfo_t info;
-            waitid(P_PIDFD, pidfd, &info, WEXITED | WNOHANG);
-            close(pidfd);
-#else
-            waitpid(child_pid, &status, WNOHANG);
-#endif
-            close(exit_pipe[0]);
-            errno = saved_errno;
-            return -1;
-        }
-        
-        // Verify the child actually stopped
-        if (!WIFSTOPPED(status)) {
-            // Child exited or something unexpected happened
-#ifdef __linux__
-            close(pidfd);
-#endif
-            close(exit_pipe[0]);
-            errno = ECHILD;
-            return -1;
-        }
-    }
-    
-    // Success - return PID, pidfd, and exit pipe fd if requested
+    // Success - return PID, pidfd, exit pipe fd, and resume pipe fd if requested
     if (out_pid != NULL) {
         *out_pid = child_pid;
     }
@@ -315,6 +319,9 @@ int spawn_process(
     }
     if (out_exit_pipe_fd != NULL) {
         *out_exit_pipe_fd = exit_pipe[0];
+    }
+    if (out_resume_pipe_fd != NULL) {
+        *out_resume_pipe_fd = resume_pipe[1];
     }
     return 0;
 }
