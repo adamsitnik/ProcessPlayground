@@ -218,9 +218,8 @@ int spawn_process(
             pid_t my_tid = syscall(SYS_gettid);
             syscall(SYS_tgkill, my_pid, my_tid, SIGSTOP);
 #else
-            // On macOS and other Unix systems, use raise() to send SIGSTOP to ourselves
-            // raise() is POSIX-compliant and works on all platforms
-            raise(SIGSTOP);
+            // On macOS and other BSD systems, use kill() with our own PID
+            kill(getpid(), SIGSTOP);
 #endif
         }
         
