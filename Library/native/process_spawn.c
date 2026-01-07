@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdint.h>
+#include <pthread.h>
 
 #ifdef __linux__
 #include <sys/syscall.h>
@@ -210,11 +211,17 @@ int spawn_process(
         
         // If create_suspended is requested, stop ourselves before execve
         if (create_suspended) {
-            // Use tgkill to send SIGSTOP to ourselves
+#ifdef __linux__
+            // On Linux, use tgkill to send SIGSTOP to the specific thread
             // This ensures we stop before execve
             pid_t my_pid = getpid();
             pid_t my_tid = syscall(SYS_gettid);
             syscall(SYS_tgkill, my_pid, my_tid, SIGSTOP);
+#else
+            // On macOS and other Unix systems, use raise() to send SIGSTOP to ourselves
+            // raise() is POSIX-compliant and works on all platforms
+            raise(SIGSTOP);
+#endif
         }
         
         // Execute the program
