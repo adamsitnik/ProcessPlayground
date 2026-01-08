@@ -299,4 +299,25 @@ public class CreateSuspendedTests
 
         processHandle.WaitForExit(TimeSpan.FromSeconds(5));
     }
+
+    [Fact]
+    public void SuspendedProcess_WithKillOnParentDeath_WorksAfterResume()
+    {
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "echo", "test" }, CreateSuspended = true, KillOnParentDeath = true }
+            : new("echo") { Arguments = { "test" }, CreateSuspended = true, KillOnParentDeath = true };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+
+        // Process should be valid
+        int pid = processHandle.GetProcessId();
+        Assert.True(pid > 0);
+
+        // Resume the process
+        processHandle.Resume();
+
+        // Process should complete successfully
+        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+        Assert.Equal(0, exitCode);
+    }
 }
