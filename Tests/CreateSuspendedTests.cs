@@ -230,7 +230,7 @@ public class CreateSuspendedTests
     public void SuspendedProcess_WithWorkingDirectory_WorksAfterResume()
     {
         string tempDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-        Directory.CreateDirectory(tempDir);
+        DirectoryInfo dirInfo = Directory.CreateDirectory(tempDir);
 
         try
         {
@@ -238,12 +238,12 @@ public class CreateSuspendedTests
                 ? new("cmd.exe") 
                 { 
                     Arguments = { "/c", "cd" }, 
-                    WorkingDirectory = new DirectoryInfo(tempDir),
+                    WorkingDirectory = dirInfo,
                     CreateSuspended = true 
                 }
                 : new("pwd") 
                 { 
-                    WorkingDirectory = new DirectoryInfo(tempDir),
+                    WorkingDirectory = dirInfo,
                     CreateSuspended = true 
                 };
 
@@ -268,7 +268,7 @@ public class CreateSuspendedTests
                 
                 // Normalize paths for comparison (handle case differences on Windows)
                 string normalizedOutput = output?.Trim().Replace('\\', '/').ToLowerInvariant() ?? "";
-                string normalizedExpected = tempDir.Replace('\\', '/').ToLowerInvariant();
+                string normalizedExpected = dirInfo.FullName.Replace('\\', '/').ToLowerInvariant();
                 
                 Assert.Equal(normalizedExpected, normalizedOutput);
             }
