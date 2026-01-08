@@ -93,35 +93,27 @@ public class ProcessStartOptionsResolvePathTests
         Assert.True(Path.IsPathRooted(options.FileName), "Expected an absolute path");
     }
 
+#if WINDOWS
     [Theory]
+#endif
     [InlineData("cmd.exe")]
     [InlineData("notepad.exe")]
     public void ResolvePath_FindsCommonWindowsExecutables(string executable)
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            // Skip this test on non-Windows platforms
-            return;
-        }
-
         var options = ProcessStartOptions.ResolvePath(executable);
         Assert.NotNull(options);
         Assert.NotNull(options.FileName);
         Assert.True(File.Exists(options.FileName), $"Expected to find {executable}");
     }
 
+#if !WINDOWS
     [Theory]
+#endif
     [InlineData("sh")]
     [InlineData("ls")]
     [InlineData("cat")]
     public void ResolvePath_FindsCommonUnixExecutables(string executable)
     {
-        if (OperatingSystem.IsWindows())
-        {
-            // Skip this test on Windows
-            return;
-        }
-
         var options = ProcessStartOptions.ResolvePath(executable);
         Assert.NotNull(options);
         Assert.NotNull(options.FileName);
