@@ -8,15 +8,21 @@ internal static partial class Interop
 {
     internal static partial class Kernel32
     {
-        internal const uint PROC_THREAD_ATTRIBUTE_JOB_LIST = 0x0002000D;
+        // PROC_THREAD_ATTRIBUTE_HANDLE_LIST = 0x00020002
+        internal const int PROC_THREAD_ATTRIBUTE_HANDLE_LIST = 0x00020002;
+        
+        // PROC_THREAD_ATTRIBUTE_JOB_LIST = 0x0002000D
+        internal const int PROC_THREAD_ATTRIBUTE_JOB_LIST = 0x0002000D;
+
+        // EXTENDED_STARTUPINFO_PRESENT flag for CreateProcess
+        internal const int EXTENDED_STARTUPINFO_PRESENT = 0x00080000;
 
 #if NETFRAMEWORK
         [DllImport(Libraries.Kernel32, SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
 #else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
 #endif
+        [return: MarshalAs(UnmanagedType.Bool)]
         internal static unsafe
 #if NETFRAMEWORK
         extern
@@ -24,18 +30,17 @@ internal static partial class Interop
         partial
 #endif
         bool InitializeProcThreadAttributeList(
-            IntPtr lpAttributeList,
+            LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList,
             int dwAttributeCount,
             int dwFlags,
-            ref nuint lpSize);
+            ref IntPtr lpSize);
 
 #if NETFRAMEWORK
         [DllImport(Libraries.Kernel32, SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
 #else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
 #endif
+        [return: MarshalAs(UnmanagedType.Bool)]
         internal static unsafe
 #if NETFRAMEWORK
         extern
@@ -43,25 +48,25 @@ internal static partial class Interop
         partial
 #endif
         bool UpdateProcThreadAttribute(
-            IntPtr lpAttributeList,
+            LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList,
             int dwFlags,
-            nuint Attribute,
-            IntPtr lpValue,
-            nuint cbSize,
-            IntPtr lpPreviousValue,
+            IntPtr attribute,
+            void* lpValue,
+            IntPtr cbSize,
+            void* lpPreviousValue,
             IntPtr lpReturnSize);
 
 #if NETFRAMEWORK
-        [DllImport(Libraries.Kernel32)]
+        [DllImport(Libraries.Kernel32, SetLastError = true)]
 #else
-        [LibraryImport(Libraries.Kernel32)]
+        [LibraryImport(Libraries.Kernel32, SetLastError = true)]
 #endif
-        internal static
+        internal static unsafe
 #if NETFRAMEWORK
         extern
 #else
         partial
 #endif
-        void DeleteProcThreadAttributeList(IntPtr lpAttributeList);
+        void DeleteProcThreadAttributeList(LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList);
     }
 }
