@@ -10,6 +10,9 @@ internal static partial class Interop
     {
         // PROC_THREAD_ATTRIBUTE_HANDLE_LIST = 0x00020002
         internal const int PROC_THREAD_ATTRIBUTE_HANDLE_LIST = 0x00020002;
+        
+        // PROC_THREAD_ATTRIBUTE_JOB_LIST = 0x0002000D
+        internal const int PROC_THREAD_ATTRIBUTE_JOB_LIST = 0x0002000D;
 
         // EXTENDED_STARTUPINFO_PRESENT flag for CreateProcess
         internal const int EXTENDED_STARTUPINFO_PRESENT = 0x00080000;

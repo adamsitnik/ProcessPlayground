@@ -11,6 +11,7 @@
 #ifdef __linux__
 #include <sys/syscall.h>
 #include <linux/sched.h>
+#include <sys/prctl.h>
 #endif
 
 // External variable containing the current environment.
@@ -56,6 +57,7 @@ static int create_cloexec_pipe(int pipefd[2]) {
 // If out_pid is not NULL, the PID of the child process is stored there
 // If out_pidfd is not NULL, the pidfd of the child process is stored there (Linux only, -1 on other platforms)
 // If out_exit_pipe_fd is not NULL, the read end of exit monitoring pipe is stored there
+// If kill_on_parent_death is non-zero, the child process will be killed when the parent dies
 int spawn_process(
     const char* path,
     char* const argv[],
@@ -66,7 +68,8 @@ int spawn_process(
     const char* working_dir,
     int* out_pid,
     int* out_pidfd,
-    int* out_exit_pipe_fd)
+    int* out_exit_pipe_fd,
+    int kill_on_parent_death)
 {
     int wait_pipe[2];
     int exit_pipe[2];
@@ -139,6 +142,32 @@ int spawn_process(
         
         // Restore signal mask immediately
         pthread_sigmask(SIG_SETMASK, &old_signals, NULL);
+        
+        // If kill_on_parent_death is enabled, set up parent death signal
+        if (kill_on_parent_death) {
+#ifdef __linux__
+            // On Linux, use prctl to set up parent death signal
+            if (prctl(PR_SET_PDEATHSIG, SIGTERM) == -1) {
+                write_errno_and_exit(wait_pipe[1], errno);
+            }
+            
+            // Close the race: parent may have already died before prctl() ran.
+            // Note: This checks if we've been reparented to init (PID 1).
+            // In containers or systems with different init systems, this may not
+            // work perfectly, but it's the standard approach for this functionality.
+            if (getppid() == 1) {
+                // Parent already gone; we've been reparented to init.
+                // Exit immediately to honor the kill-on-parent-death contract.
+                _exit(0);
+            }
+#else
+            // On non-Linux Unix systems, prctl is not available.
+            // We would need a different mechanism (like polling or signals),
+            // but for now we'll skip it as it's not straightforward to implement
+            // without platform-specific code.
+            // This is a limitation of the Unix implementation on non-Linux systems.
+#endif
+        }
         
         // Reset all signal handlers to default
         struct sigaction sa_default;

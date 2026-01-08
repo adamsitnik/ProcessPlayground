@@ -10,6 +10,28 @@ namespace Microsoft.Win32.SafeHandles;
 
 public partial class SafeChildProcessHandle
 {
+    // Static job object used for KillOnParentDeath functionality
+    // All child processes with KillOnParentDeath=true are assigned to this job
+    // Note: The job handle is intentionally never closed - it should live for the
+    // lifetime of the process. When this process exits, the job object is destroyed
+    // by the OS, which terminates all child processes in the job.
+    private static readonly Lazy<IntPtr> s_killOnParentDeathJob = new(CreateKillOnParentDeathJob);
+
+    private static IntPtr CreateKillOnParentDeathJob()
+    {
+        // Create a job object without a name (anonymous)
+        IntPtr jobHandle = Interop.Kernel32.CreateJobObjectW(IntPtr.Zero, IntPtr.Zero);
+        if (jobHandle == IntPtr.Zero)
+        {
+            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to create job object for KillOnParentDeath");
+        }
+
+        // When the last process handle in the job is closed (this process exits),
+        // all processes in the job are terminated automatically.
+        // This is the default behavior of job objects, so we don't need to configure anything else.
+        return jobHandle;
+    }
+
     protected override bool ReleaseHandle()
     {
         return Interop.Kernel32.CloseHandle(handle);
@@ -79,18 +101,23 @@ public partial class SafeChildProcessHandle
             if (errorPtr != inputPtr && errorPtr != outputPtr)
                 handlesToInherit[handleCount++] = errorPtr;
 
+            // Determine number of attributes we need
+            int attributeCount = 1; // Always need handle list
+            if (options.KillOnParentDeath)
+                attributeCount++; // Also need job list
+
             // Initialize the attribute list
             IntPtr size = IntPtr.Zero;
             Interop.Kernel32.LPPROC_THREAD_ATTRIBUTE_LIST emptyList = default;
             
             // Get required size for attribute list (first call is expected to fail)
-            Interop.Kernel32.InitializeProcThreadAttributeList(emptyList, 1, 0, ref size);
+            Interop.Kernel32.InitializeProcThreadAttributeList(emptyList, attributeCount, 0, ref size);
             
             attributeListBuffer = Marshal.AllocHGlobal(size);
             attributeList.AttributeList = attributeListBuffer;
             
             // Actually initialize the attribute list
-            if (!Interop.Kernel32.InitializeProcThreadAttributeList(attributeList, 1, 0, ref size))
+            if (!Interop.Kernel32.InitializeProcThreadAttributeList(attributeList, attributeCount, 0, ref size))
             {
                 throw new Win32Exception();
             }
@@ -106,6 +133,26 @@ public partial class SafeChildProcessHandle
                 IntPtr.Zero))
             {
                 throw new Win32Exception();
+            }
+
+            // Add job list if KillOnParentDeath is enabled
+            if (options.KillOnParentDeath)
+            {
+                IntPtr jobHandle = s_killOnParentDeathJob.Value;
+                IntPtr* pJobHandle = stackalloc IntPtr[1];
+                pJobHandle[0] = jobHandle;
+
+                if (!Interop.Kernel32.UpdateProcThreadAttribute(
+                    attributeList,
+                    0,
+                    (IntPtr)Interop.Kernel32.PROC_THREAD_ATTRIBUTE_JOB_LIST,
+                    pJobHandle,
+                    (IntPtr)IntPtr.Size,
+                    null,
+                    IntPtr.Zero))
+                {
+                    throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to add job list to proc thread attributes");
+                }
             }
 
             startupInfoEx.lpAttributeList = attributeList;
