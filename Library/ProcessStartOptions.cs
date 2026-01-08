@@ -6,6 +6,11 @@ namespace System.TBA;
 
 public sealed class ProcessStartOptions
 {
+    private static string? _executableDirectory;
+#if WINDOWS
+    private static string? _systemDirectory;
+#endif
+
     private readonly string _fileName;
     private List<string>? _arguments;
     private Dictionary<string, string?>? _envVars;
@@ -80,26 +85,22 @@ public sealed class ProcessStartOptions
         // If the file name ends in a period (.) with no extension, or if the file name contains a path, .exe is not appended."
 
         // HasExtension returns false for trailing dot, so we need to check that separately
-        if (!Path.HasExtension(fileName) && fileName[fileName.Length - 1] != '.')
+        if (fileName[fileName.Length - 1] != '.' && !Path.HasExtension(fileName))
         {
             fileName += ".exe";
         }
 #endif
 
         // Then check the executable's directory
-        string? executablePath = GetExecutablePath();
-        if (executablePath != null)
+        string? executableDirectory= _executableDirectory ??= Path.GetDirectoryName(GetExecutablePath());
+        if (executableDirectory is not null)
         {
             try
             {
-                string? dir = Path.GetDirectoryName(executablePath);
-                if (dir != null)
+                string path = Path.Combine(executableDirectory, fileName);
+                if (File.Exists(path))
                 {
-                    string path = Path.Combine(dir, fileName);
-                    if (File.Exists(path))
-                    {
-                        return path;
-                    }
+                    return path;
                 }
             }
             catch (ArgumentException) { } // ignore any errors in data that may come from the exe path
@@ -115,9 +116,9 @@ public sealed class ProcessStartOptions
 #if WINDOWS
         // Windows-specific search locations (from CreateProcessW documentation)
         
-        // Check the 32-bit Windows system directory
-        string? systemDirectory = WindowsHelpers.GetSystemDirectory();
-        if (systemDirectory != null)
+        // Check the 32-bit Windows system directory (It can't change over app lifetime)
+        string? systemDirectory = _systemDirectory ??= WindowsHelpers.GetSystemDirectory();
+        if (systemDirectory is not null)
         {
             string path = Path.Combine(systemDirectory, fileName);
             if (File.Exists(path))
@@ -127,8 +128,9 @@ public sealed class ProcessStartOptions
         }
 
         // Check the 16-bit Windows system directory (System subdirectory of Windows directory)
+        // Windows directory is user-specific, so we don't cache it.
         string? windowsDirectory = WindowsHelpers.GetWindowsDirectory();
-        if (windowsDirectory != null)
+        if (windowsDirectory is not null)
         {
             string path = Path.Combine(windowsDirectory, "System", fileName);
             if (File.Exists(path))
@@ -138,7 +140,7 @@ public sealed class ProcessStartOptions
         }
 
         // Check the Windows directory
-        if (windowsDirectory != null)
+        if (windowsDirectory is not null)
         {
             string path = Path.Combine(windowsDirectory, fileName);
             if (File.Exists(path))
@@ -155,16 +157,16 @@ public sealed class ProcessStartOptions
     private static string? GetExecutablePath()
     {
 #if NETFRAMEWORK
-        return System.Reflection.Assembly.GetEntryAssembly()?.Location;
+        return Reflection.Assembly.GetEntryAssembly()?.Location;
 #else
         return System.Environment.ProcessPath;
 #endif
     }
 
-    private static string? FindProgramInPath(string fileName)
+    private static string FindProgramInPath(string fileName)
     {
         string? pathEnvVar = System.Environment.GetEnvironmentVariable("PATH");
-        if (pathEnvVar != null)
+        if (pathEnvVar is not null)
         {
 #if WINDOWS
             char pathSeparator = ';';
