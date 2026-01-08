@@ -29,9 +29,9 @@ internal static partial class Interop
             ref SECURITY_ATTRIBUTES threadSecAttrs,
             [MarshalAs(UnmanagedType.Bool)] bool bInheritHandles,
             int dwCreationFlags,
-            IntPtr lpEnvironment,
+            char* lpEnvironment,
             string? lpCurrentDirectory,
-            ref STARTUPINFO lpStartupInfo,
+            ref STARTUPINFOEX lpStartupInfo,
             ref PROCESS_INFORMATION lpProcessInformation
         );
 
@@ -65,6 +65,18 @@ internal static partial class Interop
             internal IntPtr hStdInput;
             internal IntPtr hStdOutput;
             internal IntPtr hStdError;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct STARTUPINFOEX
+        {
+            internal STARTUPINFO StartupInfo;
+            internal LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList;
+        }
+
+        internal struct LPPROC_THREAD_ATTRIBUTE_LIST
+        {
+            internal IntPtr AttributeList;
         }
     }
 }

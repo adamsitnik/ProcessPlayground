@@ -13,8 +13,6 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
 {
     internal static readonly SafeChildProcessHandle InvalidHandle = new SafeChildProcessHandle();
 
-    private static readonly object s_createProcessLock = new();
-
     /// <summary>
     /// Creates a <see cref="T:Microsoft.Win32.SafeHandles.SafeChildProcessHandle" />.
     /// </summary>

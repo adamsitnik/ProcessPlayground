@@ -1,0 +1,72 @@
+// Licensed to the .NET Foundation under one or more agreements.
+// The .NET Foundation licenses this file to you under the MIT license.
+
+using System;
+using System.Runtime.InteropServices;
+
+internal static partial class Interop
+{
+    internal static partial class Kernel32
+    {
+        // PROC_THREAD_ATTRIBUTE_HANDLE_LIST = 0x00020002
+        internal const int PROC_THREAD_ATTRIBUTE_HANDLE_LIST = 0x00020002;
+        
+        // PROC_THREAD_ATTRIBUTE_JOB_LIST = 0x0002000D
+        internal const int PROC_THREAD_ATTRIBUTE_JOB_LIST = 0x0002000D;
+
+        // EXTENDED_STARTUPINFO_PRESENT flag for CreateProcess
+        internal const int EXTENDED_STARTUPINFO_PRESENT = 0x00080000;
+
+#if NETFRAMEWORK
+        [DllImport(Libraries.Kernel32, SetLastError = true)]
+#else
+        [LibraryImport(Libraries.Kernel32, SetLastError = true)]
+#endif
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static unsafe
+#if NETFRAMEWORK
+        extern
+#else
+        partial
+#endif
+        bool InitializeProcThreadAttributeList(
+            LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList,
+            int dwAttributeCount,
+            int dwFlags,
+            ref IntPtr lpSize);
+
+#if NETFRAMEWORK
+        [DllImport(Libraries.Kernel32, SetLastError = true)]
+#else
+        [LibraryImport(Libraries.Kernel32, SetLastError = true)]
+#endif
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static unsafe
+#if NETFRAMEWORK
+        extern
+#else
+        partial
+#endif
+        bool UpdateProcThreadAttribute(
+            LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList,
+            int dwFlags,
+            IntPtr attribute,
+            void* lpValue,
+            IntPtr cbSize,
+            void* lpPreviousValue,
+            IntPtr lpReturnSize);
+
+#if NETFRAMEWORK
+        [DllImport(Libraries.Kernel32, SetLastError = true)]
+#else
+        [LibraryImport(Libraries.Kernel32, SetLastError = true)]
+#endif
+        internal static unsafe
+#if NETFRAMEWORK
+        extern
+#else
+        partial
+#endif
+        void DeleteProcThreadAttributeList(LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList);
+    }
+}
