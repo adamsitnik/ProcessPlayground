@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.TBA;
@@ -113,6 +114,21 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
         Validate();
 
         KillCore(throwOnError: true);
+    }
+
+    /// <summary>
+    /// Sends a POSIX signal to the process.
+    /// </summary>
+    /// <param name="signal">The signal to send.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
+    /// <exception cref="PlatformNotSupportedException">Thrown on Windows.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the signal value is not supported.</exception>
+    /// <exception cref="Win32Exception">Thrown when the signal operation fails.</exception>
+    public void SendSignal(PosixSignal signal)
+    {
+        Validate();
+
+        SendSignalCore(signal);
     }
     
     /// <summary>

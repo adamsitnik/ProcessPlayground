@@ -283,3 +283,49 @@ int spawn_process(
     }
     return 0;
 }
+
+// Map managed PosixSignal enum values to native signal numbers
+// The managed enum uses negative values: SIGHUP=-1, SIGINT=-2, etc.
+// This function converts them to the actual platform-specific signal numbers
+static int map_managed_signal_to_native(int managed_signal) {
+    switch (managed_signal) {
+        case -1: return SIGHUP;    // SIGHUP
+        case -2: return SIGINT;    // SIGINT
+        case -3: return SIGQUIT;   // SIGQUIT
+        case -4: return SIGTERM;   // SIGTERM
+        case -5: return SIGCHLD;   // SIGCHLD
+        case -6: return SIGCONT;   // SIGCONT
+        case -7: return SIGWINCH;  // SIGWINCH
+        case -8: return SIGTTIN;   // SIGTTIN
+        case -9: return SIGTTOU;   // SIGTTOU
+        case -10: return SIGTSTP;  // SIGTSTP
+        default: return -1;        // Invalid signal
+    }
+}
+
+// Send a signal to a process
+// On Linux, uses pidfd_send_signal syscall if pidfd >= 0, otherwise uses kill
+// On other Unix systems, uses kill with the pid parameter
+// Returns 0 on success, -1 on error (errno is set)
+int send_signal(int pidfd, int pid, int managed_signal) {
+    // Map managed signal to native signal number
+    int native_signal = map_managed_signal_to_native(managed_signal);
+    if (native_signal == -1) {
+        errno = EINVAL;
+        return -1;
+    }
+    
+#ifdef __linux__
+    // On Linux, prefer pidfd_send_signal if we have a valid pidfd
+    if (pidfd >= 0) {
+        // pidfd_send_signal syscall number is 424 on both x86_64 and ARM64
+        return syscall(424, pidfd, native_signal, NULL, 0);
+    } else {
+        return kill(pid, native_signal);
+    }
+#else
+    // On other Unix systems, use kill
+    (void)pidfd; // Suppress unused parameter warning
+    return kill(pid, native_signal);
+#endif
+}

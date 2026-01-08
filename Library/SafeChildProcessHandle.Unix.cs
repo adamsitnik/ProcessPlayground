@@ -59,6 +59,9 @@ public partial class SafeChildProcessHandle
         out int exit_pipe_fd,
         int kill_on_parent_death);
 
+    [LibraryImport("processspawn", SetLastError = true)]
+    private static partial int send_signal(int pidfd, int pid, int managed_signal);
+
     // Shared declarations for both Linux and non-Linux Unix
     [StructLayout(LayoutKind.Sequential)]
     private struct PollFd
@@ -529,6 +532,9 @@ public partial class SafeChildProcessHandle
 
     private void KillCore(bool throwOnError)
     {
+        // Use SendSignal to send SIGKILL (-4 becomes SIGTERM, but we want the native SIGKILL=9)
+        // Actually, we need to send SIGKILL directly since PosixSignal enum doesn't have it
+        // Let's continue using the direct approach for SIGKILL
 #if LINUX
         int result = syscall_pidfd_send_signal(__NR_pidfd_send_signal, this, SIGKILL, 0, 0);
 #else
@@ -550,5 +556,32 @@ public partial class SafeChildProcessHandle
         
         // Any other error is unexpected
         throw new Win32Exception(errno, $"Failed to terminate process (errno={errno})");
+    }
+
+    private void SendSignalCore(PosixSignal signal)
+    {
+        // Validate the signal value is within the supported range
+        int signalValue = (int)signal;
+        if (signalValue < -10 || signalValue > -1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(signal), signal, "Invalid signal value");
+        }
+
+#if LINUX
+        int pidfd = (int)DangerousGetHandle();
+        int result = send_signal(pidfd, _pid, signalValue);
+#else
+        int pid = GetProcessIdCore();
+        int result = send_signal(-1, pid, signalValue);
+#endif
+
+        if (result == 0)
+        {
+            return;
+        }
+
+        // Signal sending failed, throw the error
+        int errno = Marshal.GetLastPInvokeError();
+        throw new Win32Exception(errno, $"Failed to send signal {signal} (errno={errno})");
     }
 }
