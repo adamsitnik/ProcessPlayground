@@ -117,6 +117,18 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
         KillCore(throwOnError: true);
     }
 
+    /// <summary>
+    /// Resumes a process that was created in a suspended state.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when the handle is invalid or the process was not created suspended.</exception>
+    /// <exception cref="Win32Exception">Thrown when the resume operation fails.</exception>
+    public void Resume()
+    {
+        Validate();
+
+        ResumeCore();
+    }
+
 #if NET
     /// <summary>
     /// Sends a POSIX signal to the process.
