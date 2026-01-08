@@ -40,11 +40,6 @@
     <Compile Remove="System/OperatingSystem.cs" />
   </ItemGroup>
 
-  <!-- Exclude hanging test for Framework targets -->
-  <ItemGroup Condition="'$(TargetFrameworkIdentifier)' == '.NETFramework'">
-    <Compile Remove="SafeChildProcessHandleTests.cs" />
-  </ItemGroup>
-
   <ItemGroup>
     <!-- Workaround https://github.com/dotnet/project-system/issues/935 -->
     <None Include="**/*.cs" />
