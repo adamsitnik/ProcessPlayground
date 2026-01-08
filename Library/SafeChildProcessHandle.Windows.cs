@@ -40,102 +40,147 @@ public partial class SafeChildProcessHandle
         ValueStringBuilder commandLine = new(stackalloc char[256]);
         ProcessUtils.BuildCommandLine(options, ref commandLine);
 
-        Interop.Kernel32.STARTUPINFO startupInfo = default;
+        Interop.Kernel32.STARTUPINFOEX startupInfoEx = default;
         Interop.Kernel32.PROCESS_INFORMATION processInfo = default;
         Interop.Kernel32.SECURITY_ATTRIBUTES unused_SecAttrs = default;
         SafeChildProcessHandle? procSH = null;
         IntPtr currentProcHandle = Interop.Kernel32.GetCurrentProcess();
+        IntPtr attributeListBuffer = IntPtr.Zero;
+        Interop.Kernel32.LPPROC_THREAD_ATTRIBUTE_LIST attributeList = default;
 
-        // Take a global lock to synchronize all redirect pipe handle creations and CreateProcess
-        // calls. We do not want one process to inherit the handles created concurrently for another
-        // process, as that will impact the ownership and lifetimes of those handles now inherited
-        // into multiple child processes.
-        lock (s_createProcessLock)
-        {
-            // In certain scenarios, the same handle may be passed for multiple stdio streams:
-            // - NUL file for all three
-            // - A single pipe/socket for both stdout and stderr (for combined output)
-            // - A single pipe/socket for stdin and stdout (for terminal emulation)
-            // - A single handle for all three streams
-            using SafeFileHandle duplicatedInput = Duplicate(inputHandle, currentProcHandle);
-            using SafeFileHandle duplicatedOutput = inputHandle.DangerousGetHandle() == outputHandle.DangerousGetHandle()
+        // In certain scenarios, the same handle may be passed for multiple stdio streams:
+        // - NUL file for all three
+        // - A single pipe/socket for both stdout and stderr (for combined output)
+        // - A single pipe/socket for stdin and stdout (for terminal emulation)
+        // - A single handle for all three streams
+        using SafeFileHandle duplicatedInput = Duplicate(inputHandle, currentProcHandle);
+        using SafeFileHandle duplicatedOutput = inputHandle.DangerousGetHandle() == outputHandle.DangerousGetHandle()
+            ? duplicatedInput
+            : Duplicate(outputHandle, currentProcHandle);
+        using SafeFileHandle duplicatedError = outputHandle.DangerousGetHandle() == errorHandle.DangerousGetHandle()
+            ? duplicatedOutput
+            : (inputHandle.DangerousGetHandle() == errorHandle.DangerousGetHandle()
                 ? duplicatedInput
-                : Duplicate(outputHandle, currentProcHandle);
-            using SafeFileHandle duplicatedError = outputHandle.DangerousGetHandle() == errorHandle.DangerousGetHandle()
-                ? duplicatedOutput
-                : (inputHandle.DangerousGetHandle() == errorHandle.DangerousGetHandle()
-                    ? duplicatedInput
-                    : Duplicate(errorHandle, currentProcHandle));
+                : Duplicate(errorHandle, currentProcHandle));
 
-            try
+        try
+        {
+            // Collect unique handles to inherit
+            IntPtr* handlesToInherit = stackalloc IntPtr[3];
+            int handleCount = 0;
+            
+            IntPtr inputPtr = duplicatedInput.DangerousGetHandle();
+            IntPtr outputPtr = duplicatedOutput.DangerousGetHandle();
+            IntPtr errorPtr = duplicatedError.DangerousGetHandle();
+            
+            handlesToInherit[handleCount++] = inputPtr;
+            if (outputPtr != inputPtr)
+                handlesToInherit[handleCount++] = outputPtr;
+            if (errorPtr != inputPtr && errorPtr != outputPtr)
+                handlesToInherit[handleCount++] = errorPtr;
+
+            // Initialize the attribute list
+            IntPtr size = IntPtr.Zero;
+            Interop.Kernel32.LPPROC_THREAD_ATTRIBUTE_LIST emptyList = default;
+            
+            // Get required size for attribute list (first call is expected to fail)
+            Interop.Kernel32.InitializeProcThreadAttributeList(emptyList, 1, 0, ref size);
+            
+            attributeListBuffer = Marshal.AllocHGlobal(size);
+            attributeList.AttributeList = attributeListBuffer;
+            
+            // Actually initialize the attribute list
+            if (!Interop.Kernel32.InitializeProcThreadAttributeList(attributeList, 1, 0, ref size))
             {
-                startupInfo.cb = sizeof(Interop.Kernel32.STARTUPINFO);
-
-                startupInfo.hStdInput = duplicatedInput.DangerousGetHandle();
-                startupInfo.hStdOutput = duplicatedOutput.DangerousGetHandle();
-                startupInfo.hStdError = duplicatedError.DangerousGetHandle();
-
-                startupInfo.dwFlags = Interop.Advapi32.StartupInfoOptions.STARTF_USESTDHANDLES;
-
-                int creationFlags = 0;
-                if (options.CreateNoWindow) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NO_WINDOW;
-
-                string? environmentBlock = null;
-                if (options.HasEnvironmentBeenAccessed)
-                {
-                    creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_UNICODE_ENVIRONMENT;
-                    environmentBlock = ProcessUtils.GetEnvironmentVariablesBlock(options.Environment);
-                }
-
-                string? workingDirectory = options.WorkingDirectory?.FullName;
-                int errorCode = 0;
-
-                commandLine.NullTerminate();
-                fixed (char* environmentBlockPtr = environmentBlock)
-                fixed (char* commandLinePtr = &commandLine.GetPinnableReference())
-                {
-                    bool retVal = Interop.Kernel32.CreateProcess(
-                        null,                // we don't need this since all the info is in commandLine
-                        commandLinePtr,      // pointer to the command line string
-                        ref unused_SecAttrs, // address to process security attributes, we don't need to inherit the handle
-                        ref unused_SecAttrs, // address to thread security attributes.
-                        true,                // handle inheritance flag
-                        creationFlags,       // creation flags
-                        (IntPtr)environmentBlockPtr, // pointer to new environment block
-                        workingDirectory,    // pointer to current directory name
-                        ref startupInfo,     // pointer to STARTUPINFO
-                        ref processInfo      // pointer to PROCESS_INFORMATION
-                    );
-                    if (!retVal)
-                        errorCode = Marshal.GetLastPInvokeError();
-                }
-
-                if (processInfo.hProcess != IntPtr.Zero && processInfo.hProcess != new IntPtr(-1))
-                    procSH = new(processInfo.hProcess, true);
-                if (processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
-                    Interop.Kernel32.CloseHandle(processInfo.hThread);
+                throw new Win32Exception();
             }
-            catch
-            {
-                procSH?.Dispose();
 
-                throw;
-            }
-            finally
+            // Add handle list to attribute list
+            if (!Interop.Kernel32.UpdateProcThreadAttribute(
+                attributeList,
+                0,
+                (IntPtr)Interop.Kernel32.PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                handlesToInherit,
+                (IntPtr)(handleCount * sizeof(IntPtr)),
+                null,
+                IntPtr.Zero))
             {
-                Interop.Kernel32.CloseHandle(currentProcHandle);
+                throw new Win32Exception();
+            }
+
+            startupInfoEx.lpAttributeList = attributeList;
+            startupInfoEx.StartupInfo.cb = sizeof(Interop.Kernel32.STARTUPINFOEX);
+            startupInfoEx.StartupInfo.hStdInput = inputPtr;
+            startupInfoEx.StartupInfo.hStdOutput = outputPtr;
+            startupInfoEx.StartupInfo.hStdError = errorPtr;
+            startupInfoEx.StartupInfo.dwFlags = Interop.Advapi32.StartupInfoOptions.STARTF_USESTDHANDLES;
+
+            int creationFlags = Interop.Kernel32.EXTENDED_STARTUPINFO_PRESENT;
+            if (options.CreateNoWindow) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NO_WINDOW;
+
+            string? environmentBlock = null;
+            if (options.HasEnvironmentBeenAccessed)
+            {
+                creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_UNICODE_ENVIRONMENT;
+                environmentBlock = ProcessUtils.GetEnvironmentVariablesBlock(options.Environment);
+            }
+
+            string? workingDirectory = options.WorkingDirectory?.FullName;
+            int errorCode = 0;
+
+            commandLine.NullTerminate();
+            fixed (char* environmentBlockPtr = environmentBlock)
+            fixed (char* commandLinePtr = &commandLine.GetPinnableReference())
+            {
+                bool retVal = Interop.Kernel32.CreateProcess(
+                    null,                // we don't need this since all the info is in commandLine
+                    commandLinePtr,      // pointer to the command line string
+                    ref unused_SecAttrs, // address to process security attributes, we don't need to inherit the handle
+                    ref unused_SecAttrs, // address to thread security attributes.
+                    true,                // handle inheritance flag (but only handles in attribute list will be inherited)
+                    creationFlags,       // creation flags (includes EXTENDED_STARTUPINFO_PRESENT)
+                    environmentBlockPtr, // pointer to new environment block
+                    workingDirectory,    // pointer to current directory name
+                    ref startupInfoEx,   // pointer to STARTUPINFOEX
+                    ref processInfo      // pointer to PROCESS_INFORMATION
+                );
+                if (!retVal)
+                    errorCode = Marshal.GetLastPInvokeError();
+            }
+
+            if (processInfo.hProcess != IntPtr.Zero && processInfo.hProcess != new IntPtr(-1))
+                procSH = new(processInfo.hProcess, true);
+            if (processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
+                Interop.Kernel32.CloseHandle(processInfo.hThread);
+
+            if (procSH == null)
+            {
+                throw new Win32Exception(errorCode, "Failed to create process.");
             }
         }
-
-        if (procSH == null)
+        catch
         {
-            throw new InvalidOperationException("Failed to create process handle.");
+            procSH?.Dispose();
+            throw;
+        }
+        finally
+        {
+            if (attributeListBuffer != IntPtr.Zero)
+            {
+                Interop.Kernel32.DeleteProcThreadAttributeList(attributeList);
+                Marshal.FreeHGlobal(attributeListBuffer);
+            }
+            Interop.Kernel32.CloseHandle(currentProcHandle);
         }
 
         return procSH;
 
         static SafeFileHandle Duplicate(SafeFileHandle sourceHandle, nint currentProcHandle)
         {
+            // From https://learn.microsoft.com/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute:
+            // PROC_THREAD_ATTRIBUTE_HANDLE_LIST: "These handles must be created as inheritable handles and must not include pseudo handles".
+            // To ensure the handles we pass are inheritable, they are duplicated here.
+
             if (!Interop.Kernel32.DuplicateHandle(
                 currentProcHandle,
                 sourceHandle,
