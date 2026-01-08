@@ -294,18 +294,9 @@ int spawn_process(
 // Special case: SIGKILL=9 is passed as a positive value
 // This function converts them to the actual platform-specific signal numbers
 static int map_managed_signal_to_native(int managed_signal) {
-    // Special case for SIGKILL which is passed as 9
-    if (managed_signal == 9) {
-        return SIGKILL;
-    }
-    
-    // If it's any other positive value, it's invalid
-    if (managed_signal > 0) {
-        return -1;
-    }
-    
     // Otherwise, map from managed enum values
     switch (managed_signal) {
+        case 9: return SIGKILL;   // SIGKILL
         case -1: return SIGHUP;    // SIGHUP
         case -2: return SIGINT;    // SIGINT
         case -3: return SIGQUIT;   // SIGQUIT
