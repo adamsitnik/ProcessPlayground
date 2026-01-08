@@ -91,14 +91,6 @@ public partial class SafeChildProcessHandle
         // Rest of the structure is padding to make total size 128 bytes
     }
 
-    // System call numbers for x86_64 Linux
-    // Note: ARM64 Linux uses different syscall numbers:
-    // - pidfd_send_signal: 424 (same as x86_64)
-    private const int __NR_pidfd_send_signal = 424;
-
-    [LibraryImport("libc", EntryPoint = "syscall", SetLastError = true)]
-    private static partial int syscall_pidfd_send_signal(int number, SafeChildProcessHandle pidfd, int sig, nint siginfo, uint flags);
-
     [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial int waitid(int idtype, SafeChildProcessHandle pidfd, siginfo_t* infop, int options);
 
@@ -114,9 +106,6 @@ public partial class SafeChildProcessHandle
 #else
     [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial int waitpid(int pid, int* status, int options);
-    
-    [LibraryImport("libc", SetLastError = true)]
-    private static partial int kill(int pid, int sig);
 
     private const int WNOHANG = 1;
 #endif
@@ -532,13 +521,13 @@ public partial class SafeChildProcessHandle
 
     private void KillCore(bool throwOnError)
     {
-        // Use SendSignal to send SIGKILL (-4 becomes SIGTERM, but we want the native SIGKILL=9)
-        // Actually, we need to send SIGKILL directly since PosixSignal enum doesn't have it
-        // Let's continue using the direct approach for SIGKILL
+        // Use the send_signal native function to send SIGKILL (signal 9)
 #if LINUX
-        int result = syscall_pidfd_send_signal(__NR_pidfd_send_signal, this, SIGKILL, 0, 0);
+        int pidfd = (int)DangerousGetHandle();
+        int result = send_signal(pidfd, _pid, SIGKILL);
 #else
-        int result = kill(GetProcessIdCore(), SIGKILL);
+        int pid = GetProcessIdCore();
+        int result = send_signal(-1, pid, SIGKILL);
 #endif
         if (result == 0 || !throwOnError)
         {

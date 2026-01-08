@@ -286,8 +286,15 @@ int spawn_process(
 
 // Map managed PosixSignal enum values to native signal numbers
 // The managed enum uses negative values: SIGHUP=-1, SIGINT=-2, etc.
+// Positive values are treated as direct signal numbers (e.g., SIGKILL=9)
 // This function converts them to the actual platform-specific signal numbers
 static int map_managed_signal_to_native(int managed_signal) {
+    // If it's a positive value, treat it as a direct signal number
+    if (managed_signal > 0) {
+        return managed_signal;
+    }
+    
+    // Otherwise, map from managed enum values
     switch (managed_signal) {
         case -1: return SIGHUP;    // SIGHUP
         case -2: return SIGINT;    // SIGINT
