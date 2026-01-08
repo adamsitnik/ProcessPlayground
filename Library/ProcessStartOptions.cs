@@ -173,11 +173,7 @@ public sealed class ProcessStartOptions
 
     private static bool IsExecutableFile(string path)
     {
-#if NETFRAMEWORK
-        // .NET Framework always uses Windows-style check (File.Exists)
-        return File.Exists(path);
-#elif WINDOWS
-        // Modern .NET on Windows
+#if NETFRAMEWORK || WINDOWS
         return File.Exists(path);
 #else
         // Modern .NET on Unix/Linux
