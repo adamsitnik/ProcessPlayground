@@ -218,7 +218,6 @@ public partial class SafeChildProcessHandle
                     Interop.Kernel32.CloseHandle(processInfo.hThread);
                 }
             }
-            }
 
             // Add handle list to attribute list
             if (!Interop.Kernel32.UpdateProcThreadAttribute(
