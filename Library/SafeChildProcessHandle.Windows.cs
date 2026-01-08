@@ -322,4 +322,11 @@ public partial class SafeChildProcessHandle
             }
         }
     }
+
+#if NET
+    private void SendSignalCore(PosixSignal signal)
+    {
+        throw new PlatformNotSupportedException("Sending POSIX signals is not supported on Windows.");
+    }
+#endif
 }
