@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 using System.TBA;
@@ -116,6 +117,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
         KillCore(throwOnError: true);
     }
 
+#if NET
     /// <summary>
     /// Sends a POSIX signal to the process.
     /// </summary>
@@ -124,12 +126,14 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
     /// <exception cref="PlatformNotSupportedException">Thrown on Windows.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the signal value is not supported.</exception>
     /// <exception cref="Win32Exception">Thrown when the signal operation fails.</exception>
+    [UnsupportedOSPlatform("windows")]
     public void SendSignal(PosixSignal signal)
     {
         Validate();
 
         SendSignalCore(signal);
     }
+#endif
     
     /// <summary>
     /// This is an INTERNAL method that can be used as PERF optimization

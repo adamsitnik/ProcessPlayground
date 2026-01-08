@@ -12,6 +12,11 @@
 #include <sys/syscall.h>
 #include <linux/sched.h>
 #include <sys/prctl.h>
+
+// Define syscall number if not available in headers
+#ifndef __NR_pidfd_send_signal
+#define __NR_pidfd_send_signal 424
+#endif
 #endif
 
 // External variable containing the current environment.
@@ -286,12 +291,17 @@ int spawn_process(
 
 // Map managed PosixSignal enum values to native signal numbers
 // The managed enum uses negative values: SIGHUP=-1, SIGINT=-2, etc.
-// Positive values are treated as direct signal numbers (e.g., SIGKILL=9)
+// Special case: SIGKILL=9 is passed as a positive value
 // This function converts them to the actual platform-specific signal numbers
 static int map_managed_signal_to_native(int managed_signal) {
-    // If it's a positive value, treat it as a direct signal number
+    // Special case for SIGKILL which is passed as 9
+    if (managed_signal == 9) {
+        return SIGKILL;
+    }
+    
+    // If it's any other positive value, it's invalid
     if (managed_signal > 0) {
-        return managed_signal;
+        return -1;
     }
     
     // Otherwise, map from managed enum values
@@ -325,8 +335,7 @@ int send_signal(int pidfd, int pid, int managed_signal) {
 #ifdef __linux__
     // On Linux, prefer pidfd_send_signal if we have a valid pidfd
     if (pidfd >= 0) {
-        // pidfd_send_signal syscall number is 424 on both x86_64 and ARM64
-        return syscall(424, pidfd, native_signal, NULL, 0);
+        return syscall(__NR_pidfd_send_signal, pidfd, native_signal, NULL, 0);
     } else {
         return kill(pid, native_signal);
     }

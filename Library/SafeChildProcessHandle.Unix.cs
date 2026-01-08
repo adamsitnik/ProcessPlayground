@@ -111,7 +111,11 @@ public partial class SafeChildProcessHandle
 #endif
 
     // Common constants
+#if NET
+    private const PosixSignal SIGKILL = (PosixSignal)9;
+#else
     private const int SIGKILL = 9;
+#endif
     private const int EINTR = 4;
     private const int ECHILD = 10;
     private const int ESRCH = 3;  // No such process
@@ -524,10 +528,10 @@ public partial class SafeChildProcessHandle
         // Use the send_signal native function to send SIGKILL (signal 9)
 #if LINUX
         int pidfd = (int)DangerousGetHandle();
-        int result = send_signal(pidfd, _pid, SIGKILL);
+        int result = send_signal(pidfd, _pid, (int)SIGKILL);
 #else
         int pid = GetProcessIdCore();
-        int result = send_signal(-1, pid, SIGKILL);
+        int result = send_signal(-1, pid, (int)SIGKILL);
 #endif
         if (result == 0 || !throwOnError)
         {
@@ -547,6 +551,7 @@ public partial class SafeChildProcessHandle
         throw new Win32Exception(errno, $"Failed to terminate process (errno={errno})");
     }
 
+#if NET
     private void SendSignalCore(PosixSignal signal)
     {
         // Validate the signal value is within the supported range
@@ -573,4 +578,5 @@ public partial class SafeChildProcessHandle
         int errno = Marshal.GetLastPInvokeError();
         throw new Win32Exception(errno, $"Failed to send signal {signal} (errno={errno})");
     }
+#endif
 }
