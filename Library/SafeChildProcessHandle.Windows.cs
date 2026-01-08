@@ -361,4 +361,11 @@ public partial class SafeChildProcessHandle
         Interop.Kernel32.CloseHandle(_threadHandle);
         _threadHandle = IntPtr.Zero;
     }
+
+#if NET
+    private void SendSignalCore(PosixSignal signal)
+    {
+        throw new PlatformNotSupportedException("Sending POSIX signals is not supported on Windows.");
+    }
+#endif
 }

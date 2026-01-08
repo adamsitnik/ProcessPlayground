@@ -71,6 +71,9 @@ public partial class SafeChildProcessHandle
         int create_suspended,
         out int resume_pipe_fd);
 
+    [LibraryImport("processspawn", SetLastError = true)]
+    private static partial int send_signal(int pidfd, int pid, PosixSignal managed_signal);
+
     // Shared declarations for both Linux and non-Linux Unix
     [StructLayout(LayoutKind.Sequential)]
     private struct PollFd
@@ -100,14 +103,6 @@ public partial class SafeChildProcessHandle
         // Rest of the structure is padding to make total size 128 bytes
     }
 
-    // System call numbers for x86_64 Linux
-    // Note: ARM64 Linux uses different syscall numbers:
-    // - pidfd_send_signal: 424 (same as x86_64)
-    private const int __NR_pidfd_send_signal = 424;
-
-    [LibraryImport("libc", EntryPoint = "syscall", SetLastError = true)]
-    private static partial int syscall_pidfd_send_signal(int number, SafeChildProcessHandle pidfd, int sig, nint siginfo, uint flags);
-
     [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial int waitid(int idtype, SafeChildProcessHandle pidfd, siginfo_t* infop, int options);
 
@@ -123,15 +118,12 @@ public partial class SafeChildProcessHandle
 #else
     [LibraryImport("libc", SetLastError = true)]
     private static unsafe partial int waitpid(int pid, int* status, int options);
-    
-    [LibraryImport("libc", SetLastError = true)]
-    private static partial int kill(int pid, int sig);
 
     private const int WNOHANG = 1;
 #endif
 
     // Common constants
-    private const int SIGKILL = 9;
+    private const PosixSignal SIGKILL = (PosixSignal)9;
     private const int EINTR = 4;
     private const int ECHILD = 10;
     private const int ESRCH = 3;  // No such process
@@ -546,9 +538,11 @@ public partial class SafeChildProcessHandle
     private void KillCore(bool throwOnError)
     {
 #if LINUX
-        int result = syscall_pidfd_send_signal(__NR_pidfd_send_signal, this, SIGKILL, 0, 0);
+        int pidfd = (int)DangerousGetHandle();
+        int result = send_signal(pidfd, _pid, SIGKILL);
 #else
-        int result = kill(GetProcessIdCore(), SIGKILL);
+        int pid = GetProcessIdCore();
+        int result = send_signal(-1, pid, SIGKILL);
 #endif
         if (result == 0 || !throwOnError)
         {
@@ -588,5 +582,25 @@ public partial class SafeChildProcessHandle
         // Close the resume pipe after writing
         close(_resumePipeFd);
         _resumePipeFd = 0;
+    }
+
+    private void SendSignalCore(PosixSignal signal)
+    {
+#if LINUX
+        int pidfd = (int)DangerousGetHandle();
+        int result = send_signal(pidfd, _pid, signal);
+#else
+        int pid = GetProcessIdCore();
+        int result = send_signal(-1, pid, signal);
+#endif
+
+        if (result == 0)
+        {
+            return;
+        }
+
+        // Signal sending failed, throw the error
+        int errno = Marshal.GetLastPInvokeError();
+        throw new Win32Exception(errno, $"Failed to send signal {signal} (errno={errno})");
     }
 }
