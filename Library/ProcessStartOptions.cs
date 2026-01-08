@@ -57,16 +57,11 @@ public sealed class ProcessStartOptions
     /// <exception cref="FileNotFoundException">Thrown when fileName cannot be resolved to an existing file.</exception>
     public static ProcessStartOptions ResolvePath(string fileName)
     {
-        string? resolvedPath = ResolvePathInternal(fileName);
-        if (resolvedPath == null)
-        {
-            throw new FileNotFoundException($"Could not find file '{fileName}'.", fileName);
-        }
-
+        string resolvedPath = ResolvePathInternal(fileName);
         return new ProcessStartOptions(resolvedPath, isResolved: true);
     }
 
-    internal static string? ResolvePathInternal(string fileName)
+    internal static string ResolvePathInternal(string fileName)
     {
         ArgumentException.ThrowIfNullOrEmpty(fileName);
 
@@ -77,6 +72,19 @@ public sealed class ProcessStartOptions
             // it's what the caller asked for, so it's what they'll get
             return fileName;
         }
+
+#if WINDOWS
+        // From: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw
+        // "If the file name does not contain an extension, .exe is appended.
+        // Therefore, if the file name extension is .com, this parameter must include the .com extension.
+        // If the file name ends in a period (.) with no extension, or if the file name contains a path, .exe is not appended."
+
+        // HasExtension returns false for trailing dot, so we need to check that separately
+        if (!Path.HasExtension(fileName) && fileName[fileName.Length - 1] != '.')
+        {
+            fileName += ".exe";
+        }
+#endif
 
         // Then check the executable's directory
         string? executablePath = GetExecutablePath();
@@ -153,7 +161,7 @@ public sealed class ProcessStartOptions
 #endif
     }
 
-    private static string? FindProgramInPath(string program)
+    private static string? FindProgramInPath(string fileName)
     {
         string? pathEnvVar = System.Environment.GetEnvironmentVariable("PATH");
         if (pathEnvVar != null)
@@ -167,14 +175,15 @@ public sealed class ProcessStartOptions
             while (pathParser.MoveNext())
             {
                 string subPath = pathParser.ExtractCurrent();
-                string path = Path.Combine(subPath, program);
+                string path = Path.Combine(subPath, fileName);
                 if (IsExecutableFile(path))
                 {
                     return path;
                 }
             }
         }
-        return null;
+
+        throw new FileNotFoundException("Could not resolve the file.", fileName);
     }
 
     private static bool IsExecutableFile(string path)
