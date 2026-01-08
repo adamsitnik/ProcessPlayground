@@ -129,6 +129,9 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
     [UnsupportedOSPlatform("windows")]
     public void SendSignal(PosixSignal signal)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan((int)signal, (int)PosixSignal.SIGTSTP, nameof(signal));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan((int)signal, (int)PosixSignal.SIGHUP, nameof(signal));
+
         Validate();
 
         SendSignalCore(signal);

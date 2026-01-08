@@ -60,7 +60,7 @@ public partial class SafeChildProcessHandle
         int kill_on_parent_death);
 
     [LibraryImport("processspawn", SetLastError = true)]
-    private static partial int send_signal(int pidfd, int pid, int managed_signal);
+    private static partial int send_signal(int pidfd, int pid, PosixSignal managed_signal);
 
     // Shared declarations for both Linux and non-Linux Unix
     [StructLayout(LayoutKind.Sequential)]
@@ -111,11 +111,7 @@ public partial class SafeChildProcessHandle
 #endif
 
     // Common constants
-#if NET
     private const PosixSignal SIGKILL = (PosixSignal)9;
-#else
-    private const int SIGKILL = 9;
-#endif
     private const int EINTR = 4;
     private const int ECHILD = 10;
     private const int ESRCH = 3;  // No such process
@@ -525,13 +521,12 @@ public partial class SafeChildProcessHandle
 
     private void KillCore(bool throwOnError)
     {
-        // Use the send_signal native function to send SIGKILL (signal 9)
 #if LINUX
         int pidfd = (int)DangerousGetHandle();
-        int result = send_signal(pidfd, _pid, (int)SIGKILL);
+        int result = send_signal(pidfd, _pid, SIGKILL);
 #else
         int pid = GetProcessIdCore();
-        int result = send_signal(-1, pid, (int)SIGKILL);
+        int result = send_signal(-1, pid, SIGKILL);
 #endif
         if (result == 0 || !throwOnError)
         {
@@ -551,22 +546,14 @@ public partial class SafeChildProcessHandle
         throw new Win32Exception(errno, $"Failed to terminate process (errno={errno})");
     }
 
-#if NET
     private void SendSignalCore(PosixSignal signal)
     {
-        // Validate the signal value is within the supported range
-        int signalValue = (int)signal;
-        if (signalValue < -10 || signalValue > -1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(signal), signal, "Invalid signal value");
-        }
-
 #if LINUX
         int pidfd = (int)DangerousGetHandle();
-        int result = send_signal(pidfd, _pid, signalValue);
+        int result = send_signal(pidfd, _pid, signal);
 #else
         int pid = GetProcessIdCore();
-        int result = send_signal(-1, pid, signalValue);
+        int result = send_signal(-1, pid, signal);
 #endif
 
         if (result == 0)
@@ -578,5 +565,4 @@ public partial class SafeChildProcessHandle
         int errno = Marshal.GetLastPInvokeError();
         throw new Win32Exception(errno, $"Failed to send signal {signal} (errno={errno})");
     }
-#endif
 }

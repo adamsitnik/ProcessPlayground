@@ -7,7 +7,6 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Tests;
 
-#if NET
 public partial class SafeChildProcessHandleTests
 {
     [Fact]
@@ -97,4 +96,3 @@ public partial class SafeChildProcessHandleTests
         Assert.Equal(3, exception.NativeErrorCode);
     }
 }
-#endif
