@@ -21,11 +21,18 @@ public partial class SafeChildProcessHandle
 #endif
     // Store the exit pipe read fd for async monitoring
     private int _exitPipeFd;
+    // Store the resume pipe write fd for suspended processes
+    private int _resumePipeFd;
     // Buffer for reading from exit pipe (reused to avoid allocations)
     private static readonly byte[] s_exitPipeBuffer = new byte[1];
 
     protected override bool ReleaseHandle()
     {
+        // Close the resume pipe fd if it's valid
+        if (_resumePipeFd > 0)
+        {
+            close(_resumePipeFd);
+        }
         // Close the exit pipe fd if it's valid
         if (_exitPipeFd > 0)
         {
@@ -44,6 +51,9 @@ public partial class SafeChildProcessHandle
     [LibraryImport("libc", SetLastError = true)]
     private static partial int close(int fd);
 
+    [LibraryImport("libc", SetLastError = true)]
+    private static unsafe partial nint write(int fd, void* buf, nuint count);
+
     // P/Invoke declarations
     [LibraryImport("processspawn", SetLastError = true)]
     private static unsafe partial int spawn_process(
@@ -57,7 +67,9 @@ public partial class SafeChildProcessHandle
         out int pid,
         out int pidfd,
         out int exit_pipe_fd,
-        int kill_on_parent_death);
+        int kill_on_parent_death,
+        int create_suspended,
+        out int resume_pipe_fd);
 
     // Shared declarations for both Linux and non-Linux Unix
     [StructLayout(LayoutKind.Sequential)]
@@ -181,7 +193,9 @@ public partial class SafeChildProcessHandle
                 out int pid,
                 out int pidfd,
                 out int exitPipeFd,
-                options.KillOnParentDeath ? 1 : 0);
+                options.KillOnParentDeath ? 1 : 0,
+                options.CreateSuspended ? 1 : 0,
+                out int resumePipeFd);
 
             if (result == -1)
             {
@@ -193,11 +207,13 @@ public partial class SafeChildProcessHandle
             SafeChildProcessHandle handle = new SafeChildProcessHandle(pidfd, ownsHandle: true);
             handle._pid = pid;
             handle._exitPipeFd = exitPipeFd;
+            handle._resumePipeFd = resumePipeFd;
             return handle;
 #else
             // On non-Linux Unix, we don't use pidfd (it's -1), we just use the PID as the handle
             SafeChildProcessHandle handle = new SafeChildProcessHandle(pid, ownsHandle: true);
             handle._exitPipeFd = exitPipeFd;
+            handle._resumePipeFd = resumePipeFd;
             return handle;
 #endif
         }
@@ -550,5 +566,27 @@ public partial class SafeChildProcessHandle
         
         // Any other error is unexpected
         throw new Win32Exception(errno, $"Failed to terminate process (errno={errno})");
+    }
+
+    private unsafe void ResumeCore()
+    {
+        if (_resumePipeFd <= 0)
+        {
+            throw new InvalidOperationException("Process was not created in a suspended state.");
+        }
+
+        // Write a single byte to the resume pipe to unblock the child
+        byte resumeByte = 1;
+        nint bytesWritten = write(_resumePipeFd, &resumeByte, 1);
+        
+        if (bytesWritten != 1)
+        {
+            int errno = Marshal.GetLastPInvokeError();
+            throw new Win32Exception(errno, "Failed to write to resume pipe");
+        }
+
+        // Close the resume pipe after writing
+        close(_resumePipeFd);
+        _resumePipeFd = 0;
     }
 }

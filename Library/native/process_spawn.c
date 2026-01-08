@@ -57,7 +57,9 @@ static int create_cloexec_pipe(int pipefd[2]) {
 // If out_pid is not NULL, the PID of the child process is stored there
 // If out_pidfd is not NULL, the pidfd of the child process is stored there (Linux only, -1 on other platforms)
 // If out_exit_pipe_fd is not NULL, the read end of exit monitoring pipe is stored there
+// If out_resume_pipe_fd is not NULL, the write end of resume pipe is stored there
 // If kill_on_parent_death is non-zero, the child process will be killed when the parent dies
+// If create_suspended is non-zero, the child process will wait for resume signal before execve
 int spawn_process(
     const char* path,
     char* const argv[],
@@ -69,25 +71,47 @@ int spawn_process(
     int* out_pid,
     int* out_pidfd,
     int* out_exit_pipe_fd,
-    int kill_on_parent_death)
+    int kill_on_parent_death,
+    int create_suspended,
+    int* out_resume_pipe_fd)
 {
     int wait_pipe[2];
     int exit_pipe[2];
+    int resume_pipe[2];
     int pidfd = -1;
     sigset_t all_signals, old_signals;
     
     // Create pipe for exec synchronization (CLOEXEC so child doesn't inherit it)
-    if (create_cloexec_pipe(wait_pipe) != 0) {
-        return -1;
+    // Skip this when suspended to avoid deadlock (child won't reach execve until resumed)
+    if (!create_suspended)
+    {
+        if (create_cloexec_pipe(wait_pipe) != 0) {
+            return -1;
+        }
     }
     
     // Create pipe for exit monitoring (CLOEXEC to avoid other parallel processes inheriting it)
     if (create_cloexec_pipe(exit_pipe) != 0) {
         int saved_errno = errno;
-        close(wait_pipe[0]);
-        close(wait_pipe[1]);
+        if (!create_suspended)
+        {
+            close(wait_pipe[0]);
+            close(wait_pipe[1]);
+        }
         errno = saved_errno;
         return -1;
+    }
+    
+    // Create resume pipe if suspended (CLOEXEC to avoid other processes inheriting it)
+    if (create_suspended)
+    {
+        if (create_cloexec_pipe(resume_pipe) != 0) {
+            int saved_errno = errno;
+            close(exit_pipe[0]);
+            close(exit_pipe[1]);
+            errno = saved_errno;
+            return -1;
+        }
     }
     
     // Block all signals before forking
@@ -99,7 +123,8 @@ int spawn_process(
 #ifdef __linux__
     // On Linux, use clone3 to get pidfd atomically with fork
     struct clone_args args = {0};  // Zero-initialize
-    args.flags = CLONE_VFORK | CLONE_PIDFD;
+    // Use CLONE_VFORK only if not suspended, to avoid blocking parent
+    args.flags = (create_suspended ? 0 : CLONE_VFORK) | CLONE_PIDFD;
     args.pidfd = (uint64_t)(uintptr_t)&pidfd;
     args.exit_signal = SIGCHLD;
     
@@ -109,10 +134,18 @@ int spawn_process(
         // Fork failed
         int saved_errno = errno;
         pthread_sigmask(SIG_SETMASK, &old_signals, NULL);
-        close(wait_pipe[0]);
-        close(wait_pipe[1]);
+        if (!create_suspended)
+        {
+            close(wait_pipe[0]);
+            close(wait_pipe[1]);
+        }
         close(exit_pipe[0]);
         close(exit_pipe[1]);
+        if (create_suspended)
+        {
+            close(resume_pipe[0]);
+            close(resume_pipe[1]);
+        }
         errno = saved_errno;
         return -1;
     }
@@ -121,17 +154,25 @@ int spawn_process(
     
     if (clone_result == 0) {
 #else
-    // On non-Linux Unix, use vfork
-    child_pid = vfork();
+    // On non-Linux Unix, use fork (not vfork) when suspended to avoid blocking parent
+    child_pid = create_suspended ? fork() : vfork();
     
     if (child_pid == -1) {
         // Fork failed
         int saved_errno = errno;
         pthread_sigmask(SIG_SETMASK, &old_signals, NULL);
-        close(wait_pipe[0]);
-        close(wait_pipe[1]);
+        if (!create_suspended)
+        {
+            close(wait_pipe[0]);
+            close(wait_pipe[1]);
+        }
         close(exit_pipe[0]);
         close(exit_pipe[1]);
+        if (create_suspended)
+        {
+            close(resume_pipe[0]);
+            close(resume_pipe[1]);
+        }
         errno = saved_errno;
         return -1;
     }
@@ -143,12 +184,15 @@ int spawn_process(
         // Restore signal mask immediately
         pthread_sigmask(SIG_SETMASK, &old_signals, NULL);
         
+        // Determine which pipe to use for error reporting
+        int error_pipe_fd = create_suspended ? resume_pipe[1] : wait_pipe[1];
+        
         // If kill_on_parent_death is enabled, set up parent death signal
         if (kill_on_parent_death) {
 #ifdef __linux__
             // On Linux, use prctl to set up parent death signal
             if (prctl(PR_SET_PDEATHSIG, SIGTERM) == -1) {
-                write_errno_and_exit(wait_pipe[1], errno);
+                write_errno_and_exit(error_pipe_fd, errno);
             }
             
             // Close the race: parent may have already died before prctl() ran.
@@ -190,13 +234,23 @@ int spawn_process(
             }
         }
         
-        // Close read end of wait pipe (we only write)
-        close(wait_pipe[0]);
+        // Close read end of wait pipe if not suspended
+        if (!create_suspended)
+        {
+            close(wait_pipe[0]);
+        }
+        
+        // Handle resume pipe if suspended
+        if (create_suspended)
+        {
+            // Close write end of resume pipe (parent owns it)
+            close(resume_pipe[1]);
+        }
         
         // Duplicate exit pipe write end to fd 3 (so it survives execve)
         // We use fd 3 as it's typically unused by standard streams
         if (dup2(exit_pipe[1], 3) == -1) {
-            write_errno_and_exit(wait_pipe[1], errno);
+            write_errno_and_exit(error_pipe_fd, errno);
         }
         close(exit_pipe[0]);
         close(exit_pipe[1]);
@@ -204,27 +258,37 @@ int spawn_process(
         // Redirect stdin/stdout/stderr
         if (stdin_fd != 0) {
             if (dup2(stdin_fd, 0) == -1) {
-                write_errno_and_exit(wait_pipe[1], errno);
+                write_errno_and_exit(error_pipe_fd, errno);
             }
         }
         
         if (stdout_fd != 1) {
             if (dup2(stdout_fd, 1) == -1) {
-                write_errno_and_exit(wait_pipe[1], errno);
+                write_errno_and_exit(error_pipe_fd, errno);
             }
         }
         
         if (stderr_fd != 2) {
             if (dup2(stderr_fd, 2) == -1) {
-                write_errno_and_exit(wait_pipe[1], errno);
+                write_errno_and_exit(error_pipe_fd, errno);
             }
         }
         
         // Change working directory if specified
         if (working_dir != NULL) {
             if (chdir(working_dir) == -1) {
-                write_errno_and_exit(wait_pipe[1], errno);
+                write_errno_and_exit(error_pipe_fd, errno);
             }
+        }
+        
+        // If suspended, wait for resume signal before execve
+        if (create_suspended)
+        {
+            char resume_byte;
+            // If read fails or returns 0 (pipe closed), just continue to execve
+            // This handles the case where the parent dies or closes the pipe
+            (void)read(resume_pipe[0], &resume_byte, 1);
+            close(resume_pipe[0]);
         }
         
         // Execute the program
@@ -233,7 +297,7 @@ int spawn_process(
         execve(path, argv, env);
         
         // If we get here, execve failed
-        write_errno_and_exit(wait_pipe[1], errno);
+        write_errno_and_exit(error_pipe_fd, errno);
     }
     
     // ========== PARENT PROCESS ==========
@@ -241,19 +305,32 @@ int spawn_process(
     // Restore signal mask
     pthread_sigmask(SIG_SETMASK, &old_signals, NULL);
     
-    // Close write end of wait pipe
-    close(wait_pipe[1]);
+    // Handle wait pipe only if not suspended
+    if (!create_suspended)
+    {
+        // Close write end of wait pipe
+        close(wait_pipe[1]);
+    }
     
     // Close write end of exit pipe (child owns it)
     close(exit_pipe[1]);
     
-    // Wait for child to exec or fail
-    int child_errno = 0;
-    ssize_t bytes_read = read(wait_pipe[0], &child_errno, sizeof(child_errno));
-    close(wait_pipe[0]);
+    // Handle resume pipe if suspended
+    if (create_suspended)
+    {
+        // Close read end of resume pipe (child owns it)
+        close(resume_pipe[0]);
+    }
     
-    if (bytes_read == sizeof(child_errno)) {
-        // Child failed to exec - reap it and close exit pipe
+    // Wait for child to exec or fail (skip if suspended)
+    int child_errno = 0;
+    if (!create_suspended)
+    {
+        ssize_t bytes_read = read(wait_pipe[0], &child_errno, sizeof(child_errno));
+        close(wait_pipe[0]);
+        
+        if (bytes_read == sizeof(child_errno)) {
+            // Child failed to exec - reap it and close exit pipe
 #ifdef __linux__
         siginfo_t info;
         waitid(P_PIDFD, pidfd, &info, WEXITED);
@@ -263,11 +340,16 @@ int spawn_process(
         waitpid(child_pid, &status, 0);
 #endif
         close(exit_pipe[0]);
+        if (create_suspended)
+        {
+            close(resume_pipe[1]);
+        }
         errno = child_errno;
         return -1;
+        }
     }
     
-    // Success - return PID, pidfd, and exit pipe fd if requested
+    // Success - return PID, pidfd, exit pipe fd, and resume pipe fd if requested
     if (out_pid != NULL) {
         *out_pid = child_pid;
     }
@@ -280,6 +362,9 @@ int spawn_process(
     }
     if (out_exit_pipe_fd != NULL) {
         *out_exit_pipe_fd = exit_pipe[0];
+    }
+    if (out_resume_pipe_fd != NULL) {
+        *out_resume_pipe_fd = create_suspended ? resume_pipe[1] : -1;
     }
     return 0;
 }
