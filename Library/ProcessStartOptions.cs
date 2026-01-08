@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 
@@ -24,11 +23,19 @@ public sealed class ProcessStartOptions
     // Internal property to check if environment was explicitly set
     internal bool HasEnvironmentBeenAccessed => _envVars != null;
 
+    internal bool IsFileNameResolved { get; }
+
     public ProcessStartOptions(string fileName)
     {
         ArgumentException.ThrowIfNullOrEmpty(fileName);
 
         _fileName = fileName;
+    }
+
+    private ProcessStartOptions(string resolvedFileName, bool isResolved)
+    {
+        _fileName = resolvedFileName;
+        IsFileNameResolved = isResolved;
     }
 
     private static Dictionary<string, string?> CreateEnvironmentCopy()
@@ -50,26 +57,25 @@ public sealed class ProcessStartOptions
     /// <exception cref="FileNotFoundException">Thrown when fileName cannot be resolved to an existing file.</exception>
     public static ProcessStartOptions ResolvePath(string fileName)
     {
-        ArgumentException.ThrowIfNullOrEmpty(fileName);
-
         string? resolvedPath = ResolvePathInternal(fileName);
-        
         if (resolvedPath == null)
         {
             throw new FileNotFoundException($"Could not find file '{fileName}'.", fileName);
         }
 
-        return new ProcessStartOptions(resolvedPath);
+        return new ProcessStartOptions(resolvedPath, isResolved: true);
     }
 
-    private static string? ResolvePathInternal(string filename)
+    internal static string? ResolvePathInternal(string fileName)
     {
-        // If the filename is a complete path, use it, regardless of whether it exists.
-        if (Path.IsPathRooted(filename))
+        ArgumentException.ThrowIfNullOrEmpty(fileName);
+
+        // If the fileName is a complete path, use it, regardless of whether it exists.
+        if (Path.IsPathRooted(fileName))
         {
             // In this case, it doesn't matter whether the file exists or not;
             // it's what the caller asked for, so it's what they'll get
-            return filename;
+            return fileName;
         }
 
         // Then check the executable's directory
@@ -81,7 +87,7 @@ public sealed class ProcessStartOptions
                 string? dir = Path.GetDirectoryName(executablePath);
                 if (dir != null)
                 {
-                    string path = Path.Combine(dir, filename);
+                    string path = Path.Combine(dir, fileName);
                     if (File.Exists(path))
                     {
                         return path;
@@ -92,7 +98,7 @@ public sealed class ProcessStartOptions
         }
 
         // Then check the current directory
-        string currentDirPath = Path.Combine(Directory.GetCurrentDirectory(), filename);
+        string currentDirPath = Path.Combine(Directory.GetCurrentDirectory(), fileName);
         if (File.Exists(currentDirPath))
         {
             return currentDirPath;
@@ -105,7 +111,7 @@ public sealed class ProcessStartOptions
         string? systemDirectory = WindowsHelpers.GetSystemDirectory();
         if (systemDirectory != null)
         {
-            string path = Path.Combine(systemDirectory, filename);
+            string path = Path.Combine(systemDirectory, fileName);
             if (File.Exists(path))
             {
                 return path;
@@ -116,7 +122,7 @@ public sealed class ProcessStartOptions
         string? windowsDirectory = WindowsHelpers.GetWindowsDirectory();
         if (windowsDirectory != null)
         {
-            string path = Path.Combine(windowsDirectory, "System", filename);
+            string path = Path.Combine(windowsDirectory, "System", fileName);
             if (File.Exists(path))
             {
                 return path;
@@ -126,7 +132,7 @@ public sealed class ProcessStartOptions
         // Check the Windows directory
         if (windowsDirectory != null)
         {
-            string path = Path.Combine(windowsDirectory, filename);
+            string path = Path.Combine(windowsDirectory, fileName);
             if (File.Exists(path))
             {
                 return path;
@@ -135,7 +141,7 @@ public sealed class ProcessStartOptions
 #endif
 
         // Then check each directory listed in the PATH environment variables
-        return FindProgramInPath(filename);
+        return FindProgramInPath(fileName);
     }
 
     private static string? GetExecutablePath()
