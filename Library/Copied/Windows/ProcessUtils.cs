@@ -1,37 +1,24 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Text;
 
 namespace System.TBA;
 
 internal static class ProcessUtils
 {
+    internal static void BuildApplicationName(ProcessStartOptions options, ref ValueStringBuilder applicationName)
+    {
+        ReadOnlySpan<char> fileName = options.IsFileNameResolved
+            ? options.FileName
+            : ProcessStartOptions.ResolvePathInternal(options.FileName);
+
+        applicationName.Append(fileName);
+        applicationName.NullTerminate();
+    }
+
     internal static void BuildCommandLine(ProcessStartOptions options, ref ValueStringBuilder commandLine)
     {
-        // Construct a StringBuilder with the appropriate command line
-        // to pass to CreateProcess.  If the filename isn't already
-        // in quotes, we quote it here.  This prevents some security
-        // problems (it specifies exactly which part of the string
-        // is the file to execute).
-        ReadOnlySpan<char> fileName = options.FileName.AsSpan().Trim();
-#if NETFRAMEWORK
-        bool fileNameIsQuoted = fileName.Length > 0 && fileName[0] == '"' && fileName[fileName.Length - 1] == '"';
-#else
-        bool fileNameIsQuoted = fileName.StartsWith('"') && fileName.EndsWith('"');
-#endif
-        if (!fileNameIsQuoted)
-        {
-            commandLine.Append('"');
-        }
-
-        commandLine.Append(fileName);
-
-        if (!fileNameIsQuoted)
-        {
-            commandLine.Append('"');
-        }
-
         AppendArgumentsTo(options, ref commandLine);
+        commandLine.NullTerminate();
     }
 
     internal static string GetEnvironmentVariablesBlock(IDictionary<string, string?> sd)
