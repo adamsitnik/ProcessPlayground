@@ -23,7 +23,7 @@ internal static partial class Interop
         partial
 #endif
         bool CreateProcess(
-            string? lpApplicationName,
+            char* lpApplicationName,
             char* lpCommandLine,
             ref SECURITY_ATTRIBUTES procSecAttrs,
             ref SECURITY_ATTRIBUTES threadSecAttrs,

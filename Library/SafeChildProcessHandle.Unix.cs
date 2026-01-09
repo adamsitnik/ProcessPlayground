@@ -120,7 +120,7 @@ public partial class SafeChildProcessHandle
     private static SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
         // Resolve executable path first
-        string? resolvedPath = UnixHelpers.ResolvePath(options.FileName);
+        string? resolvedPath = options.IsFileNameResolved ? options.FileName : ProcessStartOptions.ResolvePathInternal(options.FileName);
         if (string.IsNullOrEmpty(resolvedPath))
         {
             throw new Win32Exception(2, $"Cannot find executable: {options.FileName}");

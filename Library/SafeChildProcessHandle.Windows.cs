@@ -59,8 +59,9 @@ public partial class SafeChildProcessHandle
 
     private static unsafe SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
+        ValueStringBuilder applicationName = new(stackalloc char[256]);
         ValueStringBuilder commandLine = new(stackalloc char[256]);
-        ProcessUtils.BuildCommandLine(options, ref commandLine);
+        ProcessUtils.BuildArgs(options, ref applicationName, ref commandLine);
 
         Interop.Kernel32.STARTUPINFOEX startupInfoEx = default;
         Interop.Kernel32.PROCESS_INFORMATION processInfo = default;
@@ -175,12 +176,12 @@ public partial class SafeChildProcessHandle
             string? workingDirectory = options.WorkingDirectory?.FullName;
             int errorCode = 0;
 
-            commandLine.NullTerminate();
             fixed (char* environmentBlockPtr = environmentBlock)
+            fixed (char* applicationNamePtr = &applicationName.GetPinnableReference())
             fixed (char* commandLinePtr = &commandLine.GetPinnableReference())
             {
                 bool retVal = Interop.Kernel32.CreateProcess(
-                    null,                // we don't need this since all the info is in commandLine
+                    applicationNamePtr,  // pointer to the application name string
                     commandLinePtr,      // pointer to the command line string
                     ref unused_SecAttrs, // address to process security attributes, we don't need to inherit the handle
                     ref unused_SecAttrs, // address to thread security attributes.

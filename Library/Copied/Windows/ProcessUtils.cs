@@ -1,37 +1,29 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Text;
 
 namespace System.TBA;
 
 internal static class ProcessUtils
 {
-    internal static void BuildCommandLine(ProcessStartOptions options, ref ValueStringBuilder commandLine)
+    internal static void BuildArgs(ProcessStartOptions options, ref ValueStringBuilder applicationName, ref ValueStringBuilder commandLine)
     {
-        // Construct a StringBuilder with the appropriate command line
-        // to pass to CreateProcess.  If the filename isn't already
-        // in quotes, we quote it here.  This prevents some security
-        // problems (it specifies exactly which part of the string
-        // is the file to execute).
-        ReadOnlySpan<char> fileName = options.FileName.AsSpan().Trim();
-#if NETFRAMEWORK
-        bool fileNameIsQuoted = fileName.Length > 0 && fileName[0] == '"' && fileName[fileName.Length - 1] == '"';
-#else
-        bool fileNameIsQuoted = fileName.StartsWith('"') && fileName.EndsWith('"');
-#endif
-        if (!fileNameIsQuoted)
+        string absolutePath = options.IsFileNameResolved
+            ? options.FileName
+            : ProcessStartOptions.ResolvePathInternal(options.FileName);
+
+        applicationName.Append(absolutePath);
+        applicationName.NullTerminate();
+
+        // From: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw
+        // "Because argv[0] is the module name, C programmers generally repeat the module name as the first token in the command line."
+        // The truth is that some programs REQUIRE it (example: findstr). That is why we repeat it.
+        PasteArguments.AppendArgument(ref commandLine, options.FileName);
+
+        foreach (string argument in options.Arguments)
         {
-            commandLine.Append('"');
+            PasteArguments.AppendArgument(ref commandLine, argument);
         }
-
-        commandLine.Append(fileName);
-
-        if (!fileNameIsQuoted)
-        {
-            commandLine.Append('"');
-        }
-
-        AppendArgumentsTo(options, ref commandLine);
+        commandLine.NullTerminate();
     }
 
     internal static string GetEnvironmentVariablesBlock(IDictionary<string, string?> sd)
@@ -59,13 +51,5 @@ internal static class ProcessUtils
         }
 
         return result.ToString();
-    }
-
-    private static void AppendArgumentsTo(ProcessStartOptions options, ref ValueStringBuilder stringBuilder)
-    {
-        foreach (string argument in options.Arguments)
-        {
-            PasteArguments.AppendArgument(ref stringBuilder, argument);
-        }
     }
 }
