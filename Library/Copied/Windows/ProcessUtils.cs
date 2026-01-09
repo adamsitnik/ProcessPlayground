@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using System.IO;
 using System.Text;
 
 namespace System.TBA;
@@ -18,8 +17,7 @@ internal static class ProcessUtils
         // From: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw
         // "Because argv[0] is the module name, C programmers generally repeat the module name as the first token in the command line."
         // The truth is that some programs REQUIRE it (example: findstr). That is why we repeat it.
-        string fileName = Path.GetFileName(absolutePath);
-        PasteArguments.AppendArgument(ref commandLine, fileName);
+        PasteArguments.AppendArgument(ref commandLine, options.FileName);
 
         foreach (string argument in options.Arguments)
         {
