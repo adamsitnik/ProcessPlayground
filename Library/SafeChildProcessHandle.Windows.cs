@@ -60,9 +60,8 @@ public partial class SafeChildProcessHandle
     private static unsafe SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
         ValueStringBuilder applicationName = new(stackalloc char[256]);
-        ProcessUtils.BuildApplicationName(options, ref applicationName);
         ValueStringBuilder commandLine = new(stackalloc char[256]);
-        ProcessUtils.BuildCommandLine(options, ref commandLine);
+        ProcessUtils.BuildArgs(options, ref applicationName, ref commandLine);
 
         Interop.Kernel32.STARTUPINFOEX startupInfoEx = default;
         Interop.Kernel32.PROCESS_INFORMATION processInfo = default;

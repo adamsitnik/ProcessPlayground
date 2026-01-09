@@ -1,23 +1,30 @@
 ﻿using System.Collections.Generic;
+using System.IO;
 using System.Text;
 
 namespace System.TBA;
 
 internal static class ProcessUtils
 {
-    internal static void BuildApplicationName(ProcessStartOptions options, ref ValueStringBuilder applicationName)
+    internal static void BuildArgs(ProcessStartOptions options, ref ValueStringBuilder applicationName, ref ValueStringBuilder commandLine)
     {
-        ReadOnlySpan<char> fileName = options.IsFileNameResolved
+        string absolutePath = options.IsFileNameResolved
             ? options.FileName
             : ProcessStartOptions.ResolvePathInternal(options.FileName);
 
-        applicationName.Append(fileName);
+        applicationName.Append(absolutePath);
         applicationName.NullTerminate();
-    }
 
-    internal static void BuildCommandLine(ProcessStartOptions options, ref ValueStringBuilder commandLine)
-    {
-        AppendArgumentsTo(options, ref commandLine);
+        // From: https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-createprocessw
+        // "Because argv[0] is the module name, C programmers generally repeat the module name as the first token in the command line."
+        // The truth is that some programs REQUIRE it (example: findstr). That is why we repeat it.
+        string fileName = Path.GetFileName(absolutePath);
+        PasteArguments.AppendArgument(ref commandLine, fileName);
+
+        foreach (string argument in options.Arguments)
+        {
+            PasteArguments.AppendArgument(ref commandLine, argument);
+        }
         commandLine.NullTerminate();
     }
 
@@ -46,13 +53,5 @@ internal static class ProcessUtils
         }
 
         return result.ToString();
-    }
-
-    private static void AppendArgumentsTo(ProcessStartOptions options, ref ValueStringBuilder stringBuilder)
-    {
-        foreach (string argument in options.Arguments)
-        {
-            PasteArguments.AppendArgument(ref stringBuilder, argument);
-        }
     }
 }
