@@ -24,9 +24,9 @@ namespace System;
 
 public static class Console
 {
-    public static SafeFileHandle GetStandardInputHandle();
-    public static SafeFileHandle GetStandardOutputHandle();
-    public static SafeFileHandle GetStandardErrorHandle();
+    public static SafeFileHandle OpenStandardInputHandle();
+    public static SafeFileHandle OpenStandardOutputHandle();
+    public static SafeFileHandle OpenStandardErrorHandle();
 }
 ```
 
@@ -66,6 +66,8 @@ public sealed class ProcessStartOptions
     public bool KillOnParentDeath { get; set; }
 
     public ProcessStartOptions(string fileName);
+    
+    public static ProcessStartOptions ResolvePath(string fileName);
 }
 ```
 
@@ -80,6 +82,12 @@ public sealed class ProcessStartOptions
 | `CreateNoWindow` | `bool` | Whether to create a console window |
 | `KillOnParentDeath` | `bool` | Whether to kill the process when the parent process exits |
 
+**Static Methods:**
+
+| Method | Description |
+|--------|-------------|
+| `ResolvePath(string fileName)` | Resolves the given file name to an absolute path by searching the current directory, executable directory, system directories (Windows), and PATH environment variable. Returns a new ProcessStartOptions instance with the resolved path. Throws `FileNotFoundException` if the file cannot be found. |
+
 ### Low-Level APIs: SafeProcessHandle
 
 Low-level APIs for advanced process management scenarios:
@@ -93,6 +101,8 @@ public class SafeProcessHandle
     public int GetProcessId();
     public int WaitForExit(TimeSpan? timeout = default);
     public Task<int> WaitForExitAsync(CancellationToken cancellationToken = default);
+    public void Kill();
+    public void SendSignal(PosixSignal signal);  // Unix only
 }
 ```
 
@@ -171,7 +181,13 @@ namespace System.TBA
         /// <summary>
         /// Creates an instance of <see cref="ProcessOutputLines"/> to stream the output of the process.
         /// </summary>
-        public static ProcessOutputLines ReadOutputLinesAsync(ProcessStartOptions options, Encoding? encoding = null);
+        public static ProcessOutputLines ReadOutputLines(ProcessStartOptions options, TimeSpan? timeout = null, Encoding? encoding = null);
+        
+        /// <summary>
+        /// Executes the process and returns the combined output (stdout + stderr) as bytes.
+        /// </summary>
+        public static CombinedOutput GetCombinedOutput(ProcessStartOptions options, SafeFileHandle? input = null, TimeSpan? timeout = null);
+        public static Task<CombinedOutput> GetCombinedOutputAsync(ProcessStartOptions options, SafeFileHandle? input = null, CancellationToken cancellationToken = default);
     }
 }
 ```
@@ -205,6 +221,25 @@ public readonly struct ProcessOutputLine
     public bool StandardError { get; }  // True if from stderr, false if from stdout
 }
 ```
+
+### CombinedOutput
+
+A readonly struct representing the complete output from a process:
+
+```csharp
+namespace System.TBA;
+
+public readonly struct CombinedOutput
+{
+    public int ExitCode { get; }           // The exit code of the process
+    public ReadOnlyMemory<byte> Bytes { get; }  // The combined stdout and stderr as bytes
+    public int ProcessId { get; }          // The process ID
+    
+    public string GetText(Encoding? encoding = null);  // Convert bytes to string
+}
+```
+
+The `CombinedOutput` struct provides access to the complete output of a process as a byte array, which can be converted to text using the `GetText` method. This is useful when you need to capture all output efficiently without line-by-line processing.
 
 ## Usage Examples
 
@@ -304,7 +339,7 @@ ProcessStartOptions options = new("dotnet")
     Arguments = { "--help" }
 };
 
-var output = ChildProcess.ReadOutputAsync(options);
+var output = ChildProcess.ReadOutputLines(options);
 await foreach (var line in output)
 {
     if (line.StandardError)
@@ -319,6 +354,28 @@ await foreach (var line in output)
 Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
 ```
 
+### Get Combined Output
+
+For efficiently capturing all process output as bytes or text:
+
+```csharp
+ProcessStartOptions options = new("dotnet")
+{
+    Arguments = { "--version" }
+};
+
+// Synchronous version
+CombinedOutput output = ChildProcess.GetCombinedOutput(options);
+string text = output.GetText();
+Console.WriteLine($"Output: {text}");
+Console.WriteLine($"Exit code: {output.ExitCode}");
+
+// Async version
+CombinedOutput output = await ChildProcess.GetCombinedOutputAsync(options);
+string text = output.GetText();
+Console.WriteLine($"Output: {text}");
+```
+
 ## Comparison with Process API
 
 | Task | Process API | New API |
@@ -327,10 +384,12 @@ Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
 | Run async | `Process.Start()` + `WaitForExitAsync()` | `ChildProcess.ExecuteAsync()` |
 | Discard output | Redirect + empty event handlers | `ChildProcess.Discard()` |
 | Redirect to file | Redirect + read + write to file | `ChildProcess.RedirectToFiles()` |
-| Stream output | Redirect + `ReadLineAsync` loop | `ChildProcess.ReadOutputAsync()` |
+| Stream output | Redirect + `ReadLineAsync` loop | `ChildProcess.ReadOutputLines()` |
+| Capture all output | Redirect + `ReadToEndAsync()` | `ChildProcess.GetCombinedOutput()` |
 | Piping between processes | Complex handle management | `ProcessHandle.Start()` with pipes |
 | Parent death handling | Manual implementation | `KillOnParentDeath = true` |
 | Timeout | `WaitForExit(int)` + `Kill` | `Execute(TimeSpan)` or `CancellationToken` |
+| Path resolution | Manual PATH search | `ProcessStartOptions.ResolvePath()` |
 
 ## Project Structure
 
