@@ -17,6 +17,15 @@
 #ifndef __NR_pidfd_send_signal
 #define __NR_pidfd_send_signal 424
 #endif
+
+// close_range syscall and flags
+#ifndef __NR_close_range
+#define __NR_close_range 436
+#endif
+
+#ifndef CLOSE_RANGE_CLOEXEC
+#define CLOSE_RANGE_CLOEXEC (1U << 2)
+#endif
 #endif
 
 // External variable containing the current environment.
@@ -224,6 +233,17 @@ int spawn_process(
                 write_errno_and_exit(wait_pipe[1], errno);
             }
         }
+        
+#ifdef __linux__
+        // On Linux, use close_range to mark all FDs from 4 onwards as CLOEXEC
+        // This prevents the child from inheriting unwanted file descriptors
+        // FDs 0-2 are stdin/stdout/stderr, fd 3 is our exit pipe
+        // We use CLOSE_RANGE_CLOEXEC to set the flag without closing the FDs
+        // This must be called AFTER the dup2 calls above, so that if stdin_fd/stdout_fd/stderr_fd
+        // are >= 4, they don't get CLOEXEC set before being duplicated to 0/1/2
+        syscall(__NR_close_range, 4, ~0U, CLOSE_RANGE_CLOEXEC);
+        // Ignore errors - if close_range is not supported, we continue anyway
+#endif
         
         // Change working directory if specified
         if (working_dir != NULL) {
