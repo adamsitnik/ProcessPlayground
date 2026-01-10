@@ -43,11 +43,13 @@ public static class File
 {
     public static SafeFileHandle OpenNullFileHandle();
     public static void CreateAnonymousPipe(out SafeFileHandle read, out SafeFileHandle write);
+    public static void CreateNamedPipe(out SafeFileHandle read, out SafeFileHandle write, string? name = null);
 }
 ```
 
 - **`OpenNullFileHandle()`**: Opens a handle to the null device (`NUL` on Windows, `/dev/null` on Unix). Useful for discarding process output or providing empty input.
 - **`CreateAnonymousPipe()`**: Creates an anonymous pipe for inter-process communication. The read end can be used to read data written to the write end.
+- **`CreateNamedPipe()`**: Creates a named pipe for inter-process communication. The read end is async and the write end is sync. Primarily used internally for timeout scenarios on Windows.
 
 ### ProcessStartOptions
 
