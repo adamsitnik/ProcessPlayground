@@ -397,6 +397,23 @@ static int get_exit_code_from_status(int status) {
         return -1;
     }
 }
+
+// Helper to wait for a process using waitpid and return exit code
+// Handles EINTR and returns exit code
+static int wait_for_exit_waitpid(int pid) {
+    int status = 0;
+    while (1) {
+        int result = waitpid(pid, &status, 0);
+        if (result == pid) {
+            return get_exit_code_from_status(status);
+        } else if (result == -1) {
+            if (errno == EINTR) {
+                continue;
+            }
+            return -1;
+        }
+    }
+}
 #endif
 
 #ifdef __linux__
@@ -468,31 +485,12 @@ int wait_for_exit(int pidfd, int pid, int timeout_ms) {
     // macOS and other Unix systems
     if (timeout_ms == -1) {
         // Wait indefinitely using waitpid
-        int status = 0;
-        while (1) {
-            int result = waitpid(pid, &status, 0);
-            if (result == pid) {
-                return get_exit_code_from_status(status);
-            } else if (result == -1) {
-                if (errno == EINTR) {
-                    continue;
-                }
-                return -1;
-            }
-        }
+        return wait_for_exit_waitpid(pid);
     } else {
 #ifdef __APPLE__
         // macOS: Use kqueue for timeout
-        int queue = kqueue();
+        int queue = kqueuex(KQUEUE_CLOEXEC);
         if (queue == -1) {
-            return -1;
-        }
-        
-        // Set CLOEXEC on kqueue
-        if (fcntl(queue, F_SETFD, FD_CLOEXEC) == -1) {
-            int saved_errno = errno;
-            close(queue);
-            errno = saved_errno;
             return -1;
         }
         
@@ -508,14 +506,23 @@ int wait_for_exit(int pidfd, int pid, int timeout_ms) {
         timeout.tv_sec = timeout_ms / 1000;
         timeout.tv_nsec = (timeout_ms % 1000) * 1000 * 1000;
         
-        int ret = kevent(queue, &change_list, 1, &event_list, 1, &timeout);
+        int ret;
+        while (1) {
+            ret = kevent(queue, &change_list, 1, &event_list, 1, &timeout);
+            if (ret >= 0) {
+                break;  // Success or timeout
+            }
+            if (errno != EINTR) {
+                int saved_errno = errno;
+                close(queue);
+                errno = saved_errno;
+                return -1;
+            }
+            // EINTR - retry with remaining timeout
+            // Note: This is a simplification; ideally we'd track elapsed time
+        }
         
-        if (ret < 0) {
-            int saved_errno = errno;
-            close(queue);
-            errno = saved_errno;
-            return -1;
-        } else if (ret == 0) {
+        if (ret == 0) {
             // Timeout - kill the process
             kill(pid, SIGKILL);
             
@@ -525,18 +532,7 @@ int wait_for_exit(int pidfd, int pid, int timeout_ms) {
             close(queue);
             
             // Wait for the process to actually exit
-            int status = 0;
-            while (1) {
-                int result = waitpid(pid, &status, 0);
-                if (result == pid) {
-                    return get_exit_code_from_status(status);
-                } else if (result == -1) {
-                    if (errno == EINTR) {
-                        continue;
-                    }
-                    return -1;
-                }
-            }
+            return wait_for_exit_waitpid(pid);
         } else {
             // Process exited - delete the event and reap
             change_list.flags = EV_DELETE;
@@ -544,18 +540,7 @@ int wait_for_exit(int pidfd, int pid, int timeout_ms) {
             close(queue);
             
             // Reap the process
-            int status = 0;
-            while (1) {
-                int result = waitpid(pid, &status, 0);
-                if (result == pid) {
-                    return get_exit_code_from_status(status);
-                } else if (result == -1) {
-                    if (errno == EINTR) {
-                        continue;
-                    }
-                    return -1;
-                }
-            }
+            return wait_for_exit_waitpid(pid);
         }
 #else
         // Other Unix systems: fallback to polling with waitpid
