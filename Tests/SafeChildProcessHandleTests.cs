@@ -335,10 +335,8 @@ public partial class SafeChildProcessHandleTests
         processHandle.Kill();
     }
 
-#if WINDOWS || LINUX // It fails on macOS, as we use the poll on the exit pipe
     [Theory]
     [InlineData(false)]
-#endif
 #if WINDOWS // https://github.com/adamsitnik/ProcessPlayground/issues/61
     [InlineData(true)]
 #endif
