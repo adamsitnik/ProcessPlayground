@@ -223,15 +223,24 @@ int spawn_process(
     }
     
     if (stdin_fd != 0 && stdin_fd != 1 && stdin_fd != 2 && stdin_fd != 3) {
-        posix_spawn_file_actions_addclose(&file_actions, stdin_fd);
+        if (posix_spawn_file_actions_addclose(&file_actions, stdin_fd) != 0) {
+            spawn_errno = errno;
+            goto spawn_cleanup;
+        }
     }
     
     if (stdout_fd != 0 && stdout_fd != 1 && stdout_fd != 2 && stdout_fd != 3) {
-        posix_spawn_file_actions_addclose(&file_actions, stdout_fd);
+        if (posix_spawn_file_actions_addclose(&file_actions, stdout_fd) != 0) {
+            spawn_errno = errno;
+            goto spawn_cleanup;
+        }
     }
     
     if (stderr_fd != 0 && stderr_fd != 1 && stderr_fd != 2 && stderr_fd != 3) {
-        posix_spawn_file_actions_addclose(&file_actions, stderr_fd);
+        if (posix_spawn_file_actions_addclose(&file_actions, stderr_fd) != 0) {
+            spawn_errno = errno;
+            goto spawn_cleanup;
+        }
     }
     
     // Change working directory if specified
