@@ -1,34 +1,12 @@
 #ifndef PAL_CONFIG_H
 #define PAL_CONFIG_H
 
-/* Define to 1 if you have the pipe2 function. */
 #cmakedefine HAVE_PIPE2
-
-/* Define to 1 if you have the prctl function. */
 #cmakedefine HAVE_PRCTL
-
-/* Define to 1 if you have the <sys/syscall.h> header file. */
 #cmakedefine HAVE_SYS_SYSCALL_H
-
-/* Define to 1 if you have the <linux/sched.h> header file. */
 #cmakedefine HAVE_LINUX_SCHED_H
-
-/* Define to 1 if clone3 syscall is available */
-#cmakedefine HAVE_CLONE3_AVAILABLE
-
-/* Define to 1 if clone3 syscall needs fallback definition */
-#cmakedefine HAVE_CLONE3_FALLBACK
-
-/* Define to 1 if pidfd_send_signal syscall is available */
+#cmakedefine HAVE_CLONE3
 #cmakedefine HAVE_PIDFD_SEND_SIGNAL
-
-/* Define to 1 if pidfd_send_signal syscall needs fallback definition */
-#cmakedefine HAVE_PIDFD_SEND_SIGNAL_FALLBACK
-
-/* Define to 1 if close_range syscall is available */
 #cmakedefine HAVE_CLOSE_RANGE
-
-/* Define to 1 if close_range syscall needs fallback definition */
-#cmakedefine HAVE_CLOSE_RANGE_FALLBACK
 
 #endif /* PAL_CONFIG_H */
