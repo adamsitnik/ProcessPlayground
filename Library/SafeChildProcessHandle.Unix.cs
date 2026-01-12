@@ -15,6 +15,7 @@ namespace Microsoft.Win32.SafeHandles;
 // https://github.com/dotnet/runtime/blob/main/src/native/libs/System.Native/pal_process.c
 public partial class SafeChildProcessHandle
 {
+    private const int NoPidFd = -1;
     // Buffer for reading from exit pipe (reused to avoid allocations)
     private static readonly byte[] s_exitPipeBuffer = new byte[1];
 
@@ -22,7 +23,7 @@ public partial class SafeChildProcessHandle
     private readonly int _exitPipeFd;
 
     private SafeChildProcessHandle(int pidfd, int pid, int exitPipeFd)
-        : this(existingHandle: (IntPtr)pidfd, ownsHandle: pidfd != -1)
+        : this(existingHandle: (IntPtr)pidfd, ownsHandle: pidfd != NoPidFd)
     {
         _pid = pid;
         _exitPipeFd = exitPipeFd;
@@ -36,23 +37,14 @@ public partial class SafeChildProcessHandle
             close(_exitPipeFd);
         }
 
-        return (int)handle switch
+        return (int)this.handle switch
         {
-            -1 => true,
-            _ => close((int)handle) == 0,
+            NoPidFd => true,
+            _ => close((int)this.handle) == 0,
         };
     }
 
     private int GetProcessIdCore() => _pid;
-
-    // Shared declarations for both Linux and non-Linux Unix
-    [StructLayout(LayoutKind.Sequential)]
-    private struct PollFd
-    {
-        public int fd;
-        public short events;
-        public short revents;
-    }
 
     private static SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
@@ -130,11 +122,19 @@ public partial class SafeChildProcessHandle
         }
     }
 
-    private unsafe bool TryGetExitCodeCore(out int exitCode)
+    private bool TryGetExitCodeCore(out int exitCode)
         => try_get_exit_code(this, _pid, out exitCode) != -1;
 
-    private unsafe int WaitForExitCore(int milliseconds)
+    private int WaitForExitCore(int milliseconds)
     {
+        // Timeout is natively supported on:
+        // - modern Linux with (poll for pidfd)
+        // - macOS and BSDs (kqueue for pid)
+        if (milliseconds != Timeout.Infinite && OperatingSystem.IsLinux() && this.handle == NoPidFd)
+        {
+            return WaitForExitCore_OldLinux(milliseconds);
+        }
+
         if (wait_for_exit(this, _pid, milliseconds, out int exitCode) != -1)
         {
             return exitCode;
@@ -142,6 +142,36 @@ public partial class SafeChildProcessHandle
 
         int errno = Marshal.GetLastPInvokeError();
         throw new Win32Exception(errno, $"wait_for_exit() failed with (errno={errno})");
+    }
+
+    private int WaitForExitCore_OldLinux(int milliseconds)
+    {
+        // On RHEL 8.0, we don't have the ability to wait with timeout on pidfd,
+        // so we use a timer. It's sucks, but better than nothing.
+        Timer? timeoutTimer = null;
+        try
+        {
+            // Start a timer that will kill the process when the timeout expires
+            timeoutTimer = new Timer(
+                callback: _ => KillCore(throwOnError: false),
+                state: null,
+                dueTime: milliseconds,
+                period: Timeout.Infinite);
+
+            // Perform blocking wait without timeout (native code will wait indefinitely)
+            if (wait_for_exit(this, _pid, Timeout.Infinite, out int exitCode) != -1)
+            {
+                return exitCode;
+            }
+
+            int errno = Marshal.GetLastPInvokeError();
+            throw new Win32Exception(errno, $"wait_for_exit() failed with (errno={errno})");
+        }
+        finally
+        {
+            // Dispose the timer to prevent it from firing if the process exited before timeout
+            timeoutTimer?.Dispose();
+        }
     }
 
     private async Task<int> WaitForExitAsyncCore(CancellationToken cancellationToken)
