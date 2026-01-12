@@ -43,14 +43,35 @@
 #ifdef __APPLE__
 #include <sys/event.h>
 
-// kqueuex with CLOEXEC flag for macOS
+// Helper function to create kqueue with CLOEXEC
+// On FreeBSD, kqueuex is available; on macOS, we use kqueue + fcntl
+static inline int create_kqueue_cloexec(void) {
+#ifdef __FreeBSD__
+    // FreeBSD has kqueuex
+    return kqueuex(KQUEUE_CLOEXEC);
+#else
+    // macOS: use kqueue + fcntl
+    int queue = kqueue();
+    if (queue == -1) {
+        return -1;
+    }
+    
+    // Set CLOEXEC on kqueue
+    if (fcntl(queue, F_SETFD, FD_CLOEXEC) == -1) {
+        int saved_errno = errno;
+        close(queue);
+        errno = saved_errno;
+        return -1;
+    }
+    
+    return queue;
+#endif
+}
+
+// kqueuex CLOEXEC flag constant
 #ifndef KQUEUE_CLOEXEC
 #define KQUEUE_CLOEXEC 0x00000001
 #endif
-
-// Declare kqueuex if not available in headers (macOS 10.12+)
-// We'll try to use it, but fall back to kqueue() + fcntl() if not available
-extern int kqueuex(unsigned int flags) __attribute__((weak_import));
 #endif
 
 // External variable containing the current environment.
@@ -112,7 +133,9 @@ int spawn_process(
 {
     int wait_pipe[2];
     int exit_pipe[2];
+#ifdef __linux__
     int pidfd = -1;
+#endif
     sigset_t all_signals, old_signals;
     
     // Create pipe for exec synchronization (CLOEXEC so child doesn't inherit it)
@@ -382,12 +405,14 @@ int send_signal(int pidfd, int pid, int managed_signal) {
 #endif
 }
 
+#ifdef __linux__
 // Helper function to get current time in milliseconds
 static long long get_time_ms(void) {
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (long long)tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
+#endif
 
 #ifndef __linux__
 // Helper function to get exit code from status (same as C# GetExitCodeFromStatus)
@@ -493,27 +518,9 @@ int wait_for_exit(int pidfd, int pid, int timeout_ms) {
     } else {
 #ifdef __APPLE__
         // macOS: Use kqueue for timeout
-        int queue = -1;
-        
-        // Try kqueuex first (macOS 10.12+), fall back to kqueue() + fcntl()
-        if (kqueuex != NULL) {
-            queue = kqueuex(KQUEUE_CLOEXEC);
-        }
-        
+        int queue = create_kqueue_cloexec();
         if (queue == -1) {
-            // Either kqueuex is not available or it failed, use kqueue() + fcntl()
-            queue = kqueue();
-            if (queue == -1) {
-                return -1;
-            }
-            
-            // Set CLOEXEC on kqueue
-            if (fcntl(queue, F_SETFD, FD_CLOEXEC) == -1) {
-                int saved_errno = errno;
-                close(queue);
-                errno = saved_errno;
-                return -1;
-            }
+            return -1;
         }
         
         struct kevent change_list = {0};
@@ -529,19 +536,13 @@ int wait_for_exit(int pidfd, int pid, int timeout_ms) {
         timeout.tv_nsec = (timeout_ms % 1000) * 1000 * 1000;
         
         int ret;
-        while (1) {
-            ret = kevent(queue, &change_list, 1, &event_list, 1, &timeout);
-            if (ret >= 0) {
-                break;  // Success or timeout
-            }
-            if (errno != EINTR) {
-                int saved_errno = errno;
-                close(queue);
-                errno = saved_errno;
-                return -1;
-            }
-            // EINTR - retry with remaining timeout
-            // Note: This is a simplification; ideally we'd track elapsed time
+        while ((ret = kevent(queue, &change_list, 1, &event_list, 1, &timeout)) < 0 && errno == EINTR);
+        
+        if (ret < 0) {
+            int saved_errno = errno;
+            close(queue);
+            errno = saved_errno;
+            return -1;
         }
         
         if (ret == 0) {
