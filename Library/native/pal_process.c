@@ -343,12 +343,28 @@ int send_signal(int pidfd, int pid, int managed_signal) {
     return kill(pid, native_signal);
 }
 
+#ifndef HAVE_CLONE3
+int map_status(int status, int* out_exitCode) {
+    if (WIFEXITED(status)) {
+        *out_exitCode = WEXITSTATUS(status);
+        return 0;
+    }
+    else if (WIFSIGNALED(status)) {
+        // Child was killed by signal - return 128 + signal number (common convention)
+        *out_exitCode = 128 + WTERMSIG(status);
+        return 0;
+    }
+    return -1; // Still running or unknown status
+}
+#endif
+
 // -1 is a valid exit code, so to distinguish between a normal exit code and an error, we return 0 on success and -1 on error
 int wait_for_exit(int pidfd, int pid, int timeout_ms, int* out_exitCode) {
     int ret;
 #ifdef HAVE_CLONE3
     (void)pid;
     siginfo_t info;
+    memset(&info, 0, sizeof(info));
     while ((ret = waitid(P_PIDFD, pidfd, &info, WEXITED)) < 0 && errno == EINTR);
 
     if (ret != -1) {
@@ -361,17 +377,36 @@ int wait_for_exit(int pidfd, int pid, int timeout_ms, int* out_exitCode) {
     while ((ret = waitpid(pid, &status, 0)) < 0 && errno == EINTR);
 
     if (ret != -1) {
-        if (WIFEXITED(status)) {
-            *out_exitCode = WEXITSTATUS(status);
-            return 0;
-        }
-        else if (WIFSIGNALED(status)) {
-            // Child was killed by signal - return 128 + signal number (common convention)
-            *out_exitCode = 128 + WTERMSIG(status);
-            return 0;
-        }
+        return map_status(status, out_exitCode);
     }
 #endif
     (void)timeout_ms;
+    return -1;
+}
+
+// -1 is a valid exit code, so to distinguish between a normal exit code and an error, we return 0 on success and -1 on error
+// Returns 0 if process has exited (exit code set), -1 if still running or error occurred
+int try_get_exit_code(int pidfd, int pid, int* out_exitCode) {
+    int ret;
+#ifdef HAVE_CLONE3
+    (void)pid;
+    siginfo_t info;
+    memset(&info, 0, sizeof(info));
+    while ((ret = waitid(P_PIDFD, pidfd, &info, WEXITED | WNOHANG)) < 0 && errno == EINTR);
+
+    if (ret == 0 && info.si_pid != 0) {
+        *out_exitCode = info.si_status;
+        return 0;
+    }
+#else
+    (void)pidfd;
+    int status;
+    while ((ret = waitpid(pid, &status, WNOHANG)) < 0 && errno == EINTR);
+
+    if (ret > 0) {
+        return map_status(status, out_exitCode);
+    }
+#endif
+    // Process still running or error
     return -1;
 }
