@@ -29,6 +29,11 @@
 
 #ifdef HAVE_POSIX_SPAWN
 #include <spawn.h>
+
+// macOS-specific extension to keep specific file descriptors open when using POSIX_SPAWN_CLOEXEC_DEFAULT
+#ifdef HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDINHERIT_NP
+extern int posix_spawn_file_actions_addinherit_np(posix_spawn_file_actions_t *, int);
+#endif
 #endif
 
 // In the future, we could add support for pidfd on FreeBSD
@@ -105,6 +110,7 @@ static inline int create_kqueue_cloexec(void) {
 // If out_pidfd is not NULL, the pidfd of the child process is stored there (Linux only, -1 on other platforms)
 // If out_exit_pipe_fd is not NULL, the read end of exit monitoring pipe is stored there
 // If kill_on_parent_death is non-zero, the child process will be killed when the parent dies
+//   Note: On macOS with posix_spawn, kill_on_parent_death is not supported and will be ignored
 int spawn_process(
     const char* path,
     char* const argv[],
@@ -230,7 +236,6 @@ int spawn_process(
     
     // Now mark fd 3 as inheritable (exempt from POSIX_SPAWN_CLOEXEC_DEFAULT)
     // This is a macOS-specific extension to keep fd 3 open
-    extern int posix_spawn_file_actions_addinherit_np(posix_spawn_file_actions_t *, int);
     if ((result = posix_spawn_file_actions_addinherit_np(&file_actions, 3)) != 0) {
         int saved_errno = result;
         posix_spawn_file_actions_destroy(&file_actions);
@@ -254,9 +259,14 @@ int spawn_process(
             return -1;
         }
 #else
-        // If addchdir_np is not available, we cannot change directory
-        // This is a limitation, but we'll continue
-        // The caller will need to handle this limitation
+        // If addchdir_np is not available, fail the spawn request
+        // as we cannot fulfill the working directory requirement
+        posix_spawn_file_actions_destroy(&file_actions);
+        posix_spawnattr_destroy(&attr);
+        close(exit_pipe[0]);
+        close(exit_pipe[1]);
+        errno = ENOTSUP;
+        return -1;
 #endif
     }
     
