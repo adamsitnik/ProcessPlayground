@@ -425,3 +425,7 @@ BenchmarksGo/BenchmarksGo.exe
 *.so
 *.o
 *_codeql_detected_source_root
+
+# CMake build artifacts
+Library/native/build/
+*.dylib

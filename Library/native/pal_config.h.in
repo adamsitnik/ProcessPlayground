@@ -1,0 +1,12 @@
+#ifndef PAL_CONFIG_H
+#define PAL_CONFIG_H
+
+#cmakedefine HAVE_PIPE2
+#cmakedefine HAVE_PDEATHSIG
+#cmakedefine HAVE_SYS_SYSCALL_H
+#cmakedefine HAVE_LINUX_SCHED_H
+#cmakedefine HAVE_CLONE3
+#cmakedefine HAVE_PIDFD_SEND_SIGNAL
+#cmakedefine HAVE_CLOSE_RANGE
+
+#endif /* PAL_CONFIG_H */

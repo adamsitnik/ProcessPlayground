@@ -1,4 +1,4 @@
-#define _GNU_SOURCE
+#include "pal_config.h"
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -8,24 +8,16 @@
 #include <string.h>
 #include <stdint.h>
 
-#ifdef __linux__
+#ifdef HAVE_SYS_SYSCALL_H
 #include <sys/syscall.h>
+#endif
+
+#ifdef HAVE_LINUX_SCHED_H
 #include <linux/sched.h>
+#endif
+
+#ifdef HAVE_PDEATHSIG
 #include <sys/prctl.h>
-
-// Define syscall number if not available in headers
-#ifndef __NR_pidfd_send_signal
-#define __NR_pidfd_send_signal 424
-#endif
-
-// close_range syscall and flags
-#ifndef __NR_close_range
-#define __NR_close_range 436
-#endif
-
-#ifndef CLOSE_RANGE_CLOEXEC
-#define CLOSE_RANGE_CLOEXEC (1U << 2)
-#endif
 #endif
 
 // External variable containing the current environment.
@@ -43,11 +35,11 @@ static inline void write_errno_and_exit(int pipe_fd, int err) {
 
 // Helper function to create a pipe with CLOEXEC flag
 static int create_cloexec_pipe(int pipefd[2]) {
-#ifdef __linux__
-    // On Linux, use pipe2 for atomic CLOEXEC
+#ifdef HAVE_PIPE2
+    // On systems with pipe2, use it for atomic CLOEXEC
     return pipe2(pipefd, O_CLOEXEC);
 #else
-    // On other Unix systems, use pipe + fcntl
+    // On other systems, use pipe + fcntl
     if (pipe(pipefd) != 0) {
         return -1;
     }
@@ -110,8 +102,8 @@ int spawn_process(
     
     pid_t child_pid;
     
-#ifdef __linux__
-    // On Linux, use clone3 to get pidfd atomically with fork
+#ifdef HAVE_CLONE3
+    // On systems with clone3, use it to get pidfd atomically with fork
     struct clone_args args = {0};  // Zero-initialize
     args.flags = CLONE_VFORK | CLONE_PIDFD;
     args.pidfd = (uint64_t)(uintptr_t)&pidfd;
@@ -135,7 +127,7 @@ int spawn_process(
     
     if (clone_result == 0) {
 #else
-    // On non-Linux Unix, use vfork
+    // On systems without clone3, use vfork
     child_pid = vfork();
     
     if (child_pid == -1) {
@@ -159,8 +151,8 @@ int spawn_process(
         
         // If kill_on_parent_death is enabled, set up parent death signal
         if (kill_on_parent_death) {
-#ifdef __linux__
-            // On Linux, use prctl to set up parent death signal
+#ifdef HAVE_PDEATHSIG
+            // On systems with PR_SET_PDEATHSIG (Linux), use it to set up parent death signal
             if (prctl(PR_SET_PDEATHSIG, SIGTERM) == -1) {
                 write_errno_and_exit(wait_pipe[1], errno);
             }
@@ -175,11 +167,11 @@ int spawn_process(
                 _exit(0);
             }
 #else
-            // On non-Linux Unix systems, prctl is not available.
+            // On systems without prctl, this feature is not available.
             // We would need a different mechanism (like polling or signals),
             // but for now we'll skip it as it's not straightforward to implement
             // without platform-specific code.
-            // This is a limitation of the Unix implementation on non-Linux systems.
+            // This is a limitation on systems without prctl.
 #endif
         }
         
@@ -234,8 +226,8 @@ int spawn_process(
             }
         }
         
-#ifdef __linux__
-        // On Linux, use close_range to mark all FDs from 4 onwards as CLOEXEC
+#ifdef HAVE_CLOSE_RANGE
+        // On systems with close_range (Linux and FreeBSD), use it to mark all FDs from 4 onwards as CLOEXEC
         // This prevents the child from inheriting unwanted file descriptors
         // FDs 0-2 are stdin/stdout/stderr, fd 3 is our exit pipe
         // We use CLOSE_RANGE_CLOEXEC to set the flag without closing the FDs
@@ -279,7 +271,7 @@ int spawn_process(
     
     if (bytes_read == sizeof(child_errno)) {
         // Child failed to exec - reap it and close exit pipe
-#ifdef __linux__
+#ifdef HAVE_CLONE3
         siginfo_t info;
         waitid(P_PIDFD, pidfd, &info, WEXITED);
         close(pidfd);
@@ -297,10 +289,10 @@ int spawn_process(
         *out_pid = child_pid;
     }
     if (out_pidfd != NULL) {
-#ifdef __linux__
+#ifdef HAVE_CLONE3
         *out_pidfd = pidfd;
 #else
-        *out_pidfd = -1;  // pidfd not available on non-Linux platforms
+        *out_pidfd = -1;  // pidfd not available on systems without clone3
 #endif
     }
     if (out_exit_pipe_fd != NULL) {
@@ -332,8 +324,8 @@ static int map_managed_signal_to_native(int managed_signal) {
 }
 
 // Send a signal to a process
-// On Linux, uses pidfd_send_signal syscall if pidfd >= 0, otherwise uses kill
-// On other Unix systems, uses kill with the pid parameter
+// On systems with pidfd_send_signal, uses that syscall if pidfd >= 0, otherwise uses kill
+// On other systems, uses kill with the pid parameter
 // Returns 0 on success, -1 on error (errno is set)
 int send_signal(int pidfd, int pid, int managed_signal) {
     // Map managed signal to native signal number
@@ -343,15 +335,15 @@ int send_signal(int pidfd, int pid, int managed_signal) {
         return -1;
     }
     
-#ifdef __linux__
-    // On Linux, prefer pidfd_send_signal if we have a valid pidfd
+#ifdef HAVE_PIDFD_SEND_SIGNAL
+    // On systems with pidfd_send_signal, prefer it if we have a valid pidfd
     if (pidfd >= 0) {
         return syscall(__NR_pidfd_send_signal, pidfd, native_signal, NULL, 0);
     } else {
         return kill(pid, native_signal);
     }
 #else
-    // On other Unix systems, use kill
+    // On other systems, use kill
     (void)pidfd; // Suppress unused parameter warning
     return kill(pid, native_signal);
 #endif

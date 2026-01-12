@@ -45,7 +45,7 @@ public partial class SafeChildProcessHandle
     private static partial int close(int fd);
 
     // P/Invoke declarations
-    [LibraryImport("processspawn", SetLastError = true)]
+    [LibraryImport("pal_process", SetLastError = true)]
     private static unsafe partial int spawn_process(
         byte* path,
         byte** argv,
@@ -59,7 +59,7 @@ public partial class SafeChildProcessHandle
         out int exit_pipe_fd,
         int kill_on_parent_death);
 
-    [LibraryImport("processspawn", SetLastError = true)]
+    [LibraryImport("pal_process", SetLastError = true)]
     private static partial int send_signal(int pidfd, int pid, PosixSignal managed_signal);
 
     // Shared declarations for both Linux and non-Linux Unix
