@@ -54,46 +54,6 @@ public partial class SafeChildProcessHandle
         public short revents;
     }
 
-    [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial int poll(PollFd* fds, nuint nfds, int timeout);
-
-    private const short POLLIN = 0x0001;
-
-#if LINUX
-
-    [StructLayout(LayoutKind.Sequential, Size = 128)]
-    private struct siginfo_t
-    {
-        public int si_signo;     // offset 0
-        public int si_errno;     // offset 4
-        public int si_code;      // offset 8
-        private int _pad0;       // offset 12 (padding)
-        public int si_pid;       // offset 16
-        public int si_uid;       // offset 20
-        public int si_status;    // offset 24
-        // Rest of the structure is padding to make total size 128 bytes
-    }
-
-    [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial int waitid(int idtype, SafeChildProcessHandle pidfd, siginfo_t* infop, int options);
-
-    // Constants for Linux
-    private const short POLLHUP = 0x0010;
-    private const int P_PIDFD = 3;
-    private const int WEXITED = 0x00000004;
-    private const int WNOHANG = 0x00000001;
-    // si_code values for SIGCHLD
-    private const int CLD_EXITED = 1;    // child has exited
-    private const int CLD_KILLED = 2;    // child was killed
-    private const int CLD_DUMPED = 3;    // child terminated abnormally
-#endif
-
-    // Common constants
-    private const int EINTR = 4;
-    private const int ECHILD = 10;
-    private const int ESRCH = 3;  // No such process
-    private const int EBADF = 9;  // Bad file descriptor
-    
     private static SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
         // Resolve executable path first
@@ -175,135 +135,13 @@ public partial class SafeChildProcessHandle
 
     private unsafe int WaitForExitCore(int milliseconds)
     {
-        if (milliseconds == Timeout.Infinite)
+        if (wait_for_exit(this, _pid, milliseconds, out int exitCode) != -1)
         {
-            if (wait_for_exit(this, _pid, milliseconds, out int exitCode) != -1)
-            { 
-                return exitCode;
-            }
-
-            int errno = Marshal.GetLastPInvokeError();
-            throw new Win32Exception(errno, $"wait_for_exit() failed with (errno={errno})");
+            return exitCode;
         }
 
-#if LINUX
-        {
-            // Wait with timeout using poll
-            long startTime = Environment.TickCount64;
-            long endTime = startTime + milliseconds;
-            
-            while (true)
-            {
-                long now = Environment.TickCount64;
-                int remainingMs = (int)Math.Max(0, endTime - now);
-                
-                PollFd pollfd = new PollFd
-                {
-                    fd = (int)DangerousGetHandle(),
-                    events = POLLIN,
-                    revents = 0
-                };
-                
-                int pollResult = poll(&pollfd, 1, remainingMs);
-                
-                if (pollResult < 0)
-                {
-                    int errno = Marshal.GetLastPInvokeError();
-                    if (errno == EINTR)
-                    {
-                        continue;
-                    }
-                    throw new Win32Exception(errno, "poll() failed");
-                }
-                else if (pollResult == 0)
-                {
-                    // Timeout - kill the process using pidfd_send_signal
-                    KillCore(throwOnError: false);
-                    
-                    // Wait for the process to actually exit
-                    siginfo_t siginfo = default;
-                    while (true)
-                    {
-                        int result = waitid(P_PIDFD, this, &siginfo, WEXITED);
-                        if (result == 0)
-                        {
-                            return siginfo.si_status;
-                        }
-                        else
-                        {
-                            int errno = Marshal.GetLastPInvokeError();
-                            if (errno != EINTR)
-                            {
-                                throw new Win32Exception(errno, "waitid() failed after timeout");
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    // Process exited
-                    siginfo_t siginfo = default;
-                    while (true)
-                    {
-                        int result = waitid(P_PIDFD, this, &siginfo, WEXITED | WNOHANG);
-                        if (result == 0)
-                        {
-                            return siginfo.si_status;
-                        }
-                        else
-                        {
-                            int errno = Marshal.GetLastPInvokeError();
-                            if (errno != EINTR)
-                            {
-                                throw new Win32Exception(errno, "waitid() failed");
-                            }
-                        }
-                    }
-                }
-            }
-        }
-#else
-        int pid = GetProcessIdCore();
-        int status = 0;
-
-        {
-            // Wait with timeout using poll on exit pipe
-            long startTime = Environment.TickCount64;
-            long endTime = startTime + milliseconds;
-            
-            while (true)
-            {
-                long now = Environment.TickCount64;
-                int remainingMs = (int)Math.Max(0, endTime - now);
-                
-                PollFd pollfd = new PollFd
-                {
-                    fd = _exitPipeFd,
-                    events = POLLIN,
-                    revents = 0
-                };
-                
-                int pollResult = poll(&pollfd, 1, remainingMs);
-                
-                if (pollResult < 0)
-                {
-                    int errno = Marshal.GetLastPInvokeError();
-                    if (errno == EINTR)
-                    {
-                        continue;
-                    }
-                    throw new Win32Exception(errno, "poll() failed");
-                }
-                else if (pollResult == 0)
-                {
-                    // Timeout - kill the process
-                    KillCore(throwOnError: false);
-                }
-
-                return WaitForExitCore(milliseconds: Timeout.Infinite);
-            }
-        }
-#endif
+        int errno = Marshal.GetLastPInvokeError();
+        throw new Win32Exception(errno, $"wait_for_exit() failed with (errno={errno})");
     }
 
     private async Task<int> WaitForExitAsyncCore(CancellationToken cancellationToken)
@@ -344,6 +182,8 @@ public partial class SafeChildProcessHandle
             return;
         }
 
+        const int ESRCH = 3;
+        const int EBADF = 9;
         // Check if the process has already exited
         // ESRCH (3): No such process
         // EBADF (9): Bad file descriptor (pidfd no longer valid because process exited)

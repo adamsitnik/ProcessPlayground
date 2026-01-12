@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdint.h>
+#include <poll.h>
 
 #ifdef HAVE_SYS_SYSCALL_H
 #include <sys/syscall.h>
@@ -18,6 +19,11 @@
 
 #ifdef HAVE_PDEATHSIG
 #include <sys/prctl.h>
+#endif
+
+// In the future, we could add support for pidfd on FreeBSD
+#ifdef HAVE_CLONE3
+#define HAVE_PIDFD
 #endif
 
 // External variable containing the current environment.
@@ -289,7 +295,7 @@ int spawn_process(
         *out_pid = child_pid;
     }
     if (out_pidfd != NULL) {
-#ifdef HAVE_CLONE3
+#ifdef HAVE_PIDFD
         *out_pidfd = pidfd;
 #else
         *out_pidfd = -1;  // pidfd not available on systems without clone3
@@ -343,7 +349,7 @@ int send_signal(int pidfd, int pid, int managed_signal) {
     return kill(pid, native_signal);
 }
 
-#ifndef HAVE_CLONE3
+#ifndef HAVE_PIDFD
 int map_status(int status, int* out_exitCode) {
     if (WIFEXITED(status)) {
         *out_exitCode = WEXITSTATUS(status);
@@ -362,8 +368,24 @@ int map_status(int status, int* out_exitCode) {
 // -1 is a valid exit code, so to distinguish between a normal exit code and an error, we return 0 on success and -1 on error
 int wait_for_exit(int pidfd, int pid, int timeout_ms, int* out_exitCode) {
     int ret;
-#ifdef HAVE_CLONE3
+#ifdef HAVE_PIDFD
     (void)pid;
+
+    if (timeout_ms >= 0) {
+        struct pollfd pfd = { 0 };
+        pfd.fd = pidfd;
+        pfd.events = POLLIN;
+
+        while ((ret = poll(&pfd, 1, timeout_ms)) < 0 && errno == EINTR);
+
+        if (ret == -1) { // Error
+            return -1;
+        }
+        else if (ret == 0) { // Timeout
+            send_signal(pidfd, pid, SIGKILL);
+        }
+    }
+
     siginfo_t info;
     memset(&info, 0, sizeof(info));
     while ((ret = waitid(P_PIDFD, pidfd, &info, WEXITED)) < 0 && errno == EINTR);
@@ -381,7 +403,6 @@ int wait_for_exit(int pidfd, int pid, int timeout_ms, int* out_exitCode) {
         return map_status(status, out_exitCode);
     }
 #endif
-    (void)timeout_ms;
     return -1;
 }
 
@@ -389,7 +410,7 @@ int wait_for_exit(int pidfd, int pid, int timeout_ms, int* out_exitCode) {
 // Returns 0 if process has exited (exit code set), -1 if still running or error occurred
 int try_get_exit_code(int pidfd, int pid, int* out_exitCode) {
     int ret;
-#ifdef HAVE_CLONE3
+#ifdef HAVE_PIDFD
     (void)pid;
     siginfo_t info;
     memset(&info, 0, sizeof(info));
