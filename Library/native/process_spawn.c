@@ -541,6 +541,14 @@ int wait_for_exit(int pidfd, int pid, int timeout_ms) {
         if (ret < 0) {
             int saved_errno = errno;
             close(queue);
+            
+            // If kevent failed because the process doesn't exist (ENOENT/ESRCH),
+            // the process may have already exited. Try to reap it.
+            if (saved_errno == ENOENT || saved_errno == ESRCH) {
+                // Process likely already exited, try to reap it
+                return wait_for_exit_waitpid(pid);
+            }
+            
             errno = saved_errno;
             return -1;
         }
