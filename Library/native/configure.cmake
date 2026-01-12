@@ -12,9 +12,6 @@ set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
 check_symbol_exists(pipe2 "unistd.h;fcntl.h" HAVE_PIPE2)
 unset(CMAKE_REQUIRED_DEFINITIONS)
 
-# Check for prctl function (Linux)
-check_symbol_exists(prctl "sys/prctl.h" HAVE_PRCTL)
-
 # Check for necessary headers
 check_include_file("sys/syscall.h" HAVE_SYS_SYSCALL_H)
 check_include_file("linux/sched.h" HAVE_LINUX_SCHED_H)
@@ -58,6 +55,17 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             #endif
         }
     " HAVE_CLOSE_RANGE_SYSCALL)
+
+    check_c_source_compiles("
+        #include <sys/prctl.h>
+        int main() {
+            #ifdef PR_SET_PDEATHSIG
+            return 0;
+            #else
+            #error PR_SET_PDEATHSIG not defined
+            #endif
+        }
+    " HAVE_PDEATHSIG)
 
 endif()
 

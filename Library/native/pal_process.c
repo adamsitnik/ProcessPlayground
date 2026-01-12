@@ -16,7 +16,7 @@
 #include <linux/sched.h>
 #endif
 
-#ifdef HAVE_PRCTL
+#ifdef HAVE_PDEATHSIG
 #include <sys/prctl.h>
 #endif
 
@@ -151,7 +151,7 @@ int spawn_process(
         
         // If kill_on_parent_death is enabled, set up parent death signal
         if (kill_on_parent_death) {
-#ifdef HAVE_PRCTL
+#ifdef HAVE_PDEATHSIG
             // On systems with prctl, use it to set up parent death signal
             if (prctl(PR_SET_PDEATHSIG, SIGTERM) == -1) {
                 write_errno_and_exit(wait_pipe[1], errno);
