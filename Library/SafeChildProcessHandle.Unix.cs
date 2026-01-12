@@ -86,11 +86,6 @@ public partial class SafeChildProcessHandle
     private const int CLD_EXITED = 1;    // child has exited
     private const int CLD_KILLED = 2;    // child was killed
     private const int CLD_DUMPED = 3;    // child terminated abnormally
-#else
-    [LibraryImport("libc", SetLastError = true)]
-    private static unsafe partial int waitpid(int pid, int* status, int options);
-
-    private const int WNOHANG = 1;
 #endif
 
     // Common constants
@@ -303,15 +298,9 @@ public partial class SafeChildProcessHandle
                 {
                     // Timeout - kill the process
                     KillCore(throwOnError: false);
-                    
-                    // Wait for the process to actually exit and return its exit code
-                    return WaitPidForExitCode();
                 }
-                else
-                {
-                    // Exit pipe became readable - process has exited
-                    return WaitPidForExitCode();
-                }
+
+                return WaitForExitCore(milliseconds: Timeout.Infinite);
             }
         }
 #endif
@@ -344,45 +333,6 @@ public partial class SafeChildProcessHandle
 
         // The process has exited, now retrieve the exit code
         return WaitForExitCore(milliseconds: Timeout.Infinite);
-    }
-
-#if !LINUX
-    private unsafe int WaitPidForExitCode()
-    {
-        int pid = GetProcessIdCore();
-        int status = 0;
-        while (true)
-        {
-            int result = waitpid(pid, &status, 0);
-            if (result == pid)
-            {
-                return GetExitCodeFromStatus(status);
-            }
-            else if (result == -1)
-            {
-                int errno = Marshal.GetLastPInvokeError();
-                if (errno != EINTR)
-                {
-                    throw new Win32Exception(errno, "waitpid() failed");
-                }
-            }
-        }
-    }
-#endif
-    
-    private static int GetExitCodeFromStatus(int status)
-    {
-        // Check if the process exited normally
-        if ((status & 0x7F) == 0)
-        {
-            // WIFEXITED - process exited normally
-            return (status & 0xFF00) >> 8; // WEXITSTATUS
-        }
-        else
-        {
-            // Process was terminated by a signal
-            return -1;
-        }
     }
 
     private void KillCore(bool throwOnError)
