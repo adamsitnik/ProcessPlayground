@@ -54,7 +54,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             #error __NR_pidfd_send_signal not defined
             #endif
         }
-    " HAVE_PIDFD_SEND_SIGNAL_SYSCALL)
+    " HAVE_PIDFD_SEND_SIGNAL)
     
     check_c_source_compiles("
         #include <sys/syscall.h>
@@ -65,7 +65,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             #error __NR_close_range not defined
             #endif
         }
-    " HAVE_CLOSE_RANGE_SYSCALL)
+    " HAVE_CLOSE_RANGE)
 
     check_c_source_compiles("
         #include <sys/prctl.h>
