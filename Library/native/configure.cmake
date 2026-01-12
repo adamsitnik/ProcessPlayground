@@ -27,6 +27,42 @@ if(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
     check_symbol_exists(kqueuex "sys/event.h" HAVE_KQUEUEX)
 endif()
 
+# Check for posix_spawn on macOS
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    include(CheckCSourceCompiles)
+    
+    check_symbol_exists(posix_spawn "spawn.h" HAVE_POSIX_SPAWN)
+    
+    # Check for POSIX_SPAWN_CLOEXEC_DEFAULT flag
+    check_c_source_compiles("
+        #include <spawn.h>
+        int main() {
+            #ifdef POSIX_SPAWN_CLOEXEC_DEFAULT
+            return 0;
+            #else
+            #error POSIX_SPAWN_CLOEXEC_DEFAULT not defined
+            #endif
+        }
+    " HAVE_POSIX_SPAWN_CLOEXEC_DEFAULT)
+    
+    # Check for posix_spawn_file_actions_addchdir_np (macOS-specific)
+    check_symbol_exists(posix_spawn_file_actions_addchdir_np "spawn.h" HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCHDIR_NP)
+    
+    # Check for posix_spawn_file_actions_addinherit_np (macOS-specific)
+    # This is needed to keep fd 3 open when using POSIX_SPAWN_CLOEXEC_DEFAULT
+    check_c_source_compiles("
+        #include <spawn.h>
+        extern int posix_spawn_file_actions_addinherit_np(posix_spawn_file_actions_t *, int);
+        int main() {
+            posix_spawn_file_actions_t actions;
+            posix_spawn_file_actions_init(&actions);
+            posix_spawn_file_actions_addinherit_np(&actions, 3);
+            posix_spawn_file_actions_destroy(&actions);
+            return 0;
+        }
+    " HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDINHERIT_NP)
+endif()
+
 # On Linux, check for specific syscalls
 # We can't directly check for syscalls, but we can check if the headers define them
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
