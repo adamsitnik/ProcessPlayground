@@ -217,13 +217,10 @@ int spawn_process(
         }
     }
     
-    // Duplicate exit pipe write end to fd 3
-    // First, we need to clear CLOEXEC on exit_pipe[1] temporarily
-    // Actually, we can't do that with posix_spawn directly, so we need to dup it to fd 3
-    // But posix_spawn will close all fds except 0,1,2 due to POSIX_SPAWN_CLOEXEC_DEFAULT
-    // So we need to use posix_spawn_file_actions_addinherit_np to keep fd 3 open
-    
-    // First dup the exit pipe write end to fd 3
+    // Set up exit pipe write end as fd 3 in the child process
+    // We use fd 3 for the exit pipe as it's typically unused by standard streams (0-2).
+    // With POSIX_SPAWN_CLOEXEC_DEFAULT, all fds except 0,1,2 are automatically closed,
+    // so we must explicitly mark fd 3 as inheritable using addinherit_np.
     if ((result = posix_spawn_file_actions_adddup2(&file_actions, exit_pipe[1], 3)) != 0) {
         int saved_errno = result;
         posix_spawn_file_actions_destroy(&file_actions);
@@ -234,8 +231,7 @@ int spawn_process(
         return -1;
     }
     
-    // Now mark fd 3 as inheritable (exempt from POSIX_SPAWN_CLOEXEC_DEFAULT)
-    // This is a macOS-specific extension to keep fd 3 open
+    // Mark fd 3 as inheritable (exempt from POSIX_SPAWN_CLOEXEC_DEFAULT)
     if ((result = posix_spawn_file_actions_addinherit_np(&file_actions, 3)) != 0) {
         int saved_errno = result;
         posix_spawn_file_actions_destroy(&file_actions);
@@ -290,7 +286,7 @@ int spawn_process(
     }
     
     // Note: kill_on_parent_death is not supported with posix_spawn on macOS
-    // This is a known limitation as we can't use PR_SET_PDEATHSIG
+    // macOS does not provide a mechanism to automatically kill a child process when the parent dies
     (void)kill_on_parent_death;
     
     // Success - return PID and exit pipe fd if requested
