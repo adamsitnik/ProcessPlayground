@@ -118,7 +118,7 @@ int spawn_process(
     int* out_exit_pipe_fd,
     int kill_on_parent_death)
 {
-#if defined(HAVE_POSIX_SPAWN) && defined(HAVE_POSIX_SPAWN_CLOEXEC_DEFAULT)
+#if defined(HAVE_POSIX_SPAWN) && defined(HAVE_POSIX_SPAWN_CLOEXEC_DEFAULT) && defined(HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDINHERIT_NP)
     // ========== POSIX_SPAWN PATH (macOS) ==========
     int exit_pipe[2];
     pid_t child_pid;
@@ -229,7 +229,6 @@ int spawn_process(
     }
     
     // Now mark fd 3 as inheritable (exempt from POSIX_SPAWN_CLOEXEC_DEFAULT)
-#ifdef HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDINHERIT_NP
     // This is a macOS-specific extension to keep fd 3 open
     extern int posix_spawn_file_actions_addinherit_np(posix_spawn_file_actions_t *, int);
     if ((result = posix_spawn_file_actions_addinherit_np(&file_actions, 3)) != 0) {
@@ -241,7 +240,6 @@ int spawn_process(
         errno = saved_errno;
         return -1;
     }
-#endif
     
     // Change working directory if specified
     if (working_dir != NULL) {
