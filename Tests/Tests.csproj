@@ -50,10 +50,4 @@
     <None Include="**/*.cs" />
   </ItemGroup>
 
-  <!-- Copy native library from Library project after build -->
-  <Target Name="CopyNativeLibraryFromDependency" AfterTargets="Build" Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFrameworkIdentifier)' != '.NETFramework'">
-    <Copy SourceFiles="../Library/bin/$(Configuration)/$(TargetFramework)/libpal_process.so" DestinationFolder="$(OutputPath)" Condition="Exists('../Library/bin/$(Configuration)/$(TargetFramework)/libpal_process.so')" />
-    <Copy SourceFiles="../Library/bin/$(Configuration)/$(TargetFramework)/libpal_process.dylib" DestinationFolder="$(OutputPath)" Condition="Exists('../Library/bin/$(Configuration)/$(TargetFramework)/libpal_process.dylib')" />
-  </Target>
-
 </Project>
