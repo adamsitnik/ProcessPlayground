@@ -268,7 +268,7 @@ public partial class SafeChildProcessHandle
         if (result == -1)
         {
             int errno = Marshal.GetLastPInvokeError();
-            throw new Win32Exception(errno, "wait_for_exit() failed");
+            throw new Win32Exception(errno, $"wait_for_exit() failed with {errno}");
         }
         return result;
     }
