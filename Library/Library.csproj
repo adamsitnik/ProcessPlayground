@@ -53,29 +53,19 @@
     <Message Text="Building native PAL library with CMake..." Importance="high" />
     <Exec Command="cmake -S native -B native/build" WorkingDirectory="$(MSBuildProjectDirectory)" />
     <Exec Command="cmake --build native/build" WorkingDirectory="$(MSBuildProjectDirectory)" />
-    <Copy SourceFiles="native/build/libpal_process.so" DestinationFolder="native" Condition="Exists('native/build/libpal_process.so')" />
-    <Copy SourceFiles="native/build/libpal_process.dylib" DestinationFolder="native" Condition="Exists('native/build/libpal_process.dylib')" />
   </Target>
 
-  <!-- Copy native library to output directory -->
-  <Target Name="CopyNativeLibrary" AfterTargets="Build" Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFrameworkIdentifier)' != '.NETFramework'">
-    <Copy SourceFiles="native/libpal_process.so" DestinationFolder="$(OutputPath)" Condition="Exists('native/libpal_process.so')" />
-    <Copy SourceFiles="native/libpal_process.dylib" DestinationFolder="$(OutputPath)" Condition="Exists('native/libpal_process.dylib')" />
-  </Target>
-
-  <!-- Include native library in build output for dependent projects -->
-  <Target Name="IncludeNativeLibraryInOutput" BeforeTargets="GetCopyToOutputDirectoryItems" Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFrameworkIdentifier)' != '.NETFramework'">
-    <ItemGroup>
-      <AllItemsFullPathWithTargetPath Include="$(OutputPath)libpal_process.so" Condition="Exists('$(OutputPath)libpal_process.so')">
-        <TargetPath>libpal_process.so</TargetPath>
-        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      </AllItemsFullPathWithTargetPath>
-      <AllItemsFullPathWithTargetPath Include="$(OutputPath)libpal_process.dylib" Condition="Exists('$(OutputPath)libpal_process.dylib')">
-        <TargetPath>libpal_process.dylib</TargetPath>
-        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      </AllItemsFullPathWithTargetPath>
-    </ItemGroup>
-  </Target>
+  <!-- Copy native library to output directory on non-Windows platforms -->
+  <ItemGroup Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFrameworkIdentifier)' != '.NETFramework'">
+    <Content Include="native\build\libpal_process.so" Condition="Exists('native\build\libpal_process.so')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>libpal_process.so</Link>
+    </Content>
+    <Content Include="native\build\libpal_process.dylib" Condition="Exists('native\build\libpal_process.dylib')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>libpal_process.dylib</Link>
+    </Content>
+  </ItemGroup>
 
   <!-- Clean native library -->
   <Target Name="CleanNativeLibrary" AfterTargets="Clean" Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFrameworkIdentifier)' != '.NETFramework'">
