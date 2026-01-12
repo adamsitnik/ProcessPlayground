@@ -38,11 +38,7 @@
 
 // Declare the non-portable chdir function if not available in headers
 // This is available on macOS 10.15+ but may not be in older SDK headers
-#ifndef __has_include
-    extern int posix_spawn_file_actions_addchdir_np(posix_spawn_file_actions_t *, const char *);
-#elif !__has_include(<sys/_types/_posix_spawn_file_actions_addchdir_np.h>)
-    extern int posix_spawn_file_actions_addchdir_np(posix_spawn_file_actions_t *, const char *);
-#endif
+extern int posix_spawn_file_actions_addchdir_np(posix_spawn_file_actions_t *, const char *);
 #endif
 
 // External variable containing the current environment.
@@ -281,10 +277,9 @@ spawn_cleanup:
     // Close write end of exit pipe (child owns it)
     close(exit_pipe[1]);
     
-    // With posix_spawn, we don't have a wait pipe mechanism to detect exec failures
-    // The process is already running at this point
-    // We need to check if it exited immediately
-    // Close the read end of wait pipe as it's not used
+    // With posix_spawn, there's no wait pipe mechanism to detect exec failures.
+    // The process spawns immediately and any exec failures will be detected
+    // when the exit pipe is read or when waiting for the process to exit.
     close(wait_pipe[0]);
     
     // Success - return PID and exit pipe fd if requested
