@@ -370,35 +370,10 @@ public partial class SafeChildProcessHandle
         }
 
         // The process has exited, now retrieve the exit code
-#if LINUX
-        return WaitIdPidfd();
-#else
-        return WaitPidForExitCode();
-#endif
+        return WaitForExitCore(milliseconds: Timeout.Infinite);
     }
 
-#if LINUX
-    private unsafe int WaitIdPidfd()
-    {
-        siginfo_t siginfo = default;
-        while (true)
-        {
-            int result = waitid(P_PIDFD, this, &siginfo, WEXITED | WNOHANG);
-            if (result == 0)
-            {
-                return siginfo.si_status;
-            }
-            else
-            {
-                int errno = Marshal.GetLastPInvokeError();
-                if (errno != EINTR)
-                {
-                    throw new Win32Exception(errno, "waitid() failed");
-                }
-            }
-        }
-    }
-#else
+#if !LINUX
     private unsafe int WaitPidForExitCode()
     {
         int pid = GetProcessIdCore();
