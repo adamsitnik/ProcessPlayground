@@ -351,7 +351,8 @@ int map_status(int status, int* out_exitCode) {
     }
     else if (WIFSIGNALED(status)) {
         // Child was killed by signal - return 128 + signal number (common convention)
-        *out_exitCode = 128 + WTERMSIG(status);
+        // *out_exitCode = 128 + WTERMSIG(status);
+        *out_exitCode = -1;
         return 0;
     }
     return -1; // Still running or unknown status
