@@ -47,6 +47,10 @@
 #ifndef KQUEUE_CLOEXEC
 #define KQUEUE_CLOEXEC 0x00000001
 #endif
+
+// Declare kqueuex if not available in headers (macOS 10.12+)
+// We'll try to use it, but fall back to kqueue() + fcntl() if not available
+extern int kqueuex(unsigned int flags) __attribute__((weak_import));
 #endif
 
 // External variable containing the current environment.
@@ -489,9 +493,27 @@ int wait_for_exit(int pidfd, int pid, int timeout_ms) {
     } else {
 #ifdef __APPLE__
         // macOS: Use kqueue for timeout
-        int queue = kqueuex(KQUEUE_CLOEXEC);
+        int queue = -1;
+        
+        // Try kqueuex first (macOS 10.12+), fall back to kqueue() + fcntl()
+        if (kqueuex != NULL) {
+            queue = kqueuex(KQUEUE_CLOEXEC);
+        }
+        
         if (queue == -1) {
-            return -1;
+            // Either kqueuex is not available or it failed, use kqueue() + fcntl()
+            queue = kqueue();
+            if (queue == -1) {
+                return -1;
+            }
+            
+            // Set CLOEXEC on kqueue
+            if (fcntl(queue, F_SETFD, FD_CLOEXEC) == -1) {
+                int saved_errno = errno;
+                close(queue);
+                errno = saved_errno;
+                return -1;
+            }
         }
         
         struct kevent change_list = {0};
