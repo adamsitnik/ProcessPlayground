@@ -8,6 +8,8 @@
 #include <string.h>
 #include <stdint.h>
 #include <poll.h>
+#include <time.h>
+#include <sys/time.h>
 
 #ifdef HAVE_SYS_SYSCALL_H
 #include <sys/syscall.h>
@@ -19,6 +21,10 @@
 
 #ifdef HAVE_PDEATHSIG
 #include <sys/prctl.h>
+#endif
+
+#ifdef HAVE_SYS_EVENT_H
+#include <sys/event.h>
 #endif
 
 // In the future, we could add support for pidfd on FreeBSD
@@ -63,6 +69,31 @@ static int create_cloexec_pipe(int pipefd[2]) {
     return 0;
 #endif
 }
+
+#if defined(HAVE_KQUEUE) || defined(HAVE_KQUEUEX)
+static inline int create_kqueue_cloexec(void) {
+#ifdef HAVE_KQUEUEX
+    // FreeBSD has kqueuex
+    return kqueuex(KQUEUE_CLOEXEC);
+#else
+    // macOS: use kqueue + fcntl
+    int queue = kqueue();
+    if (queue == -1) {
+        return -1;
+    }
+
+    // Set CLOEXEC on kqueue
+    if (fcntl(queue, F_SETFD, FD_CLOEXEC) == -1) {
+        int saved_errno = errno;
+        close(queue);
+        errno = saved_errno;
+        return -1;
+    }
+
+    return queue;
+#endif
+}
+#endif
 
 // Spawns a process and returns success/failure
 // Returns 0 on success, -1 on error (errno is set)
@@ -295,11 +326,7 @@ int spawn_process(
         *out_pid = child_pid;
     }
     if (out_pidfd != NULL) {
-#ifdef HAVE_PIDFD
         *out_pidfd = pidfd;
-#else
-        *out_pidfd = -1;  // pidfd not available on systems without clone3
-#endif
     }
     if (out_exit_pipe_fd != NULL) {
         *out_exit_pipe_fd = exit_pipe[0];
@@ -366,11 +393,36 @@ int map_status(int status, int* out_exitCode) {
 #endif
 
 // -1 is a valid exit code, so to distinguish between a normal exit code and an error, we return 0 on success and -1 on error
-int wait_for_exit(int pidfd, int pid, int timeout_ms, int* out_exitCode) {
+// Returns 0 if process has exited (exit code set), -1 if still running or error occurred
+int try_get_exit_code(int pidfd, int pid, int* out_exitCode) {
     int ret;
 #ifdef HAVE_PIDFD
     (void)pid;
+    siginfo_t info;
+    memset(&info, 0, sizeof(info));
+    while ((ret = waitid(P_PIDFD, pidfd, &info, WEXITED | WNOHANG)) < 0 && errno == EINTR);
 
+    if (ret == 0 && info.si_pid != 0) {
+        *out_exitCode = info.si_status;
+        return 0;
+    }
+#else
+    (void)pidfd;
+    int status;
+    while ((ret = waitpid(pid, &status, WNOHANG)) < 0 && errno == EINTR);
+
+    if (ret > 0) {
+        return map_status(status, out_exitCode);
+    }
+#endif
+    // Process still running or error
+    return -1;
+}
+
+// -1 is a valid exit code, so to distinguish between a normal exit code and an error, we return 0 on success and -1 on error
+int wait_for_exit(int pidfd, int pid, int timeout_ms, int* out_exitCode) {
+    int ret;
+#ifdef HAVE_PIDFD
     if (timeout_ms >= 0) {
         struct pollfd pfd = { 0 };
         pfd.fd = pidfd;
@@ -395,7 +447,57 @@ int wait_for_exit(int pidfd, int pid, int timeout_ms, int* out_exitCode) {
         return 0;
     }
 #else
-    (void)pidfd;
+
+#if defined(HAVE_KQUEUE) || defined(HAVE_KQUEUEX)
+    if (timeout_ms >= 0) {
+        int queue = create_kqueue_cloexec();
+        if (queue == -1) {
+            return -1;
+        }
+
+        struct kevent change_list = { 0 };
+        change_list.ident = pid;
+        change_list.filter = EVFILT_PROC;
+        change_list.fflags = NOTE_EXIT;
+        change_list.flags = EV_ADD | EV_CLEAR;
+
+        struct kevent event_list = { 0 };
+
+        struct timespec timeout = { 0 };
+        timeout.tv_sec = timeout_ms / 1000;
+        timeout.tv_nsec = (timeout_ms % 1000) * 1000 * 1000;
+
+        // For EVFILT_PROC with NOTE_EXIT, if the target process is already gone:
+        // - There is no process,
+        // - Therefore there is no exit event to detect,
+        // - So no kevent is generated.
+        // So, first check if the process has already exited before registering the kevent.
+        if (try_get_exit_code(pidfd, pid, out_exitCode) != -1) {
+            close(queue);
+            return 0;
+        }
+
+        while ((ret = kevent(queue, &change_list, 1, &event_list, 1, &timeout)) < 0 && errno == EINTR);
+
+        if (ret < 0) {
+            int saved_errno = errno;
+            close(queue);
+            errno = saved_errno;
+            return -1;
+        }
+
+        // kqueue is stateful, we need to delete the event.
+        // We could use EV_ONESHOT, but it would not handle timeout (no event was consumed).
+        change_list.flags = EV_DELETE;
+        kevent(queue, &change_list, 1, NULL, 0, NULL);
+        close(queue);
+
+        if (ret == 0) { // Timeout
+            kill(pid, SIGKILL);
+        }
+    }
+#endif
+
     int status;
     while ((ret = waitpid(pid, &status, 0)) < 0 && errno == EINTR);
 
@@ -403,32 +505,5 @@ int wait_for_exit(int pidfd, int pid, int timeout_ms, int* out_exitCode) {
         return map_status(status, out_exitCode);
     }
 #endif
-    return -1;
-}
-
-// -1 is a valid exit code, so to distinguish between a normal exit code and an error, we return 0 on success and -1 on error
-// Returns 0 if process has exited (exit code set), -1 if still running or error occurred
-int try_get_exit_code(int pidfd, int pid, int* out_exitCode) {
-    int ret;
-#ifdef HAVE_PIDFD
-    (void)pid;
-    siginfo_t info;
-    memset(&info, 0, sizeof(info));
-    while ((ret = waitid(P_PIDFD, pidfd, &info, WEXITED | WNOHANG)) < 0 && errno == EINTR);
-
-    if (ret == 0 && info.si_pid != 0) {
-        *out_exitCode = info.si_status;
-        return 0;
-    }
-#else
-    (void)pidfd;
-    int status;
-    while ((ret = waitpid(pid, &status, WNOHANG)) < 0 && errno == EINTR);
-
-    if (ret > 0) {
-        return map_status(status, out_exitCode);
-    }
-#endif
-    // Process still running or error
     return -1;
 }
