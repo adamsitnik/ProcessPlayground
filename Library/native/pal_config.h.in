@@ -2,7 +2,7 @@
 #define PAL_CONFIG_H
 
 #cmakedefine HAVE_PIPE2
-#cmakedefine HAVE_PRCTL
+#cmakedefine HAVE_PDEATHSIG
 #cmakedefine HAVE_SYS_SYSCALL_H
 #cmakedefine HAVE_LINUX_SCHED_H
 #cmakedefine HAVE_CLONE3

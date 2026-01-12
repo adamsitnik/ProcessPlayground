@@ -152,7 +152,7 @@ int spawn_process(
         // If kill_on_parent_death is enabled, set up parent death signal
         if (kill_on_parent_death) {
 #ifdef HAVE_PDEATHSIG
-            // On systems with prctl, use it to set up parent death signal
+            // On systems with PR_SET_PDEATHSIG (Linux), use it to set up parent death signal
             if (prctl(PR_SET_PDEATHSIG, SIGTERM) == -1) {
                 write_errno_and_exit(wait_pipe[1], errno);
             }
@@ -227,7 +227,7 @@ int spawn_process(
         }
         
 #ifdef HAVE_CLOSE_RANGE
-        // On systems with close_range, use it to mark all FDs from 4 onwards as CLOEXEC
+        // On systems with close_range (Linux and FreeBSD), use it to mark all FDs from 4 onwards as CLOEXEC
         // This prevents the child from inheriting unwanted file descriptors
         // FDs 0-2 are stdin/stdout/stderr, fd 3 is our exit pipe
         // We use CLOSE_RANGE_CLOEXEC to set the flag without closing the FDs
