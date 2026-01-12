@@ -11,9 +11,9 @@ namespace Microsoft.Win32.SafeHandles;
 /// <summary>
 /// A wrapper for a child process handle.
 /// </summary>
-public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsInvalid
+public sealed partial class SafeChildProcessHandle : SafeHandle
 {
-    internal static readonly SafeChildProcessHandle InvalidHandle = new SafeChildProcessHandle();
+    internal static readonly SafeChildProcessHandle InvalidHandle = new();
 
     /// <summary>
     /// Creates a <see cref="T:Microsoft.Win32.SafeHandles.SafeChildProcessHandle" />.
@@ -28,15 +28,16 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
     {
     }
 
+    public override bool IsInvalid => handle == IntPtr.Zero;
+
     /// <summary>
     /// Creates a <see cref="T:Microsoft.Win32.SafeHandles.SafeChildProcessHandle" /> around a process handle.
     /// </summary>
     /// <param name="existingHandle">Handle to wrap</param>
     /// <param name="ownsHandle">Whether to control the handle lifetime</param>
     public SafeChildProcessHandle(IntPtr existingHandle, bool ownsHandle)
-        : base(ownsHandle)
+        : base(existingHandle, ownsHandle)
     {
-        SetHandle(existingHandle);
     }
 
     public static SafeChildProcessHandle Start(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error)

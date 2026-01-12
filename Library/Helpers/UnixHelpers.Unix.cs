@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -14,6 +15,20 @@ internal static partial class UnixHelpers
     {
         // Check for execute permission (X_OK = 1)
         return access(path, 1) == 0;
+    }
+
+    internal static string[] GetEnvironmentVariables(ProcessStartOptions options)
+    {
+        List<string> envList = new();
+        foreach (var kvp in options.Environment)
+        {
+            if (kvp.Value != null)
+            {
+                envList.Add($"{kvp.Key}={kvp.Value}");
+            }
+        }
+
+        return envList.ToArray();
     }
 
     internal static unsafe void AllocNullTerminatedArray(string[] arr, ref byte** arrPtr)

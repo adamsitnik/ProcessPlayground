@@ -7,6 +7,9 @@
 #include <errno.h>
 #include <string.h>
 #include <stdint.h>
+#include <poll.h>
+#include <time.h>
+#include <sys/time.h>
 
 #ifdef HAVE_SYS_SYSCALL_H
 #include <sys/syscall.h>
@@ -18,6 +21,15 @@
 
 #ifdef HAVE_PDEATHSIG
 #include <sys/prctl.h>
+#endif
+
+#ifdef HAVE_SYS_EVENT_H
+#include <sys/event.h>
+#endif
+
+// In the future, we could add support for pidfd on FreeBSD
+#ifdef HAVE_CLONE3
+#define HAVE_PIDFD
 #endif
 
 // External variable containing the current environment.
@@ -57,6 +69,31 @@ static int create_cloexec_pipe(int pipefd[2]) {
     return 0;
 #endif
 }
+
+#if defined(HAVE_KQUEUE) || defined(HAVE_KQUEUEX)
+static inline int create_kqueue_cloexec(void) {
+#ifdef HAVE_KQUEUEX
+    // FreeBSD has kqueuex
+    return kqueuex(KQUEUE_CLOEXEC);
+#else
+    // macOS: use kqueue + fcntl
+    int queue = kqueue();
+    if (queue == -1) {
+        return -1;
+    }
+
+    // Set CLOEXEC on kqueue
+    if (fcntl(queue, F_SETFD, FD_CLOEXEC) == -1) {
+        int saved_errno = errno;
+        close(queue);
+        errno = saved_errno;
+        return -1;
+    }
+
+    return queue;
+#endif
+}
+#endif
 
 // Spawns a process and returns success/failure
 // Returns 0 on success, -1 on error (errno is set)
@@ -289,11 +326,7 @@ int spawn_process(
         *out_pid = child_pid;
     }
     if (out_pidfd != NULL) {
-#ifdef HAVE_CLONE3
         *out_pidfd = pidfd;
-#else
-        *out_pidfd = -1;  // pidfd not available on systems without clone3
-#endif
     }
     if (out_exit_pipe_fd != NULL) {
         *out_exit_pipe_fd = exit_pipe[0];
@@ -323,10 +356,6 @@ static int map_managed_signal_to_native(int managed_signal) {
     }
 }
 
-// Send a signal to a process
-// On systems with pidfd_send_signal, uses that syscall if pidfd >= 0, otherwise uses kill
-// On other systems, uses kill with the pid parameter
-// Returns 0 on success, -1 on error (errno is set)
 int send_signal(int pidfd, int pid, int managed_signal) {
     // Map managed signal to native signal number
     int native_signal = map_managed_signal_to_native(managed_signal);
@@ -339,12 +368,142 @@ int send_signal(int pidfd, int pid, int managed_signal) {
     // On systems with pidfd_send_signal, prefer it if we have a valid pidfd
     if (pidfd >= 0) {
         return syscall(__NR_pidfd_send_signal, pidfd, native_signal, NULL, 0);
-    } else {
-        return kill(pid, native_signal);
     }
 #else
-    // On other systems, use kill
-    (void)pidfd; // Suppress unused parameter warning
-    return kill(pid, native_signal);
+    (void)pidfd;
 #endif
+
+    return kill(pid, native_signal);
+}
+
+#ifndef HAVE_PIDFD
+int map_status(int status, int* out_exitCode) {
+    if (WIFEXITED(status)) {
+        *out_exitCode = WEXITSTATUS(status);
+        return 0;
+    }
+    else if (WIFSIGNALED(status)) {
+        // Child was killed by signal - return 128 + signal number (common convention)
+        // *out_exitCode = 128 + WTERMSIG(status);
+        *out_exitCode = -1;
+        return 0;
+    }
+    return -1; // Still running or unknown status
+}
+#endif
+
+// -1 is a valid exit code, so to distinguish between a normal exit code and an error, we return 0 on success and -1 on error
+// Returns 0 if process has exited (exit code set), -1 if still running or error occurred
+int try_get_exit_code(int pidfd, int pid, int* out_exitCode) {
+    int ret;
+#ifdef HAVE_PIDFD
+    (void)pid;
+    siginfo_t info;
+    memset(&info, 0, sizeof(info));
+    while ((ret = waitid(P_PIDFD, pidfd, &info, WEXITED | WNOHANG)) < 0 && errno == EINTR);
+
+    if (ret == 0 && info.si_pid != 0) {
+        *out_exitCode = info.si_status;
+        return 0;
+    }
+#else
+    (void)pidfd;
+    int status;
+    while ((ret = waitpid(pid, &status, WNOHANG)) < 0 && errno == EINTR);
+
+    if (ret > 0) {
+        return map_status(status, out_exitCode);
+    }
+#endif
+    // Process still running or error
+    return -1;
+}
+
+// -1 is a valid exit code, so to distinguish between a normal exit code and an error, we return 0 on success and -1 on error
+int wait_for_exit(int pidfd, int pid, int timeout_ms, int* out_exitCode) {
+    int ret;
+#ifdef HAVE_PIDFD
+    if (timeout_ms >= 0) {
+        struct pollfd pfd = { 0 };
+        pfd.fd = pidfd;
+        pfd.events = POLLIN;
+
+        while ((ret = poll(&pfd, 1, timeout_ms)) < 0 && errno == EINTR);
+
+        if (ret == -1) { // Error
+            return -1;
+        }
+        else if (ret == 0) { // Timeout
+            send_signal(pidfd, pid, SIGKILL);
+        }
+    }
+
+    siginfo_t info;
+    memset(&info, 0, sizeof(info));
+    while ((ret = waitid(P_PIDFD, pidfd, &info, WEXITED)) < 0 && errno == EINTR);
+
+    if (ret != -1) {
+        *out_exitCode = info.si_status;
+        return 0;
+    }
+#else
+
+#if defined(HAVE_KQUEUE) || defined(HAVE_KQUEUEX)
+    if (timeout_ms >= 0) {
+        int queue = create_kqueue_cloexec();
+        if (queue == -1) {
+            return -1;
+        }
+
+        struct kevent change_list = { 0 };
+        change_list.ident = pid;
+        change_list.filter = EVFILT_PROC;
+        change_list.fflags = NOTE_EXIT;
+        change_list.flags = EV_ADD | EV_CLEAR;
+
+        struct kevent event_list = { 0 };
+
+        struct timespec timeout = { 0 };
+        timeout.tv_sec = timeout_ms / 1000;
+        timeout.tv_nsec = (timeout_ms % 1000) * 1000 * 1000;
+
+        // For EVFILT_PROC with NOTE_EXIT, if the target process is already gone:
+        // - There is no process,
+        // - Therefore there is no exit event to detect,
+        // - So no kevent is generated.
+        // So, first check if the process has already exited before registering the kevent.
+        if (try_get_exit_code(pidfd, pid, out_exitCode) != -1) {
+            close(queue);
+            return 0;
+        }
+
+        while ((ret = kevent(queue, &change_list, 1, &event_list, 1, &timeout)) < 0 && errno == EINTR);
+
+        if (ret < 0) {
+            int saved_errno = errno;
+            close(queue);
+            errno = saved_errno;
+            return -1;
+        }
+
+        // kqueue is stateful, we need to delete the event.
+        // We could use EV_ONESHOT, but it would not handle timeout (no event was consumed).
+        change_list.flags = EV_DELETE;
+        kevent(queue, &change_list, 1, NULL, 0, NULL);
+        close(queue);
+
+        if (ret == 0) { // Timeout
+            kill(pid, SIGKILL);
+        }
+    }
+#endif
+
+    int status;
+    while ((ret = waitpid(pid, &status, 0)) < 0 && errno == EINTR);
+
+    if (ret != -1) {
+        return map_status(status, out_exitCode);
+    }
+#endif
+    return -1;
 }

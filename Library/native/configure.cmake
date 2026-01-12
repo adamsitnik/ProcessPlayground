@@ -15,6 +15,17 @@ unset(CMAKE_REQUIRED_DEFINITIONS)
 # Check for necessary headers
 check_include_file("sys/syscall.h" HAVE_SYS_SYSCALL_H)
 check_include_file("linux/sched.h" HAVE_LINUX_SCHED_H)
+check_include_file("sys/event.h" HAVE_SYS_EVENT_H)
+
+# Check for kqueue (macOS, FreeBSD, and other BSDs)
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+    check_symbol_exists(kqueue "sys/event.h" HAVE_KQUEUE)
+endif()
+
+# Check for kqueuex (FreeBSD-specific extended kqueue)
+if(CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+    check_symbol_exists(kqueuex "sys/event.h" HAVE_KQUEUEX)
+endif()
 
 # On Linux, check for specific syscalls
 # We can't directly check for syscalls, but we can check if the headers define them
@@ -43,7 +54,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             #error __NR_pidfd_send_signal not defined
             #endif
         }
-    " HAVE_PIDFD_SEND_SIGNAL_SYSCALL)
+    " HAVE_PIDFD_SEND_SIGNAL)
     
     check_c_source_compiles("
         #include <sys/syscall.h>
@@ -54,7 +65,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
             #error __NR_close_range not defined
             #endif
         }
-    " HAVE_CLOSE_RANGE_SYSCALL)
+    " HAVE_CLOSE_RANGE)
 
     check_c_source_compiles("
         #include <sys/prctl.h>
