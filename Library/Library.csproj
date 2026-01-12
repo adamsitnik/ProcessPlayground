@@ -63,7 +63,7 @@
     <Copy SourceFiles="native/libpal_process.dylib" DestinationFolder="$(OutputPath)" Condition="Exists('native/libpal_process.dylib')" />
   </Target>
 
-  <!--Include native library in build output for dependent projects -->
+  <!-- Include native library in build output for dependent projects -->
   <Target Name="IncludeNativeLibraryInOutput" BeforeTargets="GetCopyToOutputDirectoryItems" Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFrameworkIdentifier)' != '.NETFramework'">
     <ItemGroup>
       <AllItemsFullPathWithTargetPath Include="$(OutputPath)libpal_process.so" Condition="Exists('$(OutputPath)libpal_process.so')">

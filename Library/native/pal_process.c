@@ -21,16 +21,33 @@
 #endif
 
 // Define syscall numbers if not available in headers
+// Note: These syscall numbers are architecture-specific (x86_64).
+// On other architectures (ARM, MIPS, etc.), the syscall numbers may differ.
+// The code will compile but may fail at runtime if the numbers are incorrect.
 #if defined(HAVE_PIDFD_SEND_SIGNAL_FALLBACK)
 #ifndef __NR_pidfd_send_signal
+#if defined(__x86_64__)
 #define __NR_pidfd_send_signal 424
+#elif defined(__aarch64__)
+#define __NR_pidfd_send_signal 424
+#else
+#warning "pidfd_send_signal syscall number not defined for this architecture"
+#define __NR_pidfd_send_signal 424  // May not work on this architecture
+#endif
 #endif
 #define HAVE_PIDFD_SEND_SIGNAL 1
 #endif
 
 #if defined(HAVE_CLOSE_RANGE_FALLBACK)
 #ifndef __NR_close_range
+#if defined(__x86_64__)
 #define __NR_close_range 436
+#elif defined(__aarch64__)
+#define __NR_close_range 436
+#else
+#warning "close_range syscall number not defined for this architecture"
+#define __NR_close_range 436  // May not work on this architecture
+#endif
 #endif
 #ifndef CLOSE_RANGE_CLOEXEC
 #define CLOSE_RANGE_CLOEXEC (1U << 2)
@@ -40,7 +57,14 @@
 
 #if defined(HAVE_CLONE3_FALLBACK)
 #ifndef SYS_clone3
+#if defined(__x86_64__)
 #define SYS_clone3 435
+#elif defined(__aarch64__)
+#define SYS_clone3 435
+#else
+#warning "clone3 syscall number not defined for this architecture"
+#define SYS_clone3 435  // May not work on this architecture
+#endif
 #endif
 #define HAVE_CLONE3_AVAILABLE 1
 #endif

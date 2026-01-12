@@ -62,21 +62,24 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     # If the syscall numbers are not defined in headers, we'll define them ourselves
     # so we mark them as potentially available
     if(NOT HAVE_PIDFD_SEND_SIGNAL_SYSCALL)
+        # Syscall not in headers, define fallback for x86_64
         set(HAVE_PIDFD_SEND_SIGNAL_FALLBACK 1)
     else()
         set(HAVE_PIDFD_SEND_SIGNAL 1)
     endif()
     
     if(NOT HAVE_CLOSE_RANGE_SYSCALL)
+        # Syscall not in headers, define fallback for x86_64
         set(HAVE_CLOSE_RANGE_FALLBACK 1)
     else()
         set(HAVE_CLOSE_RANGE 1)
     endif()
     
-    if(NOT HAVE_CLONE3)
-        set(HAVE_CLONE3_FALLBACK 1)
-    else()
+    if(HAVE_CLONE3)
         set(HAVE_CLONE3_AVAILABLE 1)
+    else()
+        # clone3 not in headers, define fallback for x86_64
+        set(HAVE_CLONE3_FALLBACK 1)
     endif()
 endif()
 
