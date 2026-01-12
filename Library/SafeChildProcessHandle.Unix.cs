@@ -23,7 +23,7 @@ public partial class SafeChildProcessHandle
     private readonly int _exitPipeFd;
 
     private SafeChildProcessHandle(int pidfd, int pid, int exitPipeFd)
-        : this(existingHandle: (IntPtr)pidfd, ownsHandle: pidfd != NoPidFd)
+        : this(existingHandle: (IntPtr)pidfd, ownsHandle: true)
     {
         _pid = pid;
         _exitPipeFd = exitPipeFd;
@@ -128,7 +128,7 @@ public partial class SafeChildProcessHandle
     private int WaitForExitCore(int milliseconds)
     {
         // Timeout is natively supported on:
-        // - modern Linux with (poll for pidfd)
+        // - modern Linux with pidfd (poll for pidfd)
         // - macOS and BSDs (kqueue for pid)
         if (milliseconds != Timeout.Infinite && OperatingSystem.IsLinux() && this.handle == NoPidFd)
         {
@@ -147,7 +147,7 @@ public partial class SafeChildProcessHandle
     private int WaitForExitCore_OldLinux(int milliseconds)
     {
         // On RHEL 8.0, we don't have the ability to wait with timeout on pidfd,
-        // so we use a timer. It's sucks, but better than nothing.
+        // so we use a timer. It sucks, but better than nothing.
         Timer? timeoutTimer = null;
         try
         {
