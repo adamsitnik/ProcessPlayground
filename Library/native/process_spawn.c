@@ -28,6 +28,23 @@
 #endif
 #endif
 
+#ifdef __APPLE__
+#include <spawn.h>
+
+// Define the flag if not available (should be available on macOS 10.9+)
+#ifndef POSIX_SPAWN_CLOEXEC_DEFAULT
+#define POSIX_SPAWN_CLOEXEC_DEFAULT 0x4000
+#endif
+
+// Declare the non-portable chdir function if not available in headers
+// This is available on macOS 10.15+ but may not be in older SDK headers
+#ifndef __has_include
+    extern int posix_spawn_file_actions_addchdir_np(posix_spawn_file_actions_t *, const char *);
+#elif !__has_include(<sys/_types/_posix_spawn_file_actions_addchdir_np.h>)
+    extern int posix_spawn_file_actions_addchdir_np(posix_spawn_file_actions_t *, const char *);
+#endif
+#endif
+
 // External variable containing the current environment.
 // This is a standard C global variable that points to the environment array.
 // It's automatically set by the C runtime when the process starts.
@@ -110,7 +127,172 @@ int spawn_process(
     
     pid_t child_pid;
     
-#ifdef __linux__
+#ifdef __APPLE__
+    // ========== macOS: Use posix_spawn with POSIX_SPAWN_CLOEXEC_DEFAULT ==========
+    
+    posix_spawn_file_actions_t file_actions;
+    posix_spawnattr_t attr;
+    int spawn_errno = 0;
+    
+    // Initialize spawn attributes
+    if (posix_spawnattr_init(&attr) != 0) {
+        int saved_errno = errno;
+        pthread_sigmask(SIG_SETMASK, &old_signals, NULL);
+        close(wait_pipe[0]);
+        close(wait_pipe[1]);
+        close(exit_pipe[0]);
+        close(exit_pipe[1]);
+        errno = saved_errno;
+        return -1;
+    }
+    
+    // Initialize file actions
+    if (posix_spawn_file_actions_init(&file_actions) != 0) {
+        int saved_errno = errno;
+        posix_spawnattr_destroy(&attr);
+        pthread_sigmask(SIG_SETMASK, &old_signals, NULL);
+        close(wait_pipe[0]);
+        close(wait_pipe[1]);
+        close(exit_pipe[0]);
+        close(exit_pipe[1]);
+        errno = saved_errno;
+        return -1;
+    }
+    
+    // Set POSIX_SPAWN_CLOEXEC_DEFAULT flag to close all FDs except those we explicitly inherit
+    // Also set POSIX_SPAWN_SETSIGMASK to restore the signal mask
+    short flags = POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGMASK;
+    if (posix_spawnattr_setflags(&attr, flags) != 0) {
+        spawn_errno = errno;
+        goto spawn_cleanup;
+    }
+    
+    // Restore signal mask in child
+    if (posix_spawnattr_setsigmask(&attr, &old_signals) != 0) {
+        spawn_errno = errno;
+        goto spawn_cleanup;
+    }
+    
+    // Set up file actions to redirect stdin/stdout/stderr
+    // Note: We need to dup2 the handles before closing the write end of wait_pipe
+    if (stdin_fd != 0) {
+        if (posix_spawn_file_actions_adddup2(&file_actions, stdin_fd, 0) != 0) {
+            spawn_errno = errno;
+            goto spawn_cleanup;
+        }
+    }
+    
+    if (stdout_fd != 1) {
+        if (posix_spawn_file_actions_adddup2(&file_actions, stdout_fd, 1) != 0) {
+            spawn_errno = errno;
+            goto spawn_cleanup;
+        }
+    }
+    
+    if (stderr_fd != 2) {
+        if (posix_spawn_file_actions_adddup2(&file_actions, stderr_fd, 2) != 0) {
+            spawn_errno = errno;
+            goto spawn_cleanup;
+        }
+    }
+    
+    // Duplicate exit pipe write end to fd 3
+    if (posix_spawn_file_actions_adddup2(&file_actions, exit_pipe[1], 3) != 0) {
+        spawn_errno = errno;
+        goto spawn_cleanup;
+    }
+    
+    // Close the read ends of both pipes in the child (they have CLOEXEC but we're using posix_spawn)
+    if (posix_spawn_file_actions_addclose(&file_actions, wait_pipe[0]) != 0) {
+        spawn_errno = errno;
+        goto spawn_cleanup;
+    }
+    
+    if (posix_spawn_file_actions_addclose(&file_actions, exit_pipe[0]) != 0) {
+        spawn_errno = errno;
+        goto spawn_cleanup;
+    }
+    
+    // After dup2 operations, close the original FDs if they're not stdin/stdout/stderr
+    // This ensures we don't leak file descriptors
+    if (exit_pipe[1] != 3) {
+        if (posix_spawn_file_actions_addclose(&file_actions, exit_pipe[1]) != 0) {
+            spawn_errno = errno;
+            goto spawn_cleanup;
+        }
+    }
+    
+    if (stdin_fd != 0 && stdin_fd != 1 && stdin_fd != 2 && stdin_fd != 3) {
+        posix_spawn_file_actions_addclose(&file_actions, stdin_fd);
+    }
+    
+    if (stdout_fd != 0 && stdout_fd != 1 && stdout_fd != 2 && stdout_fd != 3) {
+        posix_spawn_file_actions_addclose(&file_actions, stdout_fd);
+    }
+    
+    if (stderr_fd != 0 && stderr_fd != 1 && stderr_fd != 2 && stderr_fd != 3) {
+        posix_spawn_file_actions_addclose(&file_actions, stderr_fd);
+    }
+    
+    // Change working directory if specified
+    if (working_dir != NULL) {
+        if (posix_spawn_file_actions_addchdir_np(&file_actions, working_dir) != 0) {
+            spawn_errno = errno;
+            goto spawn_cleanup;
+        }
+    }
+    
+    // Use the current environment if envp is NULL
+    char* const* env = (envp != NULL) ? envp : environ;
+    
+    // Spawn the process
+    int result = posix_spawn(&child_pid, path, &file_actions, &attr, argv, env);
+    
+spawn_cleanup:
+    // Clean up spawn structures
+    posix_spawn_file_actions_destroy(&file_actions);
+    posix_spawnattr_destroy(&attr);
+    
+    // Restore signal mask
+    pthread_sigmask(SIG_SETMASK, &old_signals, NULL);
+    
+    if (result != 0 || spawn_errno != 0) {
+        // Spawn failed
+        close(wait_pipe[0]);
+        close(wait_pipe[1]);
+        close(exit_pipe[0]);
+        close(exit_pipe[1]);
+        errno = (spawn_errno != 0) ? spawn_errno : result;
+        return -1;
+    }
+    
+    // Close write end of wait pipe (not needed for posix_spawn)
+    close(wait_pipe[1]);
+    
+    // Close write end of exit pipe (child owns it)
+    close(exit_pipe[1]);
+    
+    // With posix_spawn, we don't have a wait pipe mechanism to detect exec failures
+    // The process is already running at this point
+    // We need to check if it exited immediately
+    // Close the read end of wait pipe as it's not used
+    close(wait_pipe[0]);
+    
+    // Success - return PID and exit pipe fd if requested
+    if (out_pid != NULL) {
+        *out_pid = child_pid;
+    }
+    if (out_pidfd != NULL) {
+        *out_pidfd = -1;  // pidfd not available on macOS
+    }
+    if (out_exit_pipe_fd != NULL) {
+        *out_exit_pipe_fd = exit_pipe[0];
+    }
+    return 0;
+    
+#elif defined(__linux__)
+    // ========== Linux: Use clone3 with CLONE_PIDFD ==========
+    
     // On Linux, use clone3 to get pidfd atomically with fork
     struct clone_args args = {0};  // Zero-initialize
     args.flags = CLONE_VFORK | CLONE_PIDFD;
@@ -135,6 +317,8 @@ int spawn_process(
     
     if (clone_result == 0) {
 #else
+    // ========== Other Unix: Use vfork ==========
+    
     // On non-Linux Unix, use vfork
     child_pid = vfork();
     
@@ -152,7 +336,9 @@ int spawn_process(
     
     if (child_pid == 0) {
 #endif
-        // ========== CHILD PROCESS ==========
+#if !defined(__APPLE__)
+        // ========== CHILD PROCESS (Linux and other Unix, not macOS) ==========
+        // Note: On macOS, we use posix_spawn so this code path is not executed
         
         // Restore signal mask immediately
         pthread_sigmask(SIG_SETMASK, &old_signals, NULL);
@@ -261,7 +447,11 @@ int spawn_process(
         write_errno_and_exit(wait_pipe[1], errno);
     }
     
-    // ========== PARENT PROCESS ==========
+#endif  // !defined(__APPLE__)
+    
+#if !defined(__APPLE__)
+    // ========== PARENT PROCESS (Linux and other Unix, not macOS) ==========
+    // Note: On macOS, the parent process code is above in the posix_spawn section
     
     // Restore signal mask
     pthread_sigmask(SIG_SETMASK, &old_signals, NULL);
@@ -307,6 +497,7 @@ int spawn_process(
         *out_exit_pipe_fd = exit_pipe[0];
     }
     return 0;
+#endif  // !defined(__APPLE__)
 }
 
 // Map managed PosixSignal enum values to native signal numbers
