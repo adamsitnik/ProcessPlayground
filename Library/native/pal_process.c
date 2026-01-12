@@ -342,3 +342,36 @@ int send_signal(int pidfd, int pid, int managed_signal) {
 
     return kill(pid, native_signal);
 }
+
+// -1 is a valid exit code, so to distinguish between a normal exit code and an error, we return 0 on success and -1 on error
+int wait_for_exit(int pidfd, int pid, int timeout_ms, int* out_exitCode) {
+    int ret;
+#ifdef HAVE_CLONE3
+    (void)pid;
+    siginfo_t info;
+    while ((ret = waitid(P_PIDFD, pidfd, &info, WEXITED)) < 0 && errno == EINTR);
+
+    if (ret != -1) {
+        *out_exitCode = info.si_status;
+        return 0;
+    }
+#else
+    (void)pidfd;
+    int status;
+    while ((ret = waitpid(pid, &status, 0)) < 0 && errno == EINTR);
+
+    if (ret != -1) {
+        if (WIFEXITED(status)) {
+            *out_exitCode = WEXITSTATUS(status);
+            return 0;
+        }
+        else if (WIFSIGNALED(status)) {
+            // Child was killed by signal - return 128 + signal number (common convention)
+            *out_exitCode = 128 + WTERMSIG(status);
+            return 0;
+        }
+    }
+#endif
+    (void)timeout_ms;
+    return -1;
+}
