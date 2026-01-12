@@ -323,10 +323,6 @@ static int map_managed_signal_to_native(int managed_signal) {
     }
 }
 
-// Send a signal to a process
-// On systems with pidfd_send_signal, uses that syscall if pidfd >= 0, otherwise uses kill
-// On other systems, uses kill with the pid parameter
-// Returns 0 on success, -1 on error (errno is set)
 int send_signal(int pidfd, int pid, int managed_signal) {
     // Map managed signal to native signal number
     int native_signal = map_managed_signal_to_native(managed_signal);
@@ -339,12 +335,10 @@ int send_signal(int pidfd, int pid, int managed_signal) {
     // On systems with pidfd_send_signal, prefer it if we have a valid pidfd
     if (pidfd >= 0) {
         return syscall(__NR_pidfd_send_signal, pidfd, native_signal, NULL, 0);
-    } else {
-        return kill(pid, native_signal);
     }
 #else
-    // On other systems, use kill
-    (void)pidfd; // Suppress unused parameter warning
-    return kill(pid, native_signal);
+    (void)pidfd;
 #endif
+
+    return kill(pid, native_signal);
 }

@@ -15,14 +15,18 @@ namespace Microsoft.Win32.SafeHandles;
 // https://github.com/dotnet/runtime/blob/main/src/native/libs/System.Native/pal_process.c
 public partial class SafeChildProcessHandle
 {
-#if LINUX
-    // Store the PID alongside the pidfd handle (Linux only)
-    private int _pid;
-#endif
-    // Store the exit pipe read fd for async monitoring
-    private int _exitPipeFd;
     // Buffer for reading from exit pipe (reused to avoid allocations)
     private static readonly byte[] s_exitPipeBuffer = new byte[1];
+
+    private readonly int _pid;
+    private readonly int _exitPipeFd;
+
+    private SafeChildProcessHandle(int pidfd, int pid, int exitPipeFd)
+        : this(existingHandle: (IntPtr)pidfd, ownsHandle: pidfd != -1)
+    {
+        _pid = pid;
+        _exitPipeFd = exitPipeFd;
+    }
 
     protected override bool ReleaseHandle()
     {
@@ -31,15 +35,15 @@ public partial class SafeChildProcessHandle
         {
             close(_exitPipeFd);
         }
-#if LINUX
-        // Close the pidfd file descriptor
-        return close((int)handle) == 0;
-#else
-        // On non-Linux Unix, the handle is just a PID, not a real OS handle
-        // No cleanup is needed
-        return true;
-#endif
+
+        return (int)handle switch
+        {
+            -1 => true,
+            _ => close((int)handle) == 0,
+        };
     }
+
+    private int GetProcessIdCore() => _pid;
 
     [LibraryImport("libc", SetLastError = true)]
     private static partial int close(int fd);
@@ -60,7 +64,7 @@ public partial class SafeChildProcessHandle
         int kill_on_parent_death);
 
     [LibraryImport("pal_process", SetLastError = true)]
-    private static partial int send_signal(int pidfd, int pid, PosixSignal managed_signal);
+    private static partial int send_signal(SafeChildProcessHandle pidfd, int pid, PosixSignal managed_signal);
 
     // Shared declarations for both Linux and non-Linux Unix
     [StructLayout(LayoutKind.Sequential)]
@@ -181,17 +185,7 @@ public partial class SafeChildProcessHandle
                 throw new Win32Exception(errorCode, "Failed to spawn process");
             }
 
-#if LINUX
-            SafeChildProcessHandle handle = new SafeChildProcessHandle(pidfd, ownsHandle: true);
-            handle._pid = pid;
-            handle._exitPipeFd = exitPipeFd;
-            return handle;
-#else
-            // On non-Linux Unix, we don't use pidfd (it's -1), we just use the PID as the handle
-            SafeChildProcessHandle handle = new SafeChildProcessHandle(pid, ownsHandle: true);
-            handle._exitPipeFd = exitPipeFd;
-            return handle;
-#endif
+            return new SafeChildProcessHandle(pidfd, pid, exitPipeFd);
         }
         finally
         {
@@ -216,12 +210,6 @@ public partial class SafeChildProcessHandle
 
         return envList.ToArray();
     }
-
-#if LINUX
-    private int GetProcessIdCore() => _pid;
-#else
-    private int GetProcessIdCore() => (int)DangerousGetHandle();
-#endif
 
     private unsafe bool TryGetExitCodeCore(out int exitCode)
     {
@@ -521,13 +509,7 @@ public partial class SafeChildProcessHandle
 
     private void KillCore(bool throwOnError)
     {
-#if LINUX
-        int pidfd = (int)DangerousGetHandle();
-        int result = send_signal(pidfd, _pid, SIGKILL);
-#else
-        int pid = GetProcessIdCore();
-        int result = send_signal(-1, pid, SIGKILL);
-#endif
+        int result = send_signal(this, _pid, SIGKILL);
         if (result == 0 || !throwOnError)
         {
             return;
@@ -548,14 +530,7 @@ public partial class SafeChildProcessHandle
 
     private void SendSignalCore(PosixSignal signal)
     {
-#if LINUX
-        int pidfd = (int)DangerousGetHandle();
-        int result = send_signal(pidfd, _pid, signal);
-#else
-        int pid = GetProcessIdCore();
-        int result = send_signal(-1, pid, signal);
-#endif
-
+        int result = send_signal(this, _pid, signal);
         if (result == 0)
         {
             return;
