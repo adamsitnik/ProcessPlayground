@@ -33,8 +33,10 @@ public class InheritedHandlesTests
         Assert.Same(testHandle, options.InheritedHandles[0]);
     }
 
-    [Fact]
-    public async Task InheritedHandles_ChildProcessCanReadFromInheritedPipe()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task InheritedHandles_ChildProcessCanReadFromInheritedPipe(bool inherit)
     {
         // This test creates a pipe, writes data to it, and passes the read end to a child process
         // The child process should be able to read the data from the inherited pipe handle
@@ -75,7 +77,6 @@ public class InheritedHandlesTests
                 {
                     Arguments = { "-NoProfile", "-Command", script }
                 };
-                options.InheritedHandles.Add(pipeReadHandle);
             }
             else
             {
@@ -85,6 +86,10 @@ public class InheritedHandlesTests
                 {
                     Arguments = { $"/dev/fd/{fd}" }
                 };
+            }
+
+            if (inherit)
+            {
                 options.InheritedHandles.Add(pipeReadHandle);
             }
 
@@ -101,27 +106,36 @@ public class InheritedHandlesTests
                     output: outputWriteHandle,
                     error: null);
 
-                // Close our write end so the child can see EOF
-                outputWriteHandle.Close();
-
-                // Read the output from the child process
-                using FileStream outputReadStream = new(outputReadHandle, FileAccess.Read);
-                byte[] buffer = new byte[messageBytes.Length];
-                int totalBytesRead = 0;
-                while (totalBytesRead < buffer.Length)
+                if (inherit)
                 {
-                    int bytesRead = await outputReadStream.ReadAsync(buffer, totalBytesRead, buffer.Length - totalBytesRead);
-                    if (bytesRead == 0) break;
-                    totalBytesRead += bytesRead;
+                    // Read the output from the child process
+                    using FileStream outputReadStream = new(outputReadHandle, FileAccess.Read);
+                    byte[] buffer = new byte[messageBytes.Length];
+                    int totalBytesRead = 0;
+                    while (totalBytesRead < buffer.Length)
+                    {
+                        int bytesRead = await outputReadStream.ReadAsync(buffer, totalBytesRead, buffer.Length - totalBytesRead);
+                        if (bytesRead == 0) break;
+                        totalBytesRead += bytesRead;
+                    }
+
+                    // Verify the child process read the message correctly
+                    string receivedMessage = Encoding.UTF8.GetString(buffer, 0, totalBytesRead);
+                    Assert.Equal(testMessage, receivedMessage);
                 }
 
                 // Wait for the child process to exit
                 int exitCode = processHandle.WaitForExit();
 
-                // Verify the child process read the message correctly
-                Assert.Equal(0, exitCode);
-                string receivedMessage = Encoding.UTF8.GetString(buffer, 0, totalBytesRead);
-                Assert.Equal(testMessage, receivedMessage);
+                if (inherit)
+                {
+                    Assert.Equal(0, exitCode);
+                }
+                else
+                {
+                    // If the handle was not inherited, the child process should fail to read
+                    Assert.NotEqual(0, exitCode);
+                }
             }
         }
     }
