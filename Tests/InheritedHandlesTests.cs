@@ -52,7 +52,6 @@ public class InheritedHandlesTests
             using (FileStream writeStream = new(pipeWriteHandle, FileAccess.Write))
             {
                 await writeStream.WriteAsync(messageBytes, 0, messageBytes.Length);
-                await writeStream.FlushAsync();
             }
 
             // Get the file descriptor / handle value
