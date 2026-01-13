@@ -196,9 +196,9 @@ int spawn_process(
     }
     
     // Redirect stdin/stdout/stderr
-    if ((stdin_fd != 0 && (result = posix_spawn_file_actions_adddup2(&file_actions, stdin_fd, 0)) != 0)
-        || (stdout_fd != 1 && (result = posix_spawn_file_actions_adddup2(&file_actions, stdout_fd, 1)) != 0)
-        || (stderr_fd != 2 && (result = posix_spawn_file_actions_adddup2(&file_actions, stderr_fd, 2)) != 0))
+    if ((result = posix_spawn_file_actions_adddup2(&file_actions, stdin_fd, 0)) != 0
+        || (result = posix_spawn_file_actions_adddup2(&file_actions, stdout_fd, 1)) != 0
+        || (result = posix_spawn_file_actions_adddup2(&file_actions, stderr_fd, 2)) != 0)
     {
         int saved_errno = result;
         posix_spawn_file_actions_destroy(&file_actions);
