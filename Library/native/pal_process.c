@@ -27,6 +27,10 @@
 #include <sys/event.h>
 #endif
 
+#ifdef HAVE_POSIX_SPAWN
+#include <spawn.h>
+#endif
+
 // In the future, we could add support for pidfd on FreeBSD
 #ifdef HAVE_CLONE3
 #define HAVE_PIDFD
@@ -101,6 +105,7 @@ static inline int create_kqueue_cloexec(void) {
 // If out_pidfd is not NULL, the pidfd of the child process is stored there (Linux only, -1 on other platforms)
 // If out_exit_pipe_fd is not NULL, the read end of exit monitoring pipe is stored there
 // If kill_on_parent_death is non-zero, the child process will be killed when the parent dies
+//   Note: On macOS with posix_spawn, kill_on_parent_death is not supported and will be ignored
 int spawn_process(
     const char* path,
     char* const argv[],
@@ -114,6 +119,152 @@ int spawn_process(
     int* out_exit_pipe_fd,
     int kill_on_parent_death)
 {
+#if defined(HAVE_POSIX_SPAWN) && defined(HAVE_POSIX_SPAWN_CLOEXEC_DEFAULT) && defined(HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDINHERIT_NP)
+    // ========== POSIX_SPAWN PATH (macOS) ==========
+    int exit_pipe[2];
+    pid_t child_pid;
+    posix_spawn_file_actions_t file_actions;
+    posix_spawnattr_t attr;
+    int result;
+    
+    // Create pipe for exit monitoring (CLOEXEC to avoid other parallel processes inheriting it)
+    if (create_cloexec_pipe(exit_pipe) != 0) {
+        return -1;
+    }
+    
+    // Initialize posix_spawn attributes
+    if ((result = posix_spawnattr_init(&attr)) != 0) {
+        int saved_errno = result;
+        close(exit_pipe[0]);
+        close(exit_pipe[1]);
+        errno = saved_errno;
+        return -1;
+    }
+    
+    // Set flags: POSIX_SPAWN_CLOEXEC_DEFAULT to close all FDs except stdin/stdout/stderr
+    // and POSIX_SPAWN_SETSIGDEF to reset signal handlers
+    short flags = POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGDEF;
+    if ((result = posix_spawnattr_setflags(&attr, flags)) != 0) {
+        int saved_errno = result;
+        posix_spawnattr_destroy(&attr);
+        close(exit_pipe[0]);
+        close(exit_pipe[1]);
+        errno = saved_errno;
+        return -1;
+    }
+    
+    // Reset all signal handlers to default
+    sigset_t all_signals;
+    sigfillset(&all_signals);
+    if ((result = posix_spawnattr_setsigdefault(&attr, &all_signals)) != 0) {
+        int saved_errno = result;
+        posix_spawnattr_destroy(&attr);
+        close(exit_pipe[0]);
+        close(exit_pipe[1]);
+        errno = saved_errno;
+        return -1;
+    }
+    
+    // Initialize file actions
+    if ((result = posix_spawn_file_actions_init(&file_actions)) != 0) {
+        int saved_errno = result;
+        posix_spawnattr_destroy(&attr);
+        close(exit_pipe[0]);
+        close(exit_pipe[1]);
+        errno = saved_errno;
+        return -1;
+    }
+    
+    // Redirect stdin/stdout/stderr
+    if ((stdin_fd != 0 && (result = posix_spawn_file_actions_adddup2(&file_actions, stdin_fd, 0)) != 0)
+        || (stdout_fd != 1 && (result = posix_spawn_file_actions_adddup2(&file_actions, stdout_fd, 1)) != 0)
+        || (stderr_fd != 2 && (result = posix_spawn_file_actions_adddup2(&file_actions, stderr_fd, 2)) != 0))
+    {
+        int saved_errno = result;
+        posix_spawn_file_actions_destroy(&file_actions);
+        posix_spawnattr_destroy(&attr);
+        close(exit_pipe[0]);
+        close(exit_pipe[1]);
+        errno = saved_errno;
+        return -1;
+    }
+
+    // Set up exit pipe write end as fd 3 in the child process
+    // We use fd 3 for the exit pipe as it's typically unused by standard streams (0-2).
+    // With POSIX_SPAWN_CLOEXEC_DEFAULT, all fds except 0,1,2 are automatically closed,
+    // so we must explicitly mark fd 3 as inheritable using addinherit_np.
+    if ((result = posix_spawn_file_actions_adddup2(&file_actions, exit_pipe[1], 3)) != 0
+        || (result = posix_spawn_file_actions_addinherit_np(&file_actions, 3)) != 0)
+    {
+        int saved_errno = result;
+        posix_spawn_file_actions_destroy(&file_actions);
+        posix_spawnattr_destroy(&attr);
+        close(exit_pipe[0]);
+        close(exit_pipe[1]);
+        errno = saved_errno;
+        return -1;
+    }
+    
+    // Change working directory if specified
+    if (working_dir != NULL) {
+#ifdef HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCHDIR_NP
+        if ((result = posix_spawn_file_actions_addchdir_np(&file_actions, working_dir)) != 0) {
+            int saved_errno = result;
+            posix_spawn_file_actions_destroy(&file_actions);
+            posix_spawnattr_destroy(&attr);
+            close(exit_pipe[0]);
+            close(exit_pipe[1]);
+            errno = saved_errno;
+            return -1;
+        }
+#else
+        // If addchdir_np is not available, fail the spawn request
+        // as we cannot fulfill the working directory requirement
+        posix_spawn_file_actions_destroy(&file_actions);
+        posix_spawnattr_destroy(&attr);
+        close(exit_pipe[0]);
+        close(exit_pipe[1]);
+        errno = ENOTSUP;
+        return -1;
+#endif
+    }
+    
+    // Spawn the process
+    // If envp is NULL, use the current environment (environ)
+    char* const* env = (envp != NULL) ? envp : environ;
+    result = posix_spawn(&child_pid, path, &file_actions, &attr, argv, env);
+    
+    // Clean up
+    posix_spawn_file_actions_destroy(&file_actions);
+    posix_spawnattr_destroy(&attr);
+    
+    // Close write end of exit pipe (child owns it)
+    close(exit_pipe[1]);
+    
+    if (result != 0) {
+        // Spawn failed
+        close(exit_pipe[0]);
+        errno = result;
+        return -1;
+    }
+    
+    // Note: kill_on_parent_death is not supported with posix_spawn on macOS
+    // macOS does not provide a mechanism to automatically kill a child process when the parent dies
+    (void)kill_on_parent_death;
+    
+    // Success - return PID and exit pipe fd if requested
+    if (out_pid != NULL) {
+        *out_pid = child_pid;
+    }
+    if (out_pidfd != NULL) {
+        *out_pidfd = -1;  // pidfd not supported on macOS
+    }
+    if (out_exit_pipe_fd != NULL) {
+        *out_exit_pipe_fd = exit_pipe[0];
+    }
+    return 0;
+#else
+    // ========== FORK/EXEC PATH (Linux and other Unix systems) ==========
     int wait_pipe[2];
     int exit_pipe[2];
     int pidfd = -1;
@@ -332,6 +483,7 @@ int spawn_process(
         *out_exit_pipe_fd = exit_pipe[0];
     }
     return 0;
+#endif
 }
 
 // Map managed PosixSignal enum values to native signal numbers
