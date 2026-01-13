@@ -284,7 +284,7 @@ int spawn_process(
     // ========== FORK/EXEC PATH (Linux and other Unix systems) ==========
     
     // On non-Linux Unix systems without SYS_tgkill, return ENOTSUP early
-#if !defined(HAVE_SYS_TGKILL)
+#ifndef HAVE_SYS_TGKILL
     if (create_suspended) {
         errno = ENOTSUP;
         return -1;
