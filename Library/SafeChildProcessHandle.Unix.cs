@@ -102,7 +102,8 @@ public partial class SafeChildProcessHandle
                 out int pid,
                 out int pidfd,
                 out int exitPipeFd,
-                options.KillOnParentDeath ? 1 : 0);
+                options.KillOnParentDeath ? 1 : 0,
+                options.CreateSuspended ? 1 : 0);
 
             if (result == -1)
             {
@@ -240,6 +241,21 @@ public partial class SafeChildProcessHandle
         throw new Win32Exception(errno, $"Failed to send signal {signal} (errno={errno})");
     }
 
+    private void ResumeCore()
+    {
+        // Resume a suspended process by sending SIGCONT
+        const PosixSignal SIGCONT = (PosixSignal)(-6);
+        int result = send_signal(this, _pid, SIGCONT);
+        if (result == 0)
+        {
+            return;
+        }
+
+        // Resume failed, throw the error
+        int errno = Marshal.GetLastPInvokeError();
+        throw new Win32Exception(errno, $"Failed to resume process (errno={errno})");
+    }
+
     [LibraryImport("libc", SetLastError = true)]
     private static partial int close(int fd);
 
@@ -256,7 +272,8 @@ public partial class SafeChildProcessHandle
         out int pid,
         out int pidfd,
         out int exit_pipe_fd,
-        int kill_on_parent_death);
+        int kill_on_parent_death,
+        int create_suspended);
 
     [LibraryImport("pal_process", SetLastError = true)]
     private static partial int send_signal(SafeChildProcessHandle pidfd, int pid, PosixSignal managed_signal);

@@ -60,6 +60,18 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
             return 0;
         }
     " HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDINHERIT_NP)
+    
+    # Check for POSIX_SPAWN_START_SUSPENDED flag (macOS-specific)
+    check_c_source_compiles("
+        #include <spawn.h>
+        int main() {
+            #ifdef POSIX_SPAWN_START_SUSPENDED
+            return 0;
+            #else
+            #error POSIX_SPAWN_START_SUSPENDED not defined
+            #endif
+        }
+    " HAVE_POSIX_SPAWN_START_SUSPENDED)
 endif()
 
 # On Linux, check for specific syscalls
