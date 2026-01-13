@@ -10,12 +10,17 @@ internal static partial class Interop
     {
 #if NETFRAMEWORK
         [DllImport(Libraries.Kernel32, SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        internal static extern bool SetHandleInformation(IntPtr hObject, int dwMask, int dwFlags);
+        
 #else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        internal static partial bool SetHandleInformation(IntPtr hObject, int dwMask, int dwFlags);
 #endif
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static
+#if NETFRAMEWORK
+            extern
+#else
+            partial
+#endif
+            bool SetHandleInformation(IntPtr hObject, int dwMask, int dwFlags);
     }
 }
