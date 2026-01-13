@@ -301,7 +301,9 @@ int spawn_process(
 #ifdef HAVE_CLONE3
     // On systems with clone3, use it to get pidfd atomically with fork
     struct clone_args args = {0};  // Zero-initialize
-    args.flags = CLONE_VFORK | CLONE_PIDFD;
+    // Note: We cannot use CLONE_VFORK when create_suspended is true, because
+    // the child will stop itself before exec, which would deadlock the parent
+    args.flags = (create_suspended ? 0 : CLONE_VFORK) | CLONE_PIDFD;
     args.pidfd = (uint64_t)(uintptr_t)&pidfd;
     args.exit_signal = SIGCHLD;
     
@@ -323,8 +325,9 @@ int spawn_process(
     
     if (clone_result == 0) {
 #else
-    // On systems without clone3, use vfork
-    child_pid = vfork();
+    // On systems without clone3, use fork or vfork depending on create_suspended
+    // Note: We cannot use vfork when create_suspended is true
+    child_pid = create_suspended ? fork() : vfork();
     
     if (child_pid == -1) {
         // Fork failed
@@ -440,9 +443,12 @@ int spawn_process(
             }
         }
         
-        // If create_suspended is requested, stop ourselves before exec
+        // If create_suspended is requested, close wait_pipe and stop ourselves before exec
         // This allows the parent to get our PID and set up monitoring before we start executing
         if (create_suspended) {
+            // Close wait_pipe to signal parent that we've successfully reached this point
+            close(wait_pipe[1]);
+            
 #if defined(HAVE_SYS_SYSCALL_H) && defined(__linux__)
             // On Linux, use tgkill to send SIGSTOP to ourselves
             // This is more reliable than kill(getpid(), SIGSTOP) or pthread_kill
@@ -461,7 +467,12 @@ int spawn_process(
         execve(path, argv, env);
         
         // If we get here, execve failed
-        write_errno_and_exit(wait_pipe[1], errno);
+        // Only write to wait_pipe if it's still open (not suspended case)
+        if (!create_suspended) {
+            write_errno_and_exit(wait_pipe[1], errno);
+        } else {
+            _exit(127);
+        }
     }
     
     // ========== PARENT PROCESS ==========

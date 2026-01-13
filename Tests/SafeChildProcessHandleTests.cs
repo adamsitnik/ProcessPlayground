@@ -405,4 +405,86 @@ public partial class SafeChildProcessHandleTests
         ProcessStartOptions options = new("test");
         Assert.False(options.KillOnParentDeath);
     }
+
+    [Fact]
+    public void CreateSuspended_DefaultsToFalse()
+    {
+        ProcessStartOptions options = new("test");
+        Assert.False(options.CreateSuspended);
+    }
+
+    [Fact]
+    public void CreateSuspended_CanBeSetToTrue()
+    {
+        ProcessStartOptions options = new("test") { CreateSuspended = true };
+        Assert.True(options.CreateSuspended);
+    }
+
+    [Fact]
+    public void CreateSuspended_ProcessStartsSuspended_ResumeWorks()
+    {
+        // Create a process that prints output and sleeps
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "echo Started && timeout /t 2 /nobreak" }, CreateSuspended = true }
+            : new("sh") { Arguments = { "-c", "echo Started && sleep 2" }, CreateSuspended = true };
+
+        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
+            options,
+            input: null,
+            output: nullHandle,
+            error: nullHandle);
+
+        // Process should be suspended, verify it has a valid PID
+        int pid = processHandle.GetProcessId();
+        Assert.True(pid > 0);
+
+        // Give it a moment to ensure it's truly suspended
+        Thread.Sleep(100);
+
+        // Resume the process
+        processHandle.Resume();
+
+        // Wait for the process to complete (with timeout)
+        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(10));
+        Assert.Equal(0, exitCode);
+    }
+
+    [Fact]
+    public void CreateSuspended_CanKillSuspendedProcess()
+    {
+        // Create a suspended process
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "timeout /t 60 /nobreak" }, CreateSuspended = true }
+            : new("sleep") { Arguments = { "60" }, CreateSuspended = true };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
+            options,
+            input: null,
+            output: null,
+            error: null);
+
+        // Process should be suspended
+        int pid = processHandle.GetProcessId();
+        Assert.True(pid > 0);
+
+        // Kill the suspended process (should work even when suspended)
+        processHandle.Kill();
+
+        // Wait for it to be killed
+        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+        
+        // On Windows, TerminateProcess sets exit code to -1
+        // On Unix with pidfd, the process is terminated by SIGKILL, so exit code is 9 (SIGKILL)
+        // On Unix without pidfd, the exit code is mapped to -1 for signaled processes
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Equal(-1, exitCode);
+        }
+        else
+        {
+            // On Unix, we accept either -1 or 9 (SIGKILL signal number)
+            Assert.True(exitCode == -1 || exitCode == 9, $"Expected exit code -1 or 9, but got {exitCode}");
+        }
+    }
 }
