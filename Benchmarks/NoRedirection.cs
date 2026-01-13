@@ -9,6 +9,8 @@ namespace Benchmarks;
 [BenchmarkCategory(nameof(NoRedirection))]
 public class NoRedirection
 {
+    private ProcessStartOptions _resolved = null!;
+
     [Benchmark(Baseline = true)]
     public void Old()
     {
@@ -60,4 +62,17 @@ public class NoRedirection
 
         return ChildProcess.ExecuteAsync(info);
     }
+
+    [GlobalSetup(Targets = new string[2] { nameof(New_Resolved), nameof(NewAsync_Resolved) })]
+    public void Setup()
+    {
+        _resolved = ProcessStartOptions.ResolvePath("dotnet");
+        _resolved.Arguments.Add("--help");
+    }
+
+    [Benchmark]
+    public int New_Resolved() => ChildProcess.Execute(_resolved);
+
+    [Benchmark]
+    public Task<int> NewAsync_Resolved() => ChildProcess.ExecuteAsync(_resolved);
 }

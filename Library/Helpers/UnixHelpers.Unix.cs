@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -14,6 +15,20 @@ internal static partial class UnixHelpers
     {
         // Check for execute permission (X_OK = 1)
         return access(path, 1) == 0;
+    }
+
+    internal static string[] GetEnvironmentVariables(ProcessStartOptions options)
+    {
+        List<string> envList = new();
+        foreach (var kvp in options.Environment)
+        {
+            if (kvp.Value != null)
+            {
+                envList.Add($"{kvp.Key}={kvp.Value}");
+            }
+        }
+
+        return envList.ToArray();
     }
 
     internal static unsafe void AllocNullTerminatedArray(string[] arr, ref byte** arrPtr)
@@ -72,75 +87,5 @@ internal static partial class UnixHelpers
         {
             NativeMemory.Free(ptr);
         }
-    }
-
-    // Copied directly from dotnet/runtime
-    internal static string? ResolvePath(string filename)
-    {
-        // Follow the same resolution that Windows uses with CreateProcess:
-        // 1. First try the exact path provided
-        // 2. Then try the file relative to the executable directory
-        // 3. Then try the file relative to the current directory
-        // 4. then try the file in each of the directories specified in PATH
-        // Windows does additional Windows-specific steps between 3 and 4,
-        // and we ignore those here.
-
-        // If the filename is a complete path, use it, regardless of whether it exists.
-        if (Path.IsPathRooted(filename))
-        {
-            // In this case, it doesn't matter whether the file exists or not;
-            // it's what the caller asked for, so it's what they'll get
-            return filename;
-        }
-
-        // Then check the executable's directory
-        string? path = Environment.ProcessPath;
-        if (path != null)
-        {
-            try
-            {
-                path = Path.Combine(Path.GetDirectoryName(path)!, filename);
-                if (File.Exists(path))
-                {
-                    return path;
-                }
-            }
-            catch (ArgumentException) { } // ignore any errors in data that may come from the exe path
-        }
-
-        // Then check the current directory
-        path = Path.Combine(Directory.GetCurrentDirectory(), filename);
-        if (File.Exists(path))
-        {
-            return path;
-        }
-
-        // Then check each directory listed in the PATH environment variables
-        return FindProgramInPath(filename);
-    }
-
-    /// <summary>
-    /// Gets the path to the program
-    /// </summary>
-    /// <param name="program"></param>
-    /// <returns></returns>
-    private static string? FindProgramInPath(string program)
-    {
-        string path;
-        string? pathEnvVar = Environment.GetEnvironmentVariable("PATH");
-        if (pathEnvVar != null)
-        {
-            var pathParser = new StringParser(pathEnvVar, ':', skipEmpty: true);
-            while (pathParser.MoveNext())
-            {
-                string subPath = pathParser.ExtractCurrent();
-                path = Path.Combine(subPath, program);
-                if (IsExecutable(path))
-                {
-                    return path;
-                }
-            }
-        }
-        return null;
     }
 }

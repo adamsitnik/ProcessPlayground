@@ -10,9 +10,14 @@ public static partial class ArgumentExceptionExtensions
     {
         public static void ThrowIfNullOrEmpty(string? argument, [CallerArgumentExpression(nameof(argument))] string? paramName = null)
         {
-            if (string.IsNullOrEmpty(argument))
+            if (argument is null)
             {
-                throw new ArgumentException("Value cannot be null or empty.", paramName);
+                throw new ArgumentNullException(paramName);
+            }
+            
+            if (argument.Length == 0)
+            {
+                throw new ArgumentException("Value cannot be empty.", paramName);
             }
         }
     }

@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 using System.TBA;
@@ -9,11 +11,9 @@ namespace Microsoft.Win32.SafeHandles;
 /// <summary>
 /// A wrapper for a child process handle.
 /// </summary>
-public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsInvalid
+public sealed partial class SafeChildProcessHandle : SafeHandle
 {
-    internal static readonly SafeChildProcessHandle InvalidHandle = new SafeChildProcessHandle();
-
-    private static readonly object s_createProcessLock = new();
+    internal static readonly SafeChildProcessHandle InvalidHandle = new();
 
     /// <summary>
     /// Creates a <see cref="T:Microsoft.Win32.SafeHandles.SafeChildProcessHandle" />.
@@ -28,15 +28,16 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
     {
     }
 
+    public override bool IsInvalid => handle == IntPtr.Zero;
+
     /// <summary>
     /// Creates a <see cref="T:Microsoft.Win32.SafeHandles.SafeChildProcessHandle" /> around a process handle.
     /// </summary>
     /// <param name="existingHandle">Handle to wrap</param>
     /// <param name="ownsHandle">Whether to control the handle lifetime</param>
     public SafeChildProcessHandle(IntPtr existingHandle, bool ownsHandle)
-        : base(ownsHandle)
+        : base(existingHandle, ownsHandle)
     {
-        SetHandle(existingHandle);
     }
 
     public static SafeChildProcessHandle Start(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error)
@@ -63,12 +64,19 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
             // DESIGN: avoid deadlocks and the need of users being aware of how pipes work by closing the child handles in the parent process.
             // Close the child handles in the parent process, so the pipe will signal EOF when the child exits.
             // Otherwise, the parent process will keep the write end of the pipe open, and any read operations will hang.
+            
+            // Track which handles we've already disposed to avoid double-disposal when the same handle is used for multiple streams
+            bool outputDisposed = false;
+            
             if (output.IsPipe())
             {
                 output.Dispose();
+                outputDisposed = true;
             }
 
-            if (error.IsPipe())
+            // Only dispose error if it's a pipe and it's not the same underlying handle as output
+            // Compare the actual handle values, not just reference equality, since different SafeFileHandle instances can wrap the same handle
+            if (error.IsPipe() && (!outputDisposed || error.DangerousGetHandle() != output.DangerousGetHandle()))
             {
                 error.Dispose();
             }
@@ -109,6 +117,39 @@ public sealed partial class SafeChildProcessHandle : SafeHandleZeroOrMinusOneIsI
 
         KillCore(throwOnError: true);
     }
+
+    /// <summary>
+    /// Resumes a suspended process.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
+    /// <exception cref="Win32Exception">Thrown when the resume operation fails.</exception>
+    public void Resume()
+    {
+        Validate();
+
+        ResumeCore();
+    }
+
+#if NET
+    /// <summary>
+    /// Sends a POSIX signal to the process.
+    /// </summary>
+    /// <param name="signal">The signal to send.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
+    /// <exception cref="PlatformNotSupportedException">Thrown on Windows.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the signal value is not supported.</exception>
+    /// <exception cref="Win32Exception">Thrown when the signal operation fails.</exception>
+    [UnsupportedOSPlatform("windows")]
+    public void SendSignal(PosixSignal signal)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan((int)signal, (int)PosixSignal.SIGTSTP, nameof(signal));
+        ArgumentOutOfRangeException.ThrowIfGreaterThan((int)signal, (int)PosixSignal.SIGHUP, nameof(signal));
+
+        Validate();
+
+        SendSignalCore(signal);
+    }
+#endif
     
     /// <summary>
     /// This is an INTERNAL method that can be used as PERF optimization

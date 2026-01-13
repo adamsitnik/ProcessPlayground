@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.TBA;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
 
 namespace Tests;
@@ -13,17 +16,9 @@ public partial class SafeChildProcessHandleTests
 #endif
     public void GetProcessId_ReturnsValidPid_NotHandleOrDescriptor()
     {
-#if WINDOWS
-        ProcessStartOptions info = new("cmd.exe")
-        {
-            Arguments = { "/c", "echo test" },
-        };
-#else
-        ProcessStartOptions info = new("echo")
-        {
-            Arguments = { "test" },
-        };
-#endif
+        ProcessStartOptions info = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "echo test" } }
+            : new("echo") { Arguments = { "test" } };
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(info, input: null, output: null, error: null);
         int pid = processHandle.GetProcessId();
@@ -251,11 +246,7 @@ public partial class SafeChildProcessHandleTests
             int exitCode = processHandle.WaitForExit();
             // printenv returns 1 when variable not found (Linux)
             // Windows cmd /c echo returns 0 even if variable is not set
-#if !WINDOWS
-            Assert.Equal(1, exitCode); 
-#else
-            Assert.Equal(0, exitCode);
-#endif
+            Assert.Equal(OperatingSystem.IsWindows() ? 0 : 1, exitCode);
         }
         finally
         {
@@ -263,18 +254,9 @@ public partial class SafeChildProcessHandleTests
         }
     }
 
-    private static ProcessStartOptions CreatePrintEnvVarToOutputOptions(string testVarName) =>
-#if WINDOWS
-        new("cmd.exe")
-        {
-            Arguments = { "/c", "echo", $"%{testVarName}%" }
-        };
-#else
-        new("printenv")
-        {
-            Arguments = { testVarName }
-        };
-#endif
+    private static ProcessStartOptions CreatePrintEnvVarToOutputOptions(string testVarName) => OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "echo", $"%{testVarName}%" } }
+            : new("printenv") { Arguments = { testVarName } };
 
     private static string GetSingleOutputLine(ProcessStartOptions options)
     {
@@ -306,17 +288,9 @@ public partial class SafeChildProcessHandleTests
     public void Kill_KillsRunningProcess()
     {
         // Start a long-running process
-#if WINDOWS
-        ProcessStartOptions options = new("cmd.exe")
-        {
-            Arguments = { "/c", "timeout", "/t", "60", "/nobreak" }
-        };
-#else
-        ProcessStartOptions options = new("sleep")
-        {
-            Arguments = { "60" }
-        };
-#endif
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "timeout", "/t", "60", "/nobreak" } }
+            : new("sleep") { Arguments = { "60" } };
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
@@ -345,17 +319,9 @@ public partial class SafeChildProcessHandleTests
     public void Kill_CanBeCalledMultipleTimes()
     {
         // Start a long-running process
-#if WINDOWS
-        ProcessStartOptions options = new("cmd.exe")
-        {
-            Arguments = { "/c", "timeout", "/t", "60", "/nobreak" }
-        };
-#else
-        ProcessStartOptions options = new("sleep")
-        {
-            Arguments = { "60" }
-        };
-#endif
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "timeout", "/t", "60", "/nobreak" } }
+            : new("sleep") { Arguments = { "60" } };
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
@@ -367,5 +333,76 @@ public partial class SafeChildProcessHandleTests
         
         // Second should not throw
         processHandle.Kill();
+    }
+
+    [Theory]
+    [InlineData(false)]
+#if WINDOWS // https://github.com/adamsitnik/ProcessPlayground/issues/61
+    [InlineData(true)]
+#endif
+    public async Task WaitForExit_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
+    {
+        // This test verifies that WaitForExitAsync returns when the direct child process exits,
+        // even if that child has spawned a grandchild process that is still running.
+        // This is important because:
+        // - On Windows, process handles are specific to a single process
+        // - On Linux with pidfd, the descriptor tracks only the direct child
+        // The grandchild becomes orphaned and is reparented to init/systemd
+
+        // This spawns a grandchild and then the child exits immediately
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe")
+            {
+                Arguments = { "/c", "start", "cmd.exe", "/c", "timeout", "/t", "5", "/nobreak", "&&", "exit" }
+            }
+            : new("sh")
+            {
+                Arguments = { "-c", "sleep 5 & exit" }
+            };
+
+        Stopwatch started = Stopwatch.StartNew();
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+
+        TimeSpan timeout = TimeSpan.FromSeconds(3);
+        using CancellationTokenSource cts = new(timeout);
+
+        // WaitForExitAsync should return quickly because the child exits immediately
+        // (even though the grandchild is still running for 5 seconds)
+        int exitCode = useAsync
+            ? await processHandle.WaitForExitAsync(cts.Token)
+            : processHandle.WaitForExit(timeout);
+
+        // The child should have exited successfully (exit code 0)
+        Assert.Equal(0, exitCode);
+
+        Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(3));
+    }
+
+    [Fact]
+    public void KillOnParentDeath_CanBeSetToTrue()
+    {
+        // Simple test to verify the property can be set
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "echo test" }, KillOnParentDeath = true }
+            : new("echo") { Arguments = { "test" }, KillOnParentDeath = true };
+
+        Assert.True(options.KillOnParentDeath);
+
+        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
+            options,
+            input: null,
+            output: nullHandle,
+            error: nullHandle);
+
+        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+        Assert.Equal(0, exitCode);
+    }
+
+    [Fact]
+    public void KillOnParentDeath_DefaultsToFalse()
+    {
+        ProcessStartOptions options = new("test");
+        Assert.False(options.KillOnParentDeath);
     }
 }
