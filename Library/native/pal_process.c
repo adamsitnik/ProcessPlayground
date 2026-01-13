@@ -123,6 +123,15 @@ int spawn_process(
 {
 #if defined(HAVE_POSIX_SPAWN) && defined(HAVE_POSIX_SPAWN_CLOEXEC_DEFAULT) && defined(HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDINHERIT_NP)
     // ========== POSIX_SPAWN PATH (macOS) ==========
+    
+    // On macOS without POSIX_SPAWN_START_SUSPENDED, return ENOTSUP early
+#ifndef HAVE_POSIX_SPAWN_START_SUSPENDED
+    if (create_suspended) {
+        errno = ENOTSUP;
+        return -1;
+    }
+#endif
+    
     int exit_pipe[2];
     pid_t child_pid;
     posix_spawn_file_actions_t file_actions;
@@ -273,6 +282,15 @@ int spawn_process(
     return 0;
 #else
     // ========== FORK/EXEC PATH (Linux and other Unix systems) ==========
+    
+    // On non-Linux Unix systems without SYS_tgkill, return ENOTSUP early
+#if !defined(HAVE_SYS_TGKILL)
+    if (create_suspended) {
+        errno = ENOTSUP;
+        return -1;
+    }
+#endif
+    
     int wait_pipe[2];
     int exit_pipe[2];
     int pidfd = -1;
@@ -449,7 +467,7 @@ int spawn_process(
             // Close wait_pipe to signal parent that we've successfully reached this point
             close(wait_pipe[1]);
             
-#if defined(HAVE_SYS_SYSCALL_H) && defined(__linux__)
+#if defined(HAVE_SYS_SYSCALL_H) && defined(HAVE_SYS_TGKILL)
             // On Linux, use tgkill to send SIGSTOP to ourselves
             // This is more reliable than kill(getpid(), SIGSTOP) or pthread_kill
             syscall(SYS_tgkill, getpid(), syscall(SYS_gettid), SIGSTOP);

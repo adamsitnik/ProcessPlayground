@@ -125,6 +125,17 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         }
     " HAVE_PDEATHSIG)
 
+    check_c_source_compiles("
+        #include <sys/syscall.h>
+        int main() {
+            #ifdef SYS_tgkill
+            return 0;
+            #else
+            #error SYS_tgkill not defined
+            #endif
+        }
+    " HAVE_SYS_TGKILL)
+
 endif()
 
 # Generate the configuration header
