@@ -63,9 +63,19 @@ public class InheritedHandlesTests
             ProcessStartOptions options;
             if (OperatingSystem.IsWindows())
             {
-                // On Windows, we can't easily read from a handle by number in cmd.exe
-                // Skip this test on Windows for now, or use a custom helper executable
-                return; // TODO: Implement Windows test with custom helper
+                long handleValueLong = (long)handleValue;
+                string script = $"""
+                $handle = New-Object Microsoft.Win32.SafeHandles.SafeFileHandle([IntPtr]{handleValueLong}, $false)
+                $stream = New-Object System.IO.FileStream($handle, [System.IO.FileAccess]::Read)
+                $reader = New-Object System.IO.StreamReader($stream)
+                $reader.ReadToEnd()
+                $reader.Close()
+                """;
+                options = new ProcessStartOptions("powershell.exe")
+                {
+                    Arguments = { "-NoProfile", "-Command", script }
+                };
+                options.InheritedHandles.Add(pipeReadHandle);
             }
             else
             {
