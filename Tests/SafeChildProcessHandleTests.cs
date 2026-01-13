@@ -439,9 +439,6 @@ public partial class SafeChildProcessHandleTests
         int pid = processHandle.GetProcessId();
         Assert.True(pid > 0);
 
-        // Give it a moment to ensure it's truly suspended
-        Thread.Sleep(100);
-
         // Resume the process
         processHandle.Resume();
 
