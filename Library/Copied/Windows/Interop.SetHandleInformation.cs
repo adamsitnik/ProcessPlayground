@@ -10,7 +10,6 @@ internal static partial class Interop
     {
 #if NETFRAMEWORK
         [DllImport(Libraries.Kernel32, SetLastError = true)]
-        
 #else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
 #endif

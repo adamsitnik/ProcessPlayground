@@ -112,59 +112,12 @@ public partial class SafeChildProcessHandle
         try
         {
             int handleCount = 0;
-            
+
             IntPtr inputPtr = duplicatedInput.DangerousGetHandle();
             IntPtr outputPtr = duplicatedOutput.DangerousGetHandle();
             IntPtr errorPtr = duplicatedError.DangerousGetHandle();
-            
-            handlesToInherit[handleCount++] = inputPtr;
-            if (outputPtr != inputPtr)
-                handlesToInherit[handleCount++] = outputPtr;
-            if (errorPtr != inputPtr && errorPtr != outputPtr)
-                handlesToInherit[handleCount++] = errorPtr;
-            
-            // Add user-provided inherited handles, avoiding duplicates
-            if (options.HasInheritedHandlesBeenAccessed)
-            {
-                foreach (SafeHandle handle in options.InheritedHandles)
-                {
-                    IntPtr handlePtr = handle.DangerousGetHandle();
-                    
-                    // Check if this handle is already in the list
-                    bool isDuplicate = false;
-                    for (int i = 0; i < handleCount; i++)
-                    {
-                        if (handlesToInherit[i] == handlePtr)
-                        {
-                            isDuplicate = true;
-                            break;
-                        }
-                    }
-                    
-                    if (!isDuplicate)
-                    {
-                        // Ensure the handle has inheritance enabled
-                        if (!Interop.Kernel32.GetHandleInformation(handlePtr, out int flags))
-                        {
-                            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to get handle information");
-                        }
-                        
-                        // If inheritance is not enabled, enable it
-                        if ((flags & Interop.Kernel32.HandleOptions.HANDLE_FLAG_INHERIT) == 0)
-                        {
-                            if (!Interop.Kernel32.SetHandleInformation(
-                                handlePtr,
-                                Interop.Kernel32.HandleOptions.HANDLE_FLAG_INHERIT,
-                                Interop.Kernel32.HandleOptions.HANDLE_FLAG_INHERIT))
-                            {
-                                throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to set handle inheritance");
-                            }
-                        }
-                        
-                        handlesToInherit[handleCount++] = handlePtr;
-                    }
-                }
-            }
+
+            PrepareHandleAllowList(options, handlesToInherit, ref handleCount, inputPtr, outputPtr, errorPtr);
 
             // Determine number of attributes we need
             int attributeCount = 1; // Always need handle list
@@ -174,13 +127,13 @@ public partial class SafeChildProcessHandle
             // Initialize the attribute list
             IntPtr size = IntPtr.Zero;
             Interop.Kernel32.LPPROC_THREAD_ATTRIBUTE_LIST emptyList = default;
-            
+
             // Get required size for attribute list (first call is expected to fail)
             Interop.Kernel32.InitializeProcThreadAttributeList(emptyList, attributeCount, 0, ref size);
-            
+
             attributeListBuffer = Marshal.AllocHGlobal(size);
             attributeList.AttributeList = attributeListBuffer;
-            
+
             // Actually initialize the attribute list
             if (!Interop.Kernel32.InitializeProcThreadAttributeList(attributeList, attributeCount, 0, ref size))
             {
@@ -325,6 +278,58 @@ public partial class SafeChildProcessHandle
             }
 
             return duplicated;
+        }
+    }
+
+    private static unsafe void PrepareHandleAllowList(ProcessStartOptions options, IntPtr* handlesToInherit, ref int handleCount, IntPtr inputPtr, IntPtr outputPtr, IntPtr errorPtr)
+    {
+        handlesToInherit[handleCount++] = inputPtr;
+        if (outputPtr != inputPtr)
+            handlesToInherit[handleCount++] = outputPtr;
+        if (errorPtr != inputPtr && errorPtr != outputPtr)
+            handlesToInherit[handleCount++] = errorPtr;
+
+        // Add user-provided inherited handles, avoiding duplicates
+        if (options.HasInheritedHandlesBeenAccessed)
+        {
+            foreach (SafeHandle handle in options.InheritedHandles)
+            {
+                IntPtr handlePtr = handle.DangerousGetHandle();
+
+                // Check if this handle is already in the list
+                bool isDuplicate = false;
+                for (int i = 0; i < handleCount; i++)
+                {
+                    if (handlesToInherit[i] == handlePtr)
+                    {
+                        isDuplicate = true;
+                        break;
+                    }
+                }
+
+                if (!isDuplicate)
+                {
+                    // Ensure the handle has inheritance enabled
+                    if (!Interop.Kernel32.GetHandleInformation(handlePtr, out int flags))
+                    {
+                        throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to get handle information");
+                    }
+
+                    // If inheritance is not enabled, enable it
+                    if ((flags & Interop.Kernel32.HandleOptions.HANDLE_FLAG_INHERIT) == 0)
+                    {
+                        if (!Interop.Kernel32.SetHandleInformation(
+                            handlePtr,
+                            Interop.Kernel32.HandleOptions.HANDLE_FLAG_INHERIT,
+                            Interop.Kernel32.HandleOptions.HANDLE_FLAG_INHERIT))
+                        {
+                            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to set handle inheritance");
+                        }
+                    }
+
+                    handlesToInherit[handleCount++] = handlePtr;
+                }
+            }
         }
     }
 
