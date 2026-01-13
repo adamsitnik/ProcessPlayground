@@ -1,0 +1,5 @@
+<Project>
+  <PropertyGroup>
+    <RestoreFallbackFolders>clear</RestoreFallbackFolders>
+  </PropertyGroup>
+</Project>
