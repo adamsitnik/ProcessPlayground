@@ -106,6 +106,7 @@ static inline int create_kqueue_cloexec(void) {
 // If out_exit_pipe_fd is not NULL, the read end of exit monitoring pipe is stored there
 // If kill_on_parent_death is non-zero, the child process will be killed when the parent dies
 //   Note: On macOS with posix_spawn, kill_on_parent_death is not supported and will be ignored
+// If create_suspended is non-zero, the child process will be created in a suspended state (stopped)
 int spawn_process(
     const char* path,
     char* const argv[],
@@ -117,10 +118,20 @@ int spawn_process(
     int* out_pid,
     int* out_pidfd,
     int* out_exit_pipe_fd,
-    int kill_on_parent_death)
+    int kill_on_parent_death,
+    int create_suspended)
 {
 #if defined(HAVE_POSIX_SPAWN) && defined(HAVE_POSIX_SPAWN_CLOEXEC_DEFAULT) && defined(HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDINHERIT_NP)
     // ========== POSIX_SPAWN PATH (macOS) ==========
+    
+    // On macOS without POSIX_SPAWN_START_SUSPENDED, return ENOTSUP early
+#ifndef HAVE_POSIX_SPAWN_START_SUSPENDED
+    if (create_suspended) {
+        errno = ENOTSUP;
+        return -1;
+    }
+#endif
+    
     int exit_pipe[2];
     pid_t child_pid;
     posix_spawn_file_actions_t file_actions;
@@ -144,6 +155,12 @@ int spawn_process(
     // Set flags: POSIX_SPAWN_CLOEXEC_DEFAULT to close all FDs except stdin/stdout/stderr
     // and POSIX_SPAWN_SETSIGDEF to reset signal handlers
     short flags = POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGDEF;
+#ifdef HAVE_POSIX_SPAWN_START_SUSPENDED
+    // If create_suspended is requested, add the POSIX_SPAWN_START_SUSPENDED flag
+    if (create_suspended) {
+        flags |= POSIX_SPAWN_START_SUSPENDED;
+    }
+#endif
     if ((result = posix_spawnattr_setflags(&attr, flags)) != 0) {
         int saved_errno = result;
         posix_spawnattr_destroy(&attr);
@@ -265,6 +282,15 @@ int spawn_process(
     return 0;
 #else
     // ========== FORK/EXEC PATH (Linux and other Unix systems) ==========
+    
+    // On non-Linux Unix systems without SYS_tgkill, return ENOTSUP early
+#ifndef HAVE_SYS_TGKILL
+    if (create_suspended) {
+        errno = ENOTSUP;
+        return -1;
+    }
+#endif
+    
     int wait_pipe[2];
     int exit_pipe[2];
     int pidfd = -1;
@@ -293,7 +319,9 @@ int spawn_process(
 #ifdef HAVE_CLONE3
     // On systems with clone3, use it to get pidfd atomically with fork
     struct clone_args args = {0};  // Zero-initialize
-    args.flags = CLONE_VFORK | CLONE_PIDFD;
+    // Note: We cannot use CLONE_VFORK when create_suspended is true, because
+    // the child will stop itself before exec, which would deadlock the parent
+    args.flags = (create_suspended ? 0 : CLONE_VFORK) | CLONE_PIDFD;
     args.pidfd = (uint64_t)(uintptr_t)&pidfd;
     args.exit_signal = SIGCHLD;
     
@@ -315,8 +343,9 @@ int spawn_process(
     
     if (clone_result == 0) {
 #else
-    // On systems without clone3, use vfork
-    child_pid = vfork();
+    // On systems without clone3, use fork or vfork depending on create_suspended
+    // Note: We cannot use vfork when create_suspended is true
+    child_pid = create_suspended ? fork() : vfork();
     
     if (child_pid == -1) {
         // Fork failed
@@ -432,13 +461,36 @@ int spawn_process(
             }
         }
         
+        // If create_suspended is requested, close wait_pipe and stop ourselves before exec
+        // This allows the parent to get our PID and set up monitoring before we start executing
+        if (create_suspended) {
+            // Close wait_pipe to signal parent that we've successfully reached this point
+            close(wait_pipe[1]);
+            
+#if defined(HAVE_SYS_SYSCALL_H) && defined(HAVE_SYS_TGKILL)
+            // On Linux, use tgkill to send SIGSTOP to ourselves
+            // This is more reliable than kill(getpid(), SIGSTOP) or pthread_kill
+            syscall(SYS_tgkill, getpid(), syscall(SYS_gettid), SIGSTOP);
+#else
+            // On other Unix systems (non-Linux), use kill with getpid()
+            // Note: This may not work as reliably as the Linux approach
+            kill(getpid(), SIGSTOP);
+#endif
+            // When the parent resumes us with SIGCONT, execution continues here
+        }
+        
         // Execute the program
         // If envp is NULL, use the current environment (environ)
         char* const* env = (envp != NULL) ? envp : environ;
         execve(path, argv, env);
         
         // If we get here, execve failed
-        write_errno_and_exit(wait_pipe[1], errno);
+        // Only write to wait_pipe if it's still open (not suspended case)
+        if (!create_suspended) {
+            write_errno_and_exit(wait_pipe[1], errno);
+        } else {
+            _exit(127);
+        }
     }
     
     // ========== PARENT PROCESS ==========
@@ -470,6 +522,39 @@ int spawn_process(
         close(exit_pipe[0]);
         errno = child_errno;
         return -1;
+    }
+    
+    // If create_suspended was requested, wait for the child to stop itself
+    if (create_suspended) {
+        int status;
+        pid_t wait_result;
+        
+        // Wait for the child to stop (WUNTRACED flag)
+        // The child will send itself SIGSTOP before execve
+        while ((wait_result = waitpid(child_pid, &status, WUNTRACED)) < 0 && errno == EINTR);
+        
+        if (wait_result == -1) {
+            int saved_errno = errno;
+            // Child failed to stop - clean up
+#ifdef HAVE_CLONE3
+            close(pidfd);
+#endif
+            close(exit_pipe[0]);
+            errno = saved_errno;
+            return -1;
+        }
+        
+        // Verify the child is actually stopped
+        if (!WIFSTOPPED(status)) {
+            // Child didn't stop as expected - this is an error
+#ifdef HAVE_CLONE3
+            close(pidfd);
+#endif
+            close(exit_pipe[0]);
+            errno = ECHILD;  // Use ECHILD to indicate child state error
+            return -1;
+        }
+        // Child is now stopped and waiting for SIGCONT
     }
     
     // Success - return PID, pidfd, and exit pipe fd if requested

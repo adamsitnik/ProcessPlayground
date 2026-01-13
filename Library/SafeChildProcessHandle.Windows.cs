@@ -17,6 +17,16 @@ public partial class SafeChildProcessHandle
     // by the OS, which terminates all child processes in the job.
     private static readonly Lazy<IntPtr> s_killOnParentDeathJob = new(CreateKillOnParentDeathJob);
 
+    // Thread handle for suspended processes (only used on Windows)
+    private readonly IntPtr _threadHandle;
+
+    // Windows-specific constructor for suspended processes that need to keep the thread handle
+    private SafeChildProcessHandle(IntPtr processHandle, IntPtr threadHandle, bool ownsHandle)
+        : base(processHandle, ownsHandle)
+    {
+        _threadHandle = threadHandle;
+    }
+
     private static IntPtr CreateKillOnParentDeathJob()
     {
         // Create a job object without a name (anonymous)
@@ -34,6 +44,12 @@ public partial class SafeChildProcessHandle
 
     protected override bool ReleaseHandle()
     {
+        // Close the thread handle if it exists (for suspended processes)
+        if (_threadHandle != IntPtr.Zero)
+        {
+            Interop.Kernel32.CloseHandle(_threadHandle);
+        }
+        
         return Interop.Kernel32.CloseHandle(handle);
     }
 
@@ -165,6 +181,7 @@ public partial class SafeChildProcessHandle
 
             int creationFlags = Interop.Kernel32.EXTENDED_STARTUPINFO_PRESENT;
             if (options.CreateNoWindow) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NO_WINDOW;
+            if (options.CreateSuspended) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_SUSPENDED;
 
             string? environmentBlock = null;
             if (options.HasEnvironmentBeenAccessed)
@@ -197,9 +214,24 @@ public partial class SafeChildProcessHandle
             }
 
             if (processInfo.hProcess != IntPtr.Zero && processInfo.hProcess != new IntPtr(-1))
-                procSH = new(processInfo.hProcess, true);
-            if (processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
+            {
+                // If the process was created suspended, keep the thread handle for later resumption
+                if (options.CreateSuspended && processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
+                {
+                    procSH = new(processInfo.hProcess, processInfo.hThread, true);
+                }
+                else
+                {
+                    procSH = new(processInfo.hProcess, true);
+                    // Close the thread handle if we don't need it
+                    if (processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
+                        Interop.Kernel32.CloseHandle(processInfo.hThread);
+                }
+            }
+            else if (processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
+            {
                 Interop.Kernel32.CloseHandle(processInfo.hThread);
+            }
 
             if (procSH == null)
             {
@@ -321,6 +353,21 @@ public partial class SafeChildProcessHandle
 
                 throw new Win32Exception(error, "Failed to terminate process");
             }
+        }
+    }
+
+    private void ResumeCore()
+    {
+        if (_threadHandle == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("Cannot resume a process that was not created with CreateSuspended.");
+        }
+
+        int result = Interop.Kernel32.ResumeThread(_threadHandle);
+        if (result == -1)
+        {
+            int error = Marshal.GetLastPInvokeError();
+            throw new Win32Exception(error, "Failed to resume thread");
         }
     }
 
