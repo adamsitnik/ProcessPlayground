@@ -21,7 +21,17 @@ public sealed class ProcessStartOptions
     public string FileName => _fileName;
     public IList<string> Arguments => _arguments ??= new();
     public IDictionary<string, string?> Environment => _envVars ??= CreateEnvironmentCopy();
+    
+    /// <summary>
+    /// Gets a list of handles that will be inherited by the child process.
+    /// </summary>
+    /// <remarks>
+    /// On Windows, handles do not need to have inheritance enabled beforehand.
+    /// The implementation will automatically enable inheritance on any handle added to this list
+    /// by modifying the handle's flags using SetHandleInformation.
+    /// </remarks>
     public IList<SafeHandle> InheritedHandles => _inheritedHandles ??= new();
+    
     public DirectoryInfo? WorkingDirectory { get; set; }
     public bool CreateNoWindow { get; set; }
 

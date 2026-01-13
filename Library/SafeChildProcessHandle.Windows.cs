@@ -143,6 +143,24 @@ public partial class SafeChildProcessHandle
                     
                     if (!isDuplicate)
                     {
+                        // Ensure the handle has inheritance enabled
+                        if (!Interop.Kernel32.GetHandleInformation(handlePtr, out int flags))
+                        {
+                            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to get handle information");
+                        }
+                        
+                        // If inheritance is not enabled, enable it
+                        if ((flags & Interop.Kernel32.HandleOptions.HANDLE_FLAG_INHERIT) == 0)
+                        {
+                            if (!Interop.Kernel32.SetHandleInformation(
+                                handlePtr,
+                                Interop.Kernel32.HandleOptions.HANDLE_FLAG_INHERIT,
+                                Interop.Kernel32.HandleOptions.HANDLE_FLAG_INHERIT))
+                            {
+                                throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to set handle inheritance");
+                            }
+                        }
+                        
                         handlesToInherit[handleCount++] = handlePtr;
                     }
                 }
