@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 
 namespace System.TBA;
 
@@ -14,11 +15,13 @@ public sealed class ProcessStartOptions
     private readonly string _fileName;
     private List<string>? _arguments;
     private Dictionary<string, string?>? _envVars;
+    private List<SafeHandle>? _inheritedHandles;
 
     // More or less same as ProcessStartInfo
     public string FileName => _fileName;
     public IList<string> Arguments => _arguments ??= new();
     public IDictionary<string, string?> Environment => _envVars ??= CreateEnvironmentCopy();
+    public IList<SafeHandle> InheritedHandles => _inheritedHandles ??= new();
     public DirectoryInfo? WorkingDirectory { get; set; }
     public bool CreateNoWindow { get; set; }
 
@@ -30,6 +33,9 @@ public sealed class ProcessStartOptions
 
     // Internal property to check if environment was explicitly set
     internal bool HasEnvironmentBeenAccessed => _envVars != null;
+
+    // Internal property to check if inherited handles were explicitly set
+    internal bool HasInheritedHandlesBeenAccessed => _inheritedHandles != null;
 
     internal bool IsFileNameResolved { get; }
 

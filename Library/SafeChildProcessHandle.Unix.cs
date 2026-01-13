@@ -78,6 +78,8 @@ public partial class SafeChildProcessHandle
         byte* workingDirPtr = UnixHelpers.AllocateNullTerminatedUtf8String(options.WorkingDirectory?.FullName);
         byte** argvPtr = null;
         byte** envpPtr = null;
+        int* inheritedHandlesPtr = null;
+        int inheritedHandlesCount = 0;
         
         try
         {
@@ -87,6 +89,18 @@ public partial class SafeChildProcessHandle
             if (envp is not null)
             {
                 UnixHelpers.AllocNullTerminatedArray(envp, ref envpPtr);
+            }
+            
+            // Allocate and copy inherited handles if provided
+            if (options.HasInheritedHandlesBeenAccessed && options.InheritedHandles.Count > 0)
+            {
+                inheritedHandlesCount = options.InheritedHandles.Count;
+                inheritedHandlesPtr = (int*)NativeMemory.Alloc((nuint)inheritedHandlesCount, (nuint)sizeof(int));
+                
+                for (int i = 0; i < inheritedHandlesCount; i++)
+                {
+                    inheritedHandlesPtr[i] = (int)options.InheritedHandles[i].DangerousGetHandle();
+                }
             }
 
             // Call native library to spawn process
@@ -103,7 +117,9 @@ public partial class SafeChildProcessHandle
                 out int pidfd,
                 out int exitPipeFd,
                 options.KillOnParentDeath ? 1 : 0,
-                options.CreateSuspended ? 1 : 0);
+                options.CreateSuspended ? 1 : 0,
+                inheritedHandlesPtr,
+                inheritedHandlesCount);
 
             if (result == -1)
             {
@@ -120,6 +136,7 @@ public partial class SafeChildProcessHandle
             UnixHelpers.FreePointer(workingDirPtr);
             UnixHelpers.FreeArray(envpPtr, envp?.Length ?? 0);
             UnixHelpers.FreeArray(argvPtr, argv.Length);
+            NativeMemory.Free(inheritedHandlesPtr);
         }
     }
 
@@ -273,7 +290,9 @@ public partial class SafeChildProcessHandle
         out int pidfd,
         out int exit_pipe_fd,
         int kill_on_parent_death,
-        int create_suspended);
+        int create_suspended,
+        int* inherited_handles,
+        int inherited_handles_count);
 
     [LibraryImport("pal_process", SetLastError = true)]
     private static partial int send_signal(SafeChildProcessHandle pidfd, int pid, PosixSignal managed_signal);

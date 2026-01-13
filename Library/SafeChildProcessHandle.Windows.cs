@@ -102,10 +102,15 @@ public partial class SafeChildProcessHandle
                 ? duplicatedInput
                 : Duplicate(errorHandle, currentProcHandle));
 
+        // Calculate total handle count: stdio handles (max 3) + user-provided inherited handles
+        int maxHandleCount = 3 + (options.HasInheritedHandlesBeenAccessed ? options.InheritedHandles.Count : 0);
+        
+        // Allocate handles array on heap (simpler for .NET Framework compatibility)
+        IntPtr heapHandlesPtr = Marshal.AllocHGlobal(maxHandleCount * sizeof(IntPtr));
+        IntPtr* handlesToInherit = (IntPtr*)heapHandlesPtr;
+
         try
         {
-            // Collect unique handles to inherit
-            IntPtr* handlesToInherit = stackalloc IntPtr[3];
             int handleCount = 0;
             
             IntPtr inputPtr = duplicatedInput.DangerousGetHandle();
@@ -117,6 +122,31 @@ public partial class SafeChildProcessHandle
                 handlesToInherit[handleCount++] = outputPtr;
             if (errorPtr != inputPtr && errorPtr != outputPtr)
                 handlesToInherit[handleCount++] = errorPtr;
+            
+            // Add user-provided inherited handles, avoiding duplicates
+            if (options.HasInheritedHandlesBeenAccessed)
+            {
+                foreach (SafeHandle handle in options.InheritedHandles)
+                {
+                    IntPtr handlePtr = handle.DangerousGetHandle();
+                    
+                    // Check if this handle is already in the list
+                    bool isDuplicate = false;
+                    for (int i = 0; i < handleCount; i++)
+                    {
+                        if (handlesToInherit[i] == handlePtr)
+                        {
+                            isDuplicate = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!isDuplicate)
+                    {
+                        handlesToInherit[handleCount++] = handlePtr;
+                    }
+                }
+            }
 
             // Determine number of attributes we need
             int attributeCount = 1; // Always need handle list
@@ -245,6 +275,9 @@ public partial class SafeChildProcessHandle
         }
         finally
         {
+            // Free heap-allocated handles array
+            Marshal.FreeHGlobal(heapHandlesPtr);
+            
             if (attributeListBuffer != IntPtr.Zero)
             {
                 Interop.Kernel32.DeleteProcThreadAttributeList(attributeList);

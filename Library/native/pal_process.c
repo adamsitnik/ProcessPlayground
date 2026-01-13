@@ -107,6 +107,7 @@ static inline int create_kqueue_cloexec(void) {
 // If kill_on_parent_death is non-zero, the child process will be killed when the parent dies
 //   Note: On macOS with posix_spawn, kill_on_parent_death is not supported and will be ignored
 // If create_suspended is non-zero, the child process will be created in a suspended state (stopped)
+// If inherited_handles is not NULL and inherited_handles_count > 0, the specified file descriptors will be inherited
 int spawn_process(
     const char* path,
     char* const argv[],
@@ -119,7 +120,9 @@ int spawn_process(
     int* out_pidfd,
     int* out_exit_pipe_fd,
     int kill_on_parent_death,
-    int create_suspended)
+    int create_suspended,
+    const int* inherited_handles,
+    int inherited_handles_count)
 {
 #if defined(HAVE_POSIX_SPAWN) && defined(HAVE_POSIX_SPAWN_CLOEXEC_DEFAULT) && defined(HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDINHERIT_NP)
     // ========== POSIX_SPAWN PATH (macOS) ==========
@@ -220,6 +223,26 @@ int spawn_process(
         close(exit_pipe[1]);
         errno = saved_errno;
         return -1;
+    }
+    
+    // Add user-provided inherited handles using posix_spawn_file_actions_addinherit_np
+    // This ensures they are not closed by POSIX_SPAWN_CLOEXEC_DEFAULT
+    if (inherited_handles != NULL && inherited_handles_count > 0) {
+        for (int i = 0; i < inherited_handles_count; i++) {
+            int fd = inherited_handles[i];
+            // Skip stdio fds and exit pipe fd as they're already handled
+            if (fd != 0 && fd != 1 && fd != 2 && fd != 3) {
+                if ((result = posix_spawn_file_actions_addinherit_np(&file_actions, fd)) != 0) {
+                    int saved_errno = result;
+                    posix_spawn_file_actions_destroy(&file_actions);
+                    posix_spawnattr_destroy(&attr);
+                    close(exit_pipe[0]);
+                    close(exit_pipe[1]);
+                    errno = saved_errno;
+                    return -1;
+                }
+            }
+        }
     }
     
     // Change working directory if specified
@@ -452,6 +475,22 @@ int spawn_process(
         // are >= 4, they don't get CLOEXEC set before being duplicated to 0/1/2
         syscall(__NR_close_range, 4, ~0U, CLOSE_RANGE_CLOEXEC);
         // Ignore errors - if close_range is not supported, we continue anyway
+        
+        // Remove CLOEXEC flag from user-provided inherited handles
+        // so they are inherited by execve
+        if (inherited_handles != NULL && inherited_handles_count > 0) {
+            for (int i = 0; i < inherited_handles_count; i++) {
+                int fd = inherited_handles[i];
+                // Skip stdio fds and exit pipe fd as they're already handled
+                // Also skip fds < 4 as they weren't affected by close_range
+                if (fd >= 4) {
+                    int flags = fcntl(fd, F_GETFD);
+                    if (flags != -1) {
+                        fcntl(fd, F_SETFD, flags & ~FD_CLOEXEC);
+                    }
+                }
+            }
+        }
 #endif
         
         // Change working directory if specified
