@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 
 namespace System.TBA;
 
@@ -14,11 +15,33 @@ public sealed class ProcessStartOptions
     private readonly string _fileName;
     private List<string>? _arguments;
     private Dictionary<string, string?>? _envVars;
+    private List<SafeHandle>? _inheritedHandles;
 
     // More or less same as ProcessStartInfo
     public string FileName => _fileName;
     public IList<string> Arguments => _arguments ??= new();
     public IDictionary<string, string?> Environment => _envVars ??= CreateEnvironmentCopy();
+
+    /// <summary>
+    /// Gets a list of handles that will be inherited by the child process.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Handles do not need to have inheritance enabled beforehand.
+    /// They are also not duplicated, just added as-is to the child process
+    /// so the exact same handle values can be used in the child process.
+    /// </para>
+    /// <para>
+    /// On Windows, the implementation will automatically enable inheritance on any handle added to this list
+    /// by modifying the handle's flags using SetHandleInformation.
+    /// </para>
+    /// <para>
+    /// On Unix, the implementation will modify the copy of every handle in the child process
+    /// by removing FD_CLOEXEC flag. It happens after the fork and before the exec, so it does not affect parent process.
+    /// </para>
+    /// </remarks>
+    public IList<SafeHandle> InheritedHandles => _inheritedHandles ??= new();
+    
     public DirectoryInfo? WorkingDirectory { get; set; }
     public bool CreateNoWindow { get; set; }
 
@@ -30,6 +53,9 @@ public sealed class ProcessStartOptions
 
     // Internal property to check if environment was explicitly set
     internal bool HasEnvironmentBeenAccessed => _envVars != null;
+
+    // Internal property to check if inherited handles were explicitly set
+    internal bool HasInheritedHandlesBeenAccessed => _inheritedHandles != null;
 
     internal bool IsFileNameResolved { get; }
 
