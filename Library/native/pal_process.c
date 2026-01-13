@@ -29,11 +29,6 @@
 
 #ifdef HAVE_POSIX_SPAWN
 #include <spawn.h>
-
-// macOS-specific extension to keep specific file descriptors open when using POSIX_SPAWN_CLOEXEC_DEFAULT
-#ifdef HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDINHERIT_NP
-extern int posix_spawn_file_actions_addinherit_np(posix_spawn_file_actions_t *, int);
-#endif
 #endif
 
 // In the future, we could add support for pidfd on FreeBSD
@@ -181,47 +176,10 @@ int spawn_process(
     }
     
     // Redirect stdin/stdout/stderr
-    if (stdin_fd != 0) {
-        if ((result = posix_spawn_file_actions_adddup2(&file_actions, stdin_fd, 0)) != 0) {
-            int saved_errno = result;
-            posix_spawn_file_actions_destroy(&file_actions);
-            posix_spawnattr_destroy(&attr);
-            close(exit_pipe[0]);
-            close(exit_pipe[1]);
-            errno = saved_errno;
-            return -1;
-        }
-    }
-    
-    if (stdout_fd != 1) {
-        if ((result = posix_spawn_file_actions_adddup2(&file_actions, stdout_fd, 1)) != 0) {
-            int saved_errno = result;
-            posix_spawn_file_actions_destroy(&file_actions);
-            posix_spawnattr_destroy(&attr);
-            close(exit_pipe[0]);
-            close(exit_pipe[1]);
-            errno = saved_errno;
-            return -1;
-        }
-    }
-    
-    if (stderr_fd != 2) {
-        if ((result = posix_spawn_file_actions_adddup2(&file_actions, stderr_fd, 2)) != 0) {
-            int saved_errno = result;
-            posix_spawn_file_actions_destroy(&file_actions);
-            posix_spawnattr_destroy(&attr);
-            close(exit_pipe[0]);
-            close(exit_pipe[1]);
-            errno = saved_errno;
-            return -1;
-        }
-    }
-    
-    // Set up exit pipe write end as fd 3 in the child process
-    // We use fd 3 for the exit pipe as it's typically unused by standard streams (0-2).
-    // With POSIX_SPAWN_CLOEXEC_DEFAULT, all fds except 0,1,2 are automatically closed,
-    // so we must explicitly mark fd 3 as inheritable using addinherit_np.
-    if ((result = posix_spawn_file_actions_adddup2(&file_actions, exit_pipe[1], 3)) != 0) {
+    if ((stdin_fd != 0 && (result = posix_spawn_file_actions_adddup2(&file_actions, stdin_fd, 0)) != 0)
+        || (stdout_fd != 1 && (result = posix_spawn_file_actions_adddup2(&file_actions, stdout_fd, 1)) != 0)
+        || (stderr_fd != 2 && (result = posix_spawn_file_actions_adddup2(&file_actions, stderr_fd, 2)) != 0))
+    {
         int saved_errno = result;
         posix_spawn_file_actions_destroy(&file_actions);
         posix_spawnattr_destroy(&attr);
@@ -230,9 +188,14 @@ int spawn_process(
         errno = saved_errno;
         return -1;
     }
-    
-    // Mark fd 3 as inheritable (exempt from POSIX_SPAWN_CLOEXEC_DEFAULT)
-    if ((result = posix_spawn_file_actions_addinherit_np(&file_actions, 3)) != 0) {
+
+    // Set up exit pipe write end as fd 3 in the child process
+    // We use fd 3 for the exit pipe as it's typically unused by standard streams (0-2).
+    // With POSIX_SPAWN_CLOEXEC_DEFAULT, all fds except 0,1,2 are automatically closed,
+    // so we must explicitly mark fd 3 as inheritable using addinherit_np.
+    if ((result = posix_spawn_file_actions_adddup2(&file_actions, exit_pipe[1], 3)) != 0
+        || (result = posix_spawn_file_actions_addinherit_np(&file_actions, 3)) != 0)
+    {
         int saved_errno = result;
         posix_spawn_file_actions_destroy(&file_actions);
         posix_spawnattr_destroy(&attr);
@@ -300,7 +263,6 @@ int spawn_process(
         *out_exit_pipe_fd = exit_pipe[0];
     }
     return 0;
-    
 #else
     // ========== FORK/EXEC PATH (Linux and other Unix systems) ==========
     int wait_pipe[2];

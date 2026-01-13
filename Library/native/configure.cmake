@@ -52,7 +52,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     # This is needed to keep fd 3 open when using POSIX_SPAWN_CLOEXEC_DEFAULT
     check_c_source_compiles("
         #include <spawn.h>
-        extern int posix_spawn_file_actions_addinherit_np(posix_spawn_file_actions_t *, int);
         int main() {
             posix_spawn_file_actions_t actions;
             posix_spawn_file_actions_init(&actions);
