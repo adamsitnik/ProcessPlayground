@@ -145,51 +145,13 @@ public partial class SafeChildProcessHandle
 
     private int WaitForExitCore(int milliseconds)
     {
-        // Timeout is natively supported on:
-        // - modern Linux with pidfd (poll for pidfd)
-        // - macOS and BSDs (kqueue for pid)
-        if (milliseconds != Timeout.Infinite && OperatingSystem.IsLinux() && this.handle == NoPidFd)
-        {
-            return WaitForExitCore_OldLinux(milliseconds);
-        }
-
-        if (wait_for_exit(this, _pid, milliseconds, out int exitCode) != -1)
+        if (wait_for_exit(this, _pid, _exitPipeFd, milliseconds, out int exitCode) != -1)
         {
             return exitCode;
         }
 
         int errno = Marshal.GetLastPInvokeError();
         throw new Win32Exception(errno, $"wait_for_exit() failed with (errno={errno})");
-    }
-
-    private int WaitForExitCore_OldLinux(int milliseconds)
-    {
-        // On RHEL 8.0, we don't have the ability to wait with timeout on pidfd,
-        // so we use a timer. It sucks, but better than nothing.
-        Timer? timeoutTimer = null;
-        try
-        {
-            // Start a timer that will kill the process when the timeout expires
-            timeoutTimer = new Timer(
-                callback: _ => KillCore(throwOnError: false),
-                state: null,
-                dueTime: milliseconds,
-                period: Timeout.Infinite);
-
-            // Perform blocking wait without timeout (native code will wait indefinitely)
-            if (wait_for_exit(this, _pid, Timeout.Infinite, out int exitCode) != -1)
-            {
-                return exitCode;
-            }
-
-            int errno = Marshal.GetLastPInvokeError();
-            throw new Win32Exception(errno, $"wait_for_exit() failed with (errno={errno})");
-        }
-        finally
-        {
-            // Dispose the timer to prevent it from firing if the process exited before timeout
-            timeoutTimer?.Dispose();
-        }
     }
 
     private async Task<int> WaitForExitAsyncCore(CancellationToken cancellationToken)
@@ -298,7 +260,7 @@ public partial class SafeChildProcessHandle
     private static partial int send_signal(SafeChildProcessHandle pidfd, int pid, PosixSignal managed_signal);
 
     [LibraryImport("pal_process", SetLastError = true)]
-    private static partial int wait_for_exit(SafeChildProcessHandle pidfd, int pid, int timeout_ms, out int exitCode);
+    private static partial int wait_for_exit(SafeChildProcessHandle pidfd, int pid, int exitPipeFd, int timeout_ms, out int exitCode);
 
     [LibraryImport("pal_process", SetLastError = true)]
     private static partial int try_get_exit_code(SafeChildProcessHandle pidfd, int pid, out int exitCode);
