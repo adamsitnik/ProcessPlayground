@@ -145,7 +145,7 @@ public partial class SafeChildProcessHandle
 
     private int WaitForExitCore(int milliseconds)
     {
-        if (wait_for_exit(this, _pid, milliseconds, out int exitCode) != -1)
+        if (wait_for_exit(this, _pid, _exitPipeFd, milliseconds, out int exitCode) != -1)
         {
             return exitCode;
         }

@@ -698,34 +698,9 @@ int try_get_exit_code(int pidfd, int pid, int* out_exitCode) {
 // -1 is a valid exit code, so to distinguish between a normal exit code and an error, we return 0 on success and -1 on error
 int wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_exitCode) {
     int ret;
-#ifdef HAVE_PIDFD
     if (timeout_ms >= 0) {
-        struct pollfd pfd = { 0 };
-        pfd.fd = pidfd;
-        pfd.events = POLLIN;
-
-        while ((ret = poll(&pfd, 1, timeout_ms)) < 0 && errno == EINTR);
-
-        if (ret == -1) { // Error
-            return -1;
-        }
-        else if (ret == 0) { // Timeout
-            send_signal(pidfd, pid, SIGKILL);
-        }
-    }
-
-    siginfo_t info;
-    memset(&info, 0, sizeof(info));
-    while ((ret = waitid(P_PIDFD, pidfd, &info, WEXITED)) < 0 && errno == EINTR);
-
-    if (ret != -1) {
-        *out_exitCode = info.si_status;
-        return 0;
-    }
-#else
-
 #if defined(HAVE_KQUEUE) || defined(HAVE_KQUEUEX)
-    if (timeout_ms >= 0) {
+        // macOS and FreeBSD have kqueue which can monitor process exit
         int queue = create_kqueue_cloexec();
         if (queue == -1) {
             return -1;
@@ -763,29 +738,41 @@ int wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_e
         change_list.flags = EV_DELETE;
         kevent(queue, &change_list, 1, NULL, 0, NULL);
         close(queue);
-
-        if (ret == 0) { // Timeout
-            kill(pid, SIGKILL);
-        }
-    }
 #else
-    if (timeout_ms >= 0) {
-        struct pollfd poll_fd = { 0 };
-        pfd.fd = exitPipeFd;
-        pfd.events = POLLIN | POLLHUP;
-
+        struct pollfd pfd = { 0 };
+#ifdef HAVE_PIDFD
+        //  Wait on the process descriptor with poll
+        pfd.fd = pidfd;
+#else
         // Wait for the child to finish with a timeout by monitoring exit pipe for EOF.
-        while ((ret = poll(&poll_fd, 1, (int)timeout_ms)) < 0 && errno == EINTR);
+        pfd.fd = exitPipeFd;
+#endif
+        // To poll a process descriptor, Linux needs POLLIN and FreeBSD needs POLLHUP.
+        // There are no side-effects to use both
+        pfd.events = POLLHUP | POLLIN;
+
+        while ((ret = poll(&pfd, 1, timeout_ms)) < 0 && errno == EINTR);
 
         if (ret == -1) { // Error
             return -1;
         }
-        else if (ret == 0) { // Timeout
+#endif
+        // Both poll implementations fall through here on timeout with 0
+        if (ret == 0) {
             send_signal(pidfd, pid, SIGKILL);
         }
     }
-#endif
 
+#ifdef HAVE_PIDFD
+    siginfo_t info;
+    memset(&info, 0, sizeof(info));
+    while ((ret = waitid(P_PIDFD, pidfd, &info, WEXITED)) < 0 && errno == EINTR);
+
+    if (ret != -1) {
+        *out_exitCode = info.si_status;
+        return 0;
+    }
+#else
     int status;
     while ((ret = waitpid(pid, &status, 0)) < 0 && errno == EINTR);
 
