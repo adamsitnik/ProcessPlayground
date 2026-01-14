@@ -171,8 +171,8 @@ public partial class SafeChildProcessHandle
         {
             // Start a timer that will kill the process when the timeout expires
             timeoutTimer = new Timer(
-                callback: _ => KillCore(throwOnError: false),
-                state: null,
+                callback: static state => ((SafeChildProcessHandle)state!).KillCore(throwOnError: false),
+                state: this,
                 dueTime: milliseconds,
                 period: Timeout.Infinite);
 
