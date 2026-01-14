@@ -696,7 +696,7 @@ int try_get_exit_code(int pidfd, int pid, int* out_exitCode) {
 }
 
 // -1 is a valid exit code, so to distinguish between a normal exit code and an error, we return 0 on success and -1 on error
-int wait_for_exit(int pidfd, int pid, int timeout_ms, int* out_exitCode) {
+int wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_exitCode) {
     int ret;
 #ifdef HAVE_PIDFD
     if (timeout_ms >= 0) {
@@ -766,6 +766,22 @@ int wait_for_exit(int pidfd, int pid, int timeout_ms, int* out_exitCode) {
 
         if (ret == 0) { // Timeout
             kill(pid, SIGKILL);
+        }
+    }
+#else
+    if (timeout_ms >= 0) {
+        struct pollfd poll_fd = { 0 };
+        pfd.fd = exitPipeFd;
+        pfd.events = POLLIN | POLLHUP;
+
+        // Wait for the child to finish with a timeout by monitoring exit pipe for EOF.
+        while ((ret = poll(&poll_fd, 1, (int)timeout_ms)) < 0 && errno == EINTR);
+
+        if (ret == -1) { // Error
+            return -1;
+        }
+        else if (ret == 0) { // Timeout
+            send_signal(pidfd, pid, SIGKILL);
         }
     }
 #endif
