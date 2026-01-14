@@ -743,16 +743,6 @@ int wait_for_exit(int pidfd, int pid, int timeout_ms, int* out_exitCode) {
         timeout.tv_sec = timeout_ms / 1000;
         timeout.tv_nsec = (timeout_ms % 1000) * 1000 * 1000;
 
-        // For EVFILT_PROC with NOTE_EXIT, if the target process is already gone:
-        // - There is no process,
-        // - Therefore there is no exit event to detect,
-        // - So no kevent is generated.
-        // So, first check if the process has already exited before registering the kevent.
-        if (try_get_exit_code(pidfd, pid, out_exitCode) != -1) {
-            close(queue);
-            return 0;
-        }
-
         while ((ret = kevent(queue, &change_list, 1, &event_list, 1, &timeout)) < 0 && errno == EINTR);
 
         if (ret < 0) {
