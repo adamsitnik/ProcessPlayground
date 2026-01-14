@@ -748,6 +748,12 @@ int wait_for_exit(int pidfd, int pid, int timeout_ms, int* out_exitCode) {
         if (ret < 0) {
             int saved_errno = errno;
             close(queue);
+
+            // If the target process does not exist at registration time kevent() returns -1 and errno == ESRCH.
+            if (errno == ESRCH && try_get_exit_code(pidfd, pid, out_exitCode) != -1)
+            {
+                return 0;
+            }
             errno = saved_errno;
             return -1;
         }

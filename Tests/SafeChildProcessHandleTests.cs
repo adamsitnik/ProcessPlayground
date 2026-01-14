@@ -349,8 +349,8 @@ public partial class SafeChildProcessHandleTests
         processHandle.Kill();
 
         Stopwatch stopwatch = Stopwatch.StartNew();
-        int exitCode = processHandle.WaitForExit(specifyTimeout ? TimeSpan.FromSeconds(5) : default);
-        Assert.InRange(stopwatch.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(3));
+        int exitCode = processHandle.WaitForExit(specifyTimeout ? TimeSpan.FromSeconds(3) : default);
+        Assert.InRange(stopwatch.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(0.1));
         Assert.NotEqual(0, exitCode);
     }
 
