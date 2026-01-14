@@ -336,6 +336,25 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void WaitForExit_Called_After_Kill_ReturnsExitCodeImmidately(bool specifyTimeout)
+    {
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "timeout", "/t", "60", "/nobreak" } }
+            : new("sleep") { Arguments = { "60" } };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+
+        processHandle.Kill();
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        int exitCode = processHandle.WaitForExit(specifyTimeout ? TimeSpan.FromSeconds(5) : default);
+        Assert.InRange(stopwatch.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(3));
+        Assert.NotEqual(0, exitCode);
+    }
+
+    [Theory]
     [InlineData(false)]
 #if WINDOWS // https://github.com/adamsitnik/ProcessPlayground/issues/61
     [InlineData(true)]
