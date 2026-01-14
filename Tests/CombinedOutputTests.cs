@@ -1,18 +1,18 @@
-using System.IO;
 using System.Threading;
-using System.Linq;
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-﻿using Microsoft.Win32.SafeHandles;
+using Microsoft.Win32.SafeHandles;
 using System.TBA;
 using System.Text;
 using System.Diagnostics;
+using System.IO;
 
 namespace Tests;
 
 public class CombinedOutputTests
 {
+    protected virtual ProcessStartOptions ApplyAdditionalSettings(ProcessStartOptions optionBag) => optionBag;
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -21,6 +21,8 @@ public class CombinedOutputTests
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Hello from stdout && echo Error from stderr 1>&2" } }
             : new("sh") { Arguments = { "-c", "echo 'Hello from stdout' && echo 'Error from stderr' >&2" } };
+
+        options = ApplyAdditionalSettings(options);
 
         CombinedOutput result = useAsync
             ? await ChildProcess.GetCombinedOutputAsync(options)
@@ -41,6 +43,8 @@ public class CombinedOutputTests
             ? new("cmd") { Arguments = { "/c", "exit 42" } }
             : new("sh") { Arguments = { "-c", "exit 42" } };
 
+        options = ApplyAdditionalSettings(options);
+
         CombinedOutput result = useAsync
             ? await ChildProcess.GetCombinedOutputAsync(options)
             : ChildProcess.GetCombinedOutput(options);
@@ -56,6 +60,8 @@ public class CombinedOutputTests
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "" } }
             : new("sh") { Arguments = { "-c", "" } };
+
+        options = ApplyAdditionalSettings(options);
 
         CombinedOutput result = useAsync
             ? await ChildProcess.GetCombinedOutputAsync(options)
@@ -73,6 +79,8 @@ public class CombinedOutputTests
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "rem This is a comment that produces no output" } }
             : new("sh") { Arguments = { "-c", "# This is a comment that produces no output" } };
+
+        options = ApplyAdditionalSettings(options);
 
         CombinedOutput result = useAsync
             ? await ChildProcess.GetCombinedOutputAsync(options)
@@ -95,6 +103,8 @@ public class CombinedOutputTests
         CombinedOutput result = useAsync
             ? await ChildProcess.GetCombinedOutputAsync(options)
             : ChildProcess.GetCombinedOutput(options);
+
+        options = ApplyAdditionalSettings(options);
 
         string output = result.GetText();
         
@@ -119,6 +129,8 @@ public class CombinedOutputTests
             ? new("cmd") { Arguments = { "/c", "echo OUT1 && echo ERR1 1>&2 && echo OUT2 && echo ERR2 1>&2" } }
             : new("sh") { Arguments = { "-c", "echo OUT1 && echo ERR1 >&2 && echo OUT2 && echo ERR2 >&2" } };
 
+        options = ApplyAdditionalSettings(options);
+
         CombinedOutput result = useAsync
             ? await ChildProcess.GetCombinedOutputAsync(options)
             : ChildProcess.GetCombinedOutput(options);
@@ -138,6 +150,8 @@ public class CombinedOutputTests
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Quick output" } }
             : new("sh") { Arguments = { "-c", "echo 'Quick output'" } };
+
+        options = ApplyAdditionalSettings(options);
 
         CombinedOutput result = ChildProcess.GetCombinedOutput(options, timeout: TimeSpan.FromSeconds(5));
 
@@ -160,6 +174,8 @@ public class CombinedOutputTests
             ? new("cmd") { Arguments = { "/c", "timeout /t 10 /nobreak" } }
             : new("sh") { Arguments = { "-c", "sleep 10" } };
 
+        options = ApplyAdditionalSettings(options);
+
         using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
 
         Assert.Throws<TimeoutException>(() =>
@@ -179,6 +195,8 @@ public class CombinedOutputTests
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "timeout /t 10 /nobreak" } }
             : new("sh") { Arguments = { "-c", "sleep 10" } };
+
+        options = ApplyAdditionalSettings(options);
 
         using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(500));
         using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
@@ -206,6 +224,8 @@ public class CombinedOutputTests
             ? new("cmd") { Arguments = { "/c", "timeout /t 3 /nobreak" } }
             : new("sh") { Arguments = { "-c", "sleep 3 && echo 'Waiting done'" } };
 
+        options = ApplyAdditionalSettings(options);
+
         CombinedOutput result = ChildProcess.GetCombinedOutput(options, input: Console.OpenStandardInputHandle(), timeout: Timeout.InfiniteTimeSpan);
 
         string output = result.GetText();
@@ -218,6 +238,8 @@ public class CombinedOutputTests
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Concurrent test" } }
             : new("sh") { Arguments = { "-c", "echo 'Concurrent test'" } };
+
+        options = ApplyAdditionalSettings(options);
 
         // Run multiple concurrent operations
         Task<CombinedOutput>[] tasks = new Task<CombinedOutput>[10];
@@ -235,5 +257,51 @@ public class CombinedOutputTests
             Assert.Contains("Concurrent test", output);
             Assert.Equal(0, result.ExitCode);
         }
+    }
+}
+
+#if WINDOWS // for now, don't run them on Linux as it seems that the child process receives the signal due to PR_SET_PDEATHSIG
+public class CombinedOutputTests_KillOnParentDeath : CombinedOutputTests
+{
+    protected override ProcessStartOptions ApplyAdditionalSettings(ProcessStartOptions optionBag)
+    {
+        optionBag.KillOnParentDeath = true;
+        return optionBag;
+    }
+}
+#endif
+
+public class CombinedOutputTests_WithEnvVar : CombinedOutputTests
+{
+    protected override ProcessStartOptions ApplyAdditionalSettings(ProcessStartOptions optionBag)
+    {
+        optionBag.Environment["TEST_ENV_VAR"] = "HelloEnv";
+        return optionBag;
+    }
+}
+
+public class CombinedOutputTests_InheritedHandles : CombinedOutputTests, IDisposable
+{
+    private readonly SafeFileHandle _nullHandle = File.OpenNullFileHandle();
+
+    public void Dispose() => _nullHandle.Dispose();
+
+    protected override ProcessStartOptions ApplyAdditionalSettings(ProcessStartOptions optionBag)
+    {
+        optionBag.InheritedHandles.Add(_nullHandle);
+        return optionBag;
+    }
+}
+
+public class CombinedOutputTests_WithResolvedPath : CombinedOutputTests
+{
+    protected override ProcessStartOptions ApplyAdditionalSettings(ProcessStartOptions optionBag)
+    {
+        ProcessStartOptions result = ProcessStartOptions.ResolvePath(optionBag.FileName);
+        foreach (var arg in optionBag.Arguments)
+        {
+            result.Arguments.Add(arg);
+        }
+        return result;
     }
 }
