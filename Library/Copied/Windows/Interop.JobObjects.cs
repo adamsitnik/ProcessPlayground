@@ -84,11 +84,10 @@ internal static partial class Interop
 
 #if NETFRAMEWORK
         [DllImport(Libraries.Kernel32, SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
 #else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
 #endif
+        [return: MarshalAs(UnmanagedType.Bool)]
         internal static
 #if NETFRAMEWORK
         extern
