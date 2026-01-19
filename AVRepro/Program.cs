@@ -4,7 +4,7 @@ using System.TBA;
 if (args.Length == 0)
 {
     // No args specified: use Process.Start to run echo in parallel
-    var tasks = Enumerable.Range(0, 2)
+    var tasks = Enumerable.Range(0, 8)
         .Select(i => Task.Run(async () =>
         {
             var psi = new ProcessStartInfo
@@ -22,7 +22,7 @@ if (args.Length == 0)
 else
 {
     // Args specified: use ChildProcess.ExecuteAsync
-    var tasks = Enumerable.Range(0, 2)
+    var tasks = Enumerable.Range(0, 8)
         .Select(i => Task.Run(async () =>
         {
             ProcessStartOptions options = new("/bin/echo")
