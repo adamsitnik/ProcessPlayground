@@ -44,9 +44,11 @@ jobs:
     - name: Publish AVRepro (osx-arm64) - macOS Only
       if: runner.os == 'macOS'
       run: dotnet publish AVRepro/AVRepro.csproj -c Release -r osx-arm64
-    - name: Run AVRepro with new API (osx-arm64) - macOS Only
+    - name: Run AVRepro 10 times (osx-arm64) - macOS Only
       if: runner.os == 'macOS'
-      run: ./AVRepro/bin/Release/net10.0/osx-arm64/publish/AVRepro --useNewAPI
-    - name: Run AVRepro with Process.Start (osx-arm64) - macOS Only
-      if: runner.os == 'macOS'
-      run: ./AVRepro/bin/Release/net10.0/osx-arm64/publish/AVRepro
+      run: |
+        for i in {1..10}; do
+          echo "Run $i of 10"
+          ./AVRepro/bin/Release/net10.0/osx-arm64/publish/AVRepro --useNewAPI
+          ./AVRepro/bin/Release/net10.0/osx-arm64/publish/AVRepro
+        done
