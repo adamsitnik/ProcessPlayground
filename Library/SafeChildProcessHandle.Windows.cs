@@ -36,9 +36,22 @@ public partial class SafeChildProcessHandle
             throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to create job object for KillOnParentDeath");
         }
 
-        // When the last process handle in the job is closed (this process exits),
-        // all processes in the job are terminated automatically.
-        // This is the default behavior of job objects, so we don't need to configure anything else.
+        // Set JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE flag to ensure all processes in the job
+        // are terminated when the last handle to the job object is closed (when this process exits).
+        Interop.Kernel32.JOBOBJECT_EXTENDED_LIMIT_INFORMATION limitInfo = new();
+        limitInfo.BasicLimitInformation.LimitFlags = Interop.Kernel32.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+
+        if (!Interop.Kernel32.SetInformationJobObject(
+            jobHandle,
+            Interop.Kernel32.JOBOBJECTINFOCLASS.JobObjectExtendedLimitInformation,
+            ref limitInfo,
+            (uint)Marshal.SizeOf<Interop.Kernel32.JOBOBJECT_EXTENDED_LIMIT_INFORMATION>()))
+        {
+            int error = Marshal.GetLastPInvokeError();
+            Interop.Kernel32.CloseHandle(jobHandle);
+            throw new Win32Exception(error, "Failed to set JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE flag");
+        }
+
         return jobHandle;
     }
 

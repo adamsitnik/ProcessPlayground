@@ -35,5 +35,65 @@ internal static partial class Interop
         partial
 #endif
         bool AssignProcessToJobObject(IntPtr hJob, IntPtr hProcess);
+
+        // Job object limit flags
+        internal const uint JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000;
+
+        // Job object information classes
+        internal enum JOBOBJECTINFOCLASS
+        {
+            JobObjectBasicLimitInformation = 2,
+            JobObjectExtendedLimitInformation = 9
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct IO_COUNTERS
+        {
+            internal ulong ReadOperationCount;
+            internal ulong WriteOperationCount;
+            internal ulong OtherOperationCount;
+            internal ulong ReadTransferCount;
+            internal ulong WriteTransferCount;
+            internal ulong OtherTransferCount;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct JOBOBJECT_BASIC_LIMIT_INFORMATION
+        {
+            internal long PerProcessUserTimeLimit;
+            internal long PerJobUserTimeLimit;
+            internal uint LimitFlags;
+            internal UIntPtr MinimumWorkingSetSize;
+            internal UIntPtr MaximumWorkingSetSize;
+            internal uint ActiveProcessLimit;
+            internal UIntPtr Affinity;
+            internal uint PriorityClass;
+            internal uint SchedulingClass;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+        {
+            internal JOBOBJECT_BASIC_LIMIT_INFORMATION BasicLimitInformation;
+            internal IO_COUNTERS IoInfo;
+            internal UIntPtr ProcessMemoryLimit;
+            internal UIntPtr JobMemoryLimit;
+            internal UIntPtr PeakProcessMemoryUsed;
+            internal UIntPtr PeakJobMemoryUsed;
+        }
+
+#if NETFRAMEWORK
+        [DllImport(Libraries.Kernel32, SetLastError = true)]
+#else
+        [LibraryImport(Libraries.Kernel32, SetLastError = true)]
+#endif
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static
+#if NETFRAMEWORK
+        extern
+#else
+        partial
+#endif
+        bool SetInformationJobObject(IntPtr hJob, JOBOBJECTINFOCLASS JobObjectInfoClass, ref JOBOBJECT_EXTENDED_LIMIT_INFORMATION lpJobObjectInfo, uint cbJobObjectInfoLength);
     }
 }
