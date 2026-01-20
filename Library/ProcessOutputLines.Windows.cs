@@ -37,7 +37,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             using OverlappedContext outputContext = OverlappedContext.Allocate();
             using OverlappedContext errorContext = OverlappedContext.Allocate();
 
-            _processId = processHandle.GetProcessId();
+            _processId = processHandle.ProcessId;
 
             // First of all, we need to drain STD OUT and ERR pipes.
             // We don't optimize for reading one (when other is closed).

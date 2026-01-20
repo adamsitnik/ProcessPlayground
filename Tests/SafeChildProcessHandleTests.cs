@@ -21,7 +21,7 @@ public partial class SafeChildProcessHandleTests
             : new("echo") { Arguments = { "test" } };
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(info, input: null, output: null, error: null);
-        int pid = processHandle.GetProcessId();
+        int pid = processHandle.ProcessId;
 
         // Verify PID is valid (not 0, not -1, and different from handle value)
         Assert.NotEqual(0, pid);

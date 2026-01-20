@@ -19,13 +19,13 @@ public partial class SafeChildProcessHandle
     // Buffer for reading from exit pipe (reused to avoid allocations)
     private static readonly byte[] s_exitPipeBuffer = new byte[1];
 
-    private readonly int _pid;
+    private readonly int _processId;
     private readonly int _exitPipeFd;
 
     private SafeChildProcessHandle(int pidfd, int pid, int exitPipeFd)
         : this(existingHandle: (IntPtr)pidfd, ownsHandle: true)
     {
-        _pid = pid;
+        _processId = pid;
         _exitPipeFd = exitPipeFd;
     }
 
@@ -43,8 +43,6 @@ public partial class SafeChildProcessHandle
             _ => close((int)this.handle) == 0,
         };
     }
-
-    private int GetProcessIdCore() => _pid;
 
     private static SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
     {
@@ -141,11 +139,11 @@ public partial class SafeChildProcessHandle
     }
 
     private bool TryGetExitCodeCore(out int exitCode)
-        => try_get_exit_code(this, _pid, out exitCode) != -1;
+        => try_get_exit_code(this, _processId, out exitCode) != -1;
 
     private int WaitForExitCore(int milliseconds)
     {
-        if (wait_for_exit(this, _pid, _exitPipeFd, milliseconds, out int exitCode) != -1)
+        if (wait_for_exit(this, _processId, _exitPipeFd, milliseconds, out int exitCode) != -1)
         {
             return exitCode;
         }
@@ -186,7 +184,7 @@ public partial class SafeChildProcessHandle
     private void KillCore(bool throwOnError)
     {
         const PosixSignal SIGKILL = (PosixSignal)9;
-        int result = send_signal(this, _pid, SIGKILL);
+        int result = send_signal(this, _processId, SIGKILL);
         if (result == 0 || !throwOnError)
         {
             return;
@@ -209,7 +207,7 @@ public partial class SafeChildProcessHandle
 
     private void SendSignalCore(PosixSignal signal)
     {
-        int result = send_signal(this, _pid, signal);
+        int result = send_signal(this, _processId, signal);
         if (result == 0)
         {
             return;
@@ -224,7 +222,7 @@ public partial class SafeChildProcessHandle
     {
         // Resume a suspended process by sending SIGCONT
         const PosixSignal SIGCONT = (PosixSignal)(-6);
-        int result = send_signal(this, _pid, SIGCONT);
+        int result = send_signal(this, _processId, SIGCONT);
         if (result == 0)
         {
             return;

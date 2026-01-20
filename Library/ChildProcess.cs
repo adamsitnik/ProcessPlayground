@@ -175,7 +175,7 @@ public static partial class ChildProcess
         using (SafeFileHandle inputHandle = input ?? File.OpenNullFileHandle())
         using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, inputHandle, output: write, error: write))
         {
-            int processId = processHandle.GetProcessId();
+            int processId = processHandle.ProcessId;
 
 #if WINDOWS
             // If timeout was specified, we need to use a different code path to read with timeout.
@@ -253,7 +253,7 @@ public static partial class ChildProcess
         using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, inputHandle, output: write, error: write))
         using (Stream outputStream = StreamHelper.CreateReadStream(read, cancellationToken))
         {
-            int processId = processHandle.GetProcessId();
+            int processId = processHandle.ProcessId;
 
             byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
             int totalBytesRead = 0;

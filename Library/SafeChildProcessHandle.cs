@@ -29,6 +29,11 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     }
 
     public override bool IsInvalid => handle == IntPtr.Zero;
+    
+    /// <summary>
+    /// Gets the process ID.
+    /// </summary>
+    public int ProcessId => _processId;
 
     /// <summary>
     /// Creates a <see cref="T:Microsoft.Win32.SafeHandles.SafeChildProcessHandle" /> around a process handle.
@@ -83,13 +88,6 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
 
             nullHandle?.Dispose();
         }
-    }
-
-    public int GetProcessId()
-    {
-        Validate();
-
-        return GetProcessIdCore();
     }
 
     public int WaitForExit(TimeSpan? timeout = default)

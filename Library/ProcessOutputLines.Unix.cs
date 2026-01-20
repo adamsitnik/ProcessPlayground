@@ -53,7 +53,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 
             using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
 
-            _processId = processHandle.GetProcessId();
+            _processId = processHandle.ProcessId;
 
             int outputFd = (int)parentOutputHandle.DangerousGetHandle();
             int errorFd = (int)parentErrorHandle.DangerousGetHandle();

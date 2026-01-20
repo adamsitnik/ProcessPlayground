@@ -35,7 +35,7 @@ public class CreateSuspendedTests
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
         // Verify the process was created
-        int pid = processHandle.GetProcessId();
+        int pid = processHandle.ProcessId;
         Assert.True(pid > 0, "Process ID should be positive");
         
         // Now resume the process
@@ -127,7 +127,7 @@ public class CreateSuspendedTests
             error: null);
 
         // Process should be suspended
-        int pid = processHandle.GetProcessId();
+        int pid = processHandle.ProcessId;
         Assert.True(pid > 0);
 
         // Kill the suspended process (should work even when suspended)
