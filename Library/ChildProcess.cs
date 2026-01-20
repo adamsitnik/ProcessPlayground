@@ -139,6 +139,156 @@ public static partial class ChildProcess
     }
 
     /// <summary>
+    /// Starts a process with the specified options and returns the standard output and error.
+    /// </summary>
+    /// <param name="options">The configuration options used to start the process. Cannot be null.</param>
+    /// <param name="input">An optional handle to a file that provides input to the process's standard input stream. If null, no input is provided.</param>
+    /// <param name="timeout">An optional timeout that specifies the maximum duration to wait for the process to complete. If null, the
+    /// process will wait indefinitely.</param>
+    /// <returns>A <see cref="ProcessOutput" /> object containing the process's exit code, id, standard output and standard error data.</returns>
+    /// <remarks>Use <see cref="Console.OpenStandardInput()"/> to provide input of the process.</remarks>
+    public static ProcessOutput GetProcessOutput(ProcessStartOptions options, SafeFileHandle? input = null, TimeSpan? timeout = null)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        SafeFileHandle? readStdOut = null, writeStdOut = null, readStdErr = null, writeStdErr = null;
+        TimeoutHelper timeoutHelper = TimeoutHelper.Start(timeout);
+
+        if (OperatingSystem.IsWindows())
+        {
+            // We open ASYNC read handles to allow for cancellation for timeout.
+            File.CreateNamedPipe(out readStdOut, out writeStdOut);
+            File.CreateNamedPipe(out readStdErr, out writeStdErr);
+        }
+        else
+        {
+            File.CreateAnonymousPipe(out readStdOut, out writeStdOut);
+            File.CreateAnonymousPipe(out readStdErr, out writeStdErr);
+        }
+
+        using (readStdOut)
+        using (writeStdOut)
+        using (readStdErr)
+        using (writeStdErr)
+        using (SafeFileHandle inputHandle = input ?? File.OpenNullFileHandle())
+        using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, inputHandle, output: writeStdOut, error: writeStdErr))
+        {
+            return GetProcessOutputCore(processHandle, readStdOut, readStdErr, timeoutHelper);
+        }
+    }
+
+    /// <summary>
+    /// Starts a process with the specified options and returns the standard output and error.
+    /// </summary>
+    /// <param name="options">The configuration options used to start the process. Cannot be null.</param>
+    /// <param name="input">An optional handle to a file that provides input to the process's standard input stream. If null, no input is provided.</param>
+    /// <param name="cancellationToken">A cancellation token to cancel the operation.</param>
+    /// <returns>A <see cref="ProcessOutput" /> object containing the process's exit code, id, standard output and standard error data.</returns>
+    /// <remarks>Use <see cref="Console.OpenStandardInput()"/> to provide input of the process.</remarks>
+    public static async Task<ProcessOutput> GetProcessOutputAsync(ProcessStartOptions options, SafeFileHandle? input = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        SafeFileHandle? readStdOut = null, writeStdOut = null, readStdErr = null, writeStdErr = null;
+
+        if (OperatingSystem.IsWindows())
+        {
+            // We open ASYNC read handles to allow for cancellation for timeout.
+            File.CreateNamedPipe(out readStdOut, out writeStdOut);
+            File.CreateNamedPipe(out readStdErr, out writeStdErr);
+        }
+        else
+        {
+            File.CreateAnonymousPipe(out readStdOut, out writeStdOut);
+            File.CreateAnonymousPipe(out readStdErr, out writeStdErr);
+        }
+
+        using (readStdOut)
+        using (writeStdOut)
+        using (readStdErr)
+        using (writeStdErr)
+        using (SafeFileHandle inputHandle = input ?? File.OpenNullFileHandle())
+        using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, inputHandle, output: writeStdOut, error: writeStdErr))
+        using (Stream outputStream = StreamHelper.CreateReadStream(readStdOut, cancellationToken))
+        using (Stream errorStream = StreamHelper.CreateReadStream(readStdErr, cancellationToken))
+        {
+            byte[] outputBuffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
+            byte[] errorBuffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
+
+            int outputStartIndex = 0, errorStartIndex = 0;
+
+            // It's possible for the process to exit but not report EOF on pipe.
+            // This happens when the child process starts a grandchild process that inherits the pipe handle and keeps it open.
+            // The EOF is then reported only when all handles are closed (all ancestors who derived the pipe handle has exited).
+            Task<int> processExit = processHandle.WaitForExitAsync(cancellationToken);
+            Task<int> outputRead = outputStream.ReadAsync(outputBuffer, outputStartIndex, outputBuffer.Length - outputStartIndex, cancellationToken);
+            Task<int> errorRead = errorStream.ReadAsync(errorBuffer, errorStartIndex, errorBuffer.Length - errorStartIndex, cancellationToken);
+
+            Task<int>[] tasks = [processExit, outputRead, errorRead];
+
+            try
+            {
+                while (!readStdOut.IsClosed || !readStdErr.IsClosed)
+                {
+                    Task<int> finished = await Task.WhenAny(tasks);
+                    if (finished == processExit)
+                    {
+                        // Process exited, we can stop reading.
+                        break;
+                    }
+
+                    bool isError = finished == errorRead;
+
+                    int bytesRead = await finished;
+                    if (bytesRead > 0)
+                    {
+                        if (isError)
+                        {
+                            errorStartIndex += bytesRead;
+                            if (errorStartIndex == errorBuffer.Length)
+                            {
+                                BufferHelper.RentLargerBuffer(ref errorBuffer);
+                            }
+                            tasks[2] = errorRead = errorStream.ReadAsync(errorBuffer, errorStartIndex, errorBuffer.Length - errorStartIndex, cancellationToken);
+                        }
+                        else
+                        {
+                            outputStartIndex += bytesRead;
+                            if (outputStartIndex == outputBuffer.Length)
+                            {
+                                BufferHelper.RentLargerBuffer(ref outputBuffer);
+                            }
+                            tasks[1] = outputRead = outputStream.ReadAsync(outputBuffer, outputStartIndex, outputBuffer.Length - outputStartIndex, cancellationToken);
+                        }
+                    }
+                    else
+                    {
+                        if (isError)
+                        {
+                            errorStream.Close();
+                            tasks[2] = processExit;
+                        }
+                        else
+                        {
+                            outputStream.Close();
+                            tasks[1] = processExit;
+                        }
+                    }
+                }
+
+                int exitCode = await processExit;
+
+                return new(exitCode, BufferHelper.CreateCopy(outputBuffer, outputStartIndex), BufferHelper.CreateCopy(errorBuffer, errorStartIndex), processHandle.ProcessId);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(outputBuffer);
+                ArrayPool<byte>.Shared.Return(errorBuffer);
+            }
+        }
+    }
+
+    /// <summary>
     /// Starts a process with the specified options and returns the combined output, including both standard output and
     /// standard error streams.
     /// </summary>
