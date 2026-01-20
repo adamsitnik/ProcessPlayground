@@ -8,7 +8,7 @@ internal static class StreamHelper
 {
     internal static Stream CreateReadStream(SafeFileHandle read, CancellationToken cancellationToken)
     {
-#if WINDOWS || NETFRAMEWORK
+#if WINDOWS
         return new FileStream(read, FileAccess.Read, bufferSize: 1, isAsync: true);
 #else
         if (!cancellationToken.CanBeCanceled)

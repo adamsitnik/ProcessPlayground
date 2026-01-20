@@ -17,36 +17,20 @@ internal static partial class Interop
         // EXTENDED_STARTUPINFO_PRESENT flag for CreateProcess
         internal const int EXTENDED_STARTUPINFO_PRESENT = 0x00080000;
 
-#if NETFRAMEWORK
-        [DllImport(Libraries.Kernel32, SetLastError = true)]
-#else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
-#endif
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static unsafe
-#if NETFRAMEWORK
-        extern
-#else
         partial
-#endif
         bool InitializeProcThreadAttributeList(
             LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList,
             int dwAttributeCount,
             int dwFlags,
             ref IntPtr lpSize);
 
-#if NETFRAMEWORK
-        [DllImport(Libraries.Kernel32, SetLastError = true)]
-#else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
-#endif
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static unsafe
-#if NETFRAMEWORK
-        extern
-#else
         partial
-#endif
         bool UpdateProcThreadAttribute(
             LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList,
             int dwFlags,
@@ -56,17 +40,9 @@ internal static partial class Interop
             void* lpPreviousValue,
             IntPtr lpReturnSize);
 
-#if NETFRAMEWORK
-        [DllImport(Libraries.Kernel32, SetLastError = true)]
-#else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
-#endif
         internal static unsafe
-#if NETFRAMEWORK
-        extern
-#else
         partial
-#endif
         void DeleteProcThreadAttributeList(LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList);
     }
 }

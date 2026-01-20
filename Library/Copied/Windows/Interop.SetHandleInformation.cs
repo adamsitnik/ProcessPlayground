@@ -8,18 +8,10 @@ internal static partial class Interop
 {
     internal static partial class Kernel32
     {
-#if NETFRAMEWORK
-        [DllImport(Libraries.Kernel32, SetLastError = true)]
-#else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
-#endif
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static
-#if NETFRAMEWORK
-            extern
-#else
             partial
-#endif
             bool SetHandleInformation(IntPtr hObject, int dwMask, int dwFlags);
     }
 }

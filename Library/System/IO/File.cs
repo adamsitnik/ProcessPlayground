@@ -41,42 +41,5 @@ public static partial class FileExtensions
         // DESIGN: this method may be too specific to make it public in general File API!
         public static void CreateNamedPipe(out SafeFileHandle read, out SafeFileHandle write, string? name = null)
             => CreateNamedPipeCore(out read, out write, name);
-
-#if NETFRAMEWORK
-        /// <summary>
-        /// Polyfill for File.OpenHandle on .NET Framework
-        /// </summary>
-        public static SafeFileHandle OpenHandle(string path, FileMode mode, FileAccess access = FileAccess.ReadWrite, FileShare share = FileShare.Read, FileOptions options = FileOptions.None)
-        {
-            // Call CreateFile directly to avoid FileStream overhead
-            Interop.Kernel32.SECURITY_ATTRIBUTES securityAttributes = default;
-            
-            // Convert FileAccess to Windows access rights
-            int accessRights = 0;
-            if ((access & FileAccess.Read) != 0)
-                accessRights |= Interop.Kernel32.GenericOperations.GENERIC_READ;
-            if ((access & FileAccess.Write) != 0)
-                accessRights |= Interop.Kernel32.GenericOperations.GENERIC_WRITE;
-            
-            unsafe
-            {
-                SafeFileHandle handle = Interop.Kernel32.CreateFile(
-                    path,
-                    accessRights,
-                    share,
-                    &securityAttributes,
-                    mode,
-                    (int)options,
-                    IntPtr.Zero);
-                
-                if (handle.IsInvalid)
-                {
-                    throw new Win32Exception(Marshal.GetLastPInvokeError(), $"Failed to open file: {path}");
-                }
-                
-                return handle;
-            }
-        }
-#endif
     }
 }

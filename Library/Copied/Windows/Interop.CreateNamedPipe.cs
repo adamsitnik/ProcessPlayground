@@ -9,13 +9,8 @@ internal static partial class Interop
 {
     internal static partial class Kernel32
     {
-#if NETFRAMEWORK
-        [DllImport(Libraries.Kernel32, EntryPoint = "CreateNamedPipeW", SetLastError = true, CharSet = CharSet.Unicode)]
-        internal static extern
-#else
         [LibraryImport(Libraries.Kernel32, EntryPoint = "CreateNamedPipeW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
         internal static partial
-#endif
          SafeFileHandle CreateNamedPipe(
             string pipeName,
             int openMode,

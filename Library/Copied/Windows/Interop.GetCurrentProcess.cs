@@ -8,12 +8,7 @@ internal static partial class Interop
 {
     internal static partial class Kernel32
     {
-#if NETFRAMEWORK
-        [DllImport(Libraries.Kernel32)]
-        internal static extern IntPtr GetCurrentProcess();
-#else
         [LibraryImport(Libraries.Kernel32)]
         internal static partial IntPtr GetCurrentProcess();
-#endif
     }
 }

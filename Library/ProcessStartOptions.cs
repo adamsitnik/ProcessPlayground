@@ -185,11 +185,7 @@ public sealed class ProcessStartOptions
 
     private static string? GetExecutablePath()
     {
-#if NETFRAMEWORK
-        return Reflection.Assembly.GetEntryAssembly()?.Location;
-#else
         return System.Environment.ProcessPath;
-#endif
     }
 
     private static string FindProgramInPath(string fileName)
@@ -219,7 +215,7 @@ public sealed class ProcessStartOptions
 
     private static bool IsExecutableFile(string path)
     {
-#if NETFRAMEWORK || WINDOWS
+#if WINDOWS
         return File.Exists(path);
 #else
         // Modern .NET on Unix/Linux

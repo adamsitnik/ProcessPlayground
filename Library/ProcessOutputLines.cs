@@ -66,13 +66,8 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             using StreamReader outputReader = new(StreamHelper.CreateReadStream(parentOutputHandle, cancellationToken), encoding);
             using StreamReader errorReader = new(StreamHelper.CreateReadStream(parentErrorHandle, cancellationToken), encoding);
 
-#if NETFRAMEWORK
-            Task<string?> readOutput = outputReader.ReadLineAsync();
-            Task<string?> readError = errorReader.ReadLineAsync();
-#else
             Task<string?> readOutput = outputReader.ReadLineAsync(cancellationToken).AsTask();
             Task<string?> readError = errorReader.ReadLineAsync(cancellationToken).AsTask();
-#endif
             bool isError;
 
             while (true)
@@ -90,11 +85,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                     StreamReader activeReader = isError ? errorReader : outputReader;
                     while (true)
                     {
-#if NETFRAMEWORK
-                        ValueTask<string?> nextRead = new ValueTask<string?>(activeReader.ReadLineAsync());
-#else
                         ValueTask<string?> nextRead = activeReader.ReadLineAsync(cancellationToken);
-#endif
 
                         // Check if the read completes immediately (data already available)
                         if (nextRead.IsCompleted)
@@ -136,11 +127,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             {
                 yield return new(moreData, !isError);
 
-#if NETFRAMEWORK
-                moreData = await remaining.ReadLineAsync();
-#else
                 moreData = await remaining.ReadLineAsync(cancellationToken);
-#endif
             }
 
             if (!procHandle.TryGetExitCode(out int exitCode))

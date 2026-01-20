@@ -7,13 +7,8 @@ internal static partial class Interop
 {
     internal static partial class Kernel32
     {
-#if NETFRAMEWORK
-        [DllImport(Libraries.Kernel32, SetLastError = true)]
-        internal static extern
-#else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
         internal static partial
-#endif
          int GetFileType(SafeHandle hFile);
     }
 }

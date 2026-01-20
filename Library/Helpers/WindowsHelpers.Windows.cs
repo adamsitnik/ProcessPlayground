@@ -6,19 +6,11 @@ internal static partial class WindowsHelpers
 {
     private const int MAX_PATH = 260;
 
-#if NETFRAMEWORK
-    [DllImport("kernel32.dll", EntryPoint = "GetSystemDirectoryW", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern uint GetSystemDirectoryW(char[] lpBuffer, uint uSize);
-
-    [DllImport("kernel32.dll", EntryPoint = "GetWindowsDirectoryW", SetLastError = true, CharSet = CharSet.Unicode)]
-    private static extern uint GetWindowsDirectoryW(char[] lpBuffer, uint uSize);
-#else
     [LibraryImport("kernel32.dll", EntryPoint = "GetSystemDirectoryW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     private static partial uint GetSystemDirectoryW(char[] lpBuffer, uint uSize);
 
     [LibraryImport("kernel32.dll", EntryPoint = "GetWindowsDirectoryW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     private static partial uint GetWindowsDirectoryW(char[] lpBuffer, uint uSize);
-#endif
 
     internal static string? GetSystemDirectory()
     {

@@ -165,10 +165,6 @@ public class ProcessStartOptionsResolvePathTests
 
     private static string? GetExecutablePath()
     {
-#if NETFRAMEWORK
-        return System.Reflection.Assembly.GetEntryAssembly()?.Location;
-#else
         return System.Environment.ProcessPath;
-#endif
     }
 }

@@ -17,12 +17,7 @@ internal static class BufferHelper
     internal static void RentLargerBuffer(ref byte[] buffer)
     {
         byte[] oldBuffer = buffer;
-#if NETFRAMEWORK
-        const int MaxArrayLength = 0X7FEFFFFF; // From .NET Framework Array class
-        buffer = ArrayPool<byte>.Shared.Rent(Math.Min(buffer.Length * 2, MaxArrayLength));
-#else
         buffer = ArrayPool<byte>.Shared.Rent(Math.Min(buffer.Length * 2, Array.MaxLength));
-#endif
 
         try
         {
@@ -36,11 +31,7 @@ internal static class BufferHelper
 
     internal static byte[] CreateCopy(byte[] buffer, int totalBytesRead)
     {
-#if NETFRAMEWORK
-        byte[] resultBuffer = new byte[totalBytesRead];
-#else
         byte[] resultBuffer = GC.AllocateUninitializedArray<byte>(totalBytesRead);
-#endif
         Buffer.BlockCopy(buffer, 0, resultBuffer, 0, totalBytesRead);
         return resultBuffer;
     }
