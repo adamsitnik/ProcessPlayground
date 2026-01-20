@@ -33,7 +33,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// <summary>
     /// Gets the process ID.
     /// </summary>
-    public int ProcessId => _processId;
+    public int ProcessId { get; init; }
 
     /// <summary>
     /// Creates a <see cref="T:Microsoft.Win32.SafeHandles.SafeChildProcessHandle" /> around a process handle.

@@ -19,16 +19,13 @@ public partial class SafeChildProcessHandle
 
     // Thread handle for suspended processes (only used on Windows)
     private readonly IntPtr _threadHandle;
-    
-    // Process ID stored during process creation
-    private readonly int _processId;
 
     // Windows-specific constructor for suspended processes that need to keep the thread handle
     private SafeChildProcessHandle(IntPtr processHandle, IntPtr threadHandle, int processId, bool ownsHandle)
         : base(processHandle, ownsHandle)
     {
         _threadHandle = threadHandle;
-        _processId = processId;
+        ProcessId = processId;
     }
     
     // Windows-specific constructor for non-suspended processes
@@ -36,7 +33,7 @@ public partial class SafeChildProcessHandle
         : base(processHandle, ownsHandle)
     {
         _threadHandle = IntPtr.Zero;
-        _processId = processId;
+        ProcessId = processId;
     }
 
     private static IntPtr CreateKillOnParentDeathJob()
