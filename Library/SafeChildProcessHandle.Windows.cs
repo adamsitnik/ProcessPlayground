@@ -21,10 +21,11 @@ public partial class SafeChildProcessHandle
     private readonly IntPtr _threadHandle;
 
     // Windows-specific constructor for suspended processes that need to keep the thread handle
-    private SafeChildProcessHandle(IntPtr processHandle, IntPtr threadHandle, bool ownsHandle)
+    private SafeChildProcessHandle(IntPtr processHandle, IntPtr threadHandle, int processId, bool ownsHandle)
         : base(processHandle, ownsHandle)
     {
         _threadHandle = threadHandle;
+        ProcessId = processId;
     }
 
     private static IntPtr CreateKillOnParentDeathJob()
@@ -232,11 +233,11 @@ public partial class SafeChildProcessHandle
                 // If the process was created suspended, keep the thread handle for later resumption
                 if (options.CreateSuspended && processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
                 {
-                    procSH = new(processInfo.hProcess, processInfo.hThread, true);
+                    procSH = new(processInfo.hProcess, processInfo.hThread, processInfo.dwProcessId, true);
                 }
                 else
                 {
-                    procSH = new(processInfo.hProcess, true);
+                    procSH = new(processInfo.hProcess, IntPtr.Zero, processInfo.dwProcessId, true);
                     // Close the thread handle if we don't need it
                     if (processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
                         Interop.Kernel32.CloseHandle(processInfo.hThread);
@@ -344,16 +345,6 @@ public partial class SafeChildProcessHandle
                 }
             }
         }
-    }
-
-    private int GetProcessIdCore()
-    {
-        int result = Interop.Kernel32.GetProcessId(this);
-        if (result == 0)
-        {
-            throw new Win32Exception(Marshal.GetLastPInvokeError());
-        }
-        return result;
     }
 
     private int WaitForExitCore(int milliseconds)
