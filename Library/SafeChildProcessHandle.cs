@@ -47,47 +47,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
 
     public static SafeChildProcessHandle Start(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error)
     {
-        ArgumentNullException.ThrowIfNull(options);
-
-        SafeFileHandle? nullHandle = null;
-
-        if (input is null || output is null || error is null)
-        {
-            nullHandle = File.OpenNullFileHandle();
-
-            input ??= nullHandle;
-            output ??= nullHandle;
-            error ??= nullHandle;
-        }
-
-        try
-        {
-            return StartCore(options, input, output, error, createSuspended: false);
-        }
-        finally
-        {
-            // DESIGN: avoid deadlocks and the need of users being aware of how pipes work by closing the child handles in the parent process.
-            // Close the child handles in the parent process, so the pipe will signal EOF when the child exits.
-            // Otherwise, the parent process will keep the write end of the pipe open, and any read operations will hang.
-            
-            // Track which handles we've already disposed to avoid double-disposal when the same handle is used for multiple streams
-            bool outputDisposed = false;
-            
-            if (output.IsPipe())
-            {
-                output.Dispose();
-                outputDisposed = true;
-            }
-
-            // Only dispose error if it's a pipe and it's not the same underlying handle as output
-            // Compare the actual handle values, not just reference equality, since different SafeFileHandle instances can wrap the same handle
-            if (error.IsPipe() && (!outputDisposed || error.DangerousGetHandle() != output.DangerousGetHandle()))
-            {
-                error.Dispose();
-            }
-
-            nullHandle?.Dispose();
-        }
+        return StartInternal(options, input, output, error, createSuspended: false);
     }
 
     /// <summary>
@@ -99,6 +59,11 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// <param name="error">Standard error handle.</param>
     /// <returns>A handle to the suspended process. Call <see cref="Resume"/> to start execution.</returns>
     public static SafeChildProcessHandle StartSuspended(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error)
+    {
+        return StartInternal(options, input, output, error, createSuspended: true);
+    }
+
+    private static SafeChildProcessHandle StartInternal(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error, bool createSuspended)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -115,7 +80,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
 
         try
         {
-            return StartCore(options, input, output, error, createSuspended: true);
+            return StartCore(options, input, output, error, createSuspended);
         }
         finally
         {
