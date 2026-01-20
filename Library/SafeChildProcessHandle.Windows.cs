@@ -27,14 +27,6 @@ public partial class SafeChildProcessHandle
         _threadHandle = threadHandle;
         ProcessId = processId;
     }
-    
-    // Windows-specific constructor for non-suspended processes
-    private SafeChildProcessHandle(IntPtr processHandle, int processId, bool ownsHandle)
-        : base(processHandle, ownsHandle)
-    {
-        _threadHandle = IntPtr.Zero;
-        ProcessId = processId;
-    }
 
     private static IntPtr CreateKillOnParentDeathJob()
     {
@@ -245,7 +237,7 @@ public partial class SafeChildProcessHandle
                 }
                 else
                 {
-                    procSH = new(processInfo.hProcess, processInfo.dwProcessId, true);
+                    procSH = new(processInfo.hProcess, IntPtr.Zero, processInfo.dwProcessId, true);
                     // Close the thread handle if we don't need it
                     if (processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
                         Interop.Kernel32.CloseHandle(processInfo.hThread);
