@@ -43,7 +43,7 @@ public partial class SafeChildProcessHandle
         };
     }
 
-    private static SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
+    private static SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle, bool createSuspended)
     {
         // Resolve executable path first
         string? resolvedPath = options.IsFileNameResolved ? options.FileName : ProcessStartOptions.ResolvePathInternal(options.FileName);
@@ -64,11 +64,11 @@ public partial class SafeChildProcessHandle
         int stdOutFd = (int)outputHandle.DangerousGetHandle();
         int stdErrFd = (int)errorHandle.DangerousGetHandle();
 
-        return StartProcessInternal(resolvedPath, argv, envp, options, stdInFd, stdOutFd, stdErrFd);
+        return StartProcessInternal(resolvedPath, argv, envp, options, stdInFd, stdOutFd, stdErrFd, createSuspended);
     }
 
     private static unsafe SafeChildProcessHandle StartProcessInternal(string resolvedPath, string[] argv, string[]? envp,
-        ProcessStartOptions options, int stdinFd, int stdoutFd, int stderrFd)
+        ProcessStartOptions options, int stdinFd, int stdoutFd, int stderrFd, bool createSuspended)
     {
         // Allocate native memory BEFORE forking
         byte* resolvedPathPtr = UnixHelpers.AllocateNullTerminatedUtf8String(resolvedPath);
@@ -114,7 +114,7 @@ public partial class SafeChildProcessHandle
                 out int pidfd,
                 out int exitPipeFd,
                 options.KillOnParentDeath ? 1 : 0,
-                options.CreateSuspended ? 1 : 0,
+                createSuspended ? 1 : 0,
                 inheritedHandlesPtr,
                 inheritedHandlesCount);
 
