@@ -35,11 +35,6 @@
     <Compile Remove="**/*.Windows.cs" />
   </ItemGroup>
 
-  <!-- Exclude OperatingSystem polyfill for non-Framework targets -->
-  <ItemGroup>
-    <Compile Remove="System/OperatingSystem.cs" />
-  </ItemGroup>
-
   <ItemGroup>
     <!-- Workaround https://github.com/dotnet/project-system/issues/935 -->
     <None Include="**/*.cs" />

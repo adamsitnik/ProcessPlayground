@@ -17,14 +17,6 @@
     <DefineConstants>$(DefineConstants);LINUX</DefineConstants>
   </PropertyGroup>
 
-  <!-- Exclude polyfills for non-Framework targets -->
-  <ItemGroup>
-    <Compile Remove="System/ArgumentNullException.cs" />
-    <Compile Remove="System/ArgumentException.cs" />
-    <Compile Remove="System/Runtime/InteropServices/Marshal.cs" />
-    <Compile Remove="System/Runtime/CompilerServices/CallerArgumentExpressionAttribute.cs" />
-  </ItemGroup>
-
   <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
     <Compile Remove="Copied/Unix/*.cs" />
     <Compile Remove="**/*.Unix.cs" />
