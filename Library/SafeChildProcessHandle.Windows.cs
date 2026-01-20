@@ -87,7 +87,7 @@ public partial class SafeChildProcessHandle
         => Interop.Kernel32.GetExitCodeProcess(this, out exitCode)
             && exitCode != Interop.Kernel32.HandleOptions.STILL_ACTIVE;
 
-    private static unsafe SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
+    private static unsafe SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle, bool createSuspended)
     {
         ValueStringBuilder applicationName = new(stackalloc char[256]);
         ValueStringBuilder commandLine = new(stackalloc char[256]);
@@ -196,7 +196,7 @@ public partial class SafeChildProcessHandle
 
             int creationFlags = Interop.Kernel32.EXTENDED_STARTUPINFO_PRESENT;
             if (options.CreateNoWindow) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NO_WINDOW;
-            if (options.CreateSuspended) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_SUSPENDED;
+            if (createSuspended) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_SUSPENDED;
 
             string? environmentBlock = null;
             if (options.HasEnvironmentBeenAccessed)
@@ -231,7 +231,7 @@ public partial class SafeChildProcessHandle
             if (processInfo.hProcess != IntPtr.Zero && processInfo.hProcess != new IntPtr(-1))
             {
                 // If the process was created suspended, keep the thread handle for later resumption
-                if (options.CreateSuspended && processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
+                if (createSuspended && processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
                 {
                     procSH = new(processInfo.hProcess, processInfo.hThread, processInfo.dwProcessId, true);
                 }
@@ -420,7 +420,7 @@ public partial class SafeChildProcessHandle
     {
         if (_threadHandle == IntPtr.Zero)
         {
-            throw new InvalidOperationException("Cannot resume a process that was not created with CreateSuspended.");
+            throw new InvalidOperationException("Cannot resume a process that was not started with StartSuspended.");
         }
 
         int result = Interop.Kernel32.ResumeThread(_threadHandle);

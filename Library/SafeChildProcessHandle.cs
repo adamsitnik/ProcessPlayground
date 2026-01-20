@@ -47,6 +47,24 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
 
     public static SafeChildProcessHandle Start(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error)
     {
+        return StartInternal(options, input, output, error, createSuspended: false);
+    }
+
+    /// <summary>
+    /// Starts a new process in a suspended state.
+    /// </summary>
+    /// <param name="options">Process start options.</param>
+    /// <param name="input">Standard input handle.</param>
+    /// <param name="output">Standard output handle.</param>
+    /// <param name="error">Standard error handle.</param>
+    /// <returns>A handle to the suspended process. Call <see cref="Resume"/> to start execution.</returns>
+    public static SafeChildProcessHandle StartSuspended(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error)
+    {
+        return StartInternal(options, input, output, error, createSuspended: true);
+    }
+
+    private static SafeChildProcessHandle StartInternal(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error, bool createSuspended)
+    {
         ArgumentNullException.ThrowIfNull(options);
 
         SafeFileHandle? nullHandle = null;
@@ -62,7 +80,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
 
         try
         {
-            return StartCore(options, input, output, error);
+            return StartCore(options, input, output, error, createSuspended);
         }
         finally
         {

@@ -11,28 +11,14 @@ namespace Tests;
 public class CreateSuspendedTests
 {
     [Fact]
-    public void CreateSuspended_DefaultsToFalse()
-    {
-        ProcessStartOptions options = new("test");
-        Assert.False(options.CreateSuspended);
-    }
-
-    [Fact]
-    public void CreateSuspended_CanBeSetToTrue()
-    {
-        ProcessStartOptions options = new("test") { CreateSuspended = true };
-        Assert.True(options.CreateSuspended);
-    }
-
-    [Fact]
-    public void CreateSuspended_StartsProcessInSuspendedState()
+    public void StartSuspended_StartsProcessInSuspendedState()
     {
         // Create a simple process that will write output
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd.exe") { Arguments = { "/c", "echo", "test" }, CreateSuspended = true }
-            : new("echo") { Arguments = { "test" }, CreateSuspended = true };
+            ? new("cmd.exe") { Arguments = { "/c", "echo", "test" } }
+            : new("echo") { Arguments = { "test" } };
 
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.StartSuspended(options, input: null, output: null, error: null);
         
         // Verify the process was created
         int pid = processHandle.ProcessId;
@@ -49,7 +35,7 @@ public class CreateSuspendedTests
     }
 
     [Fact]
-    public void CreateSuspended_ResumeAllowsProcessToRun()
+    public void StartSuspended_ResumeAllowsProcessToRun()
     {
         // Create a process that creates a file after a delay
         string tempFile = Path.Combine(Path.GetTempPath(), $"suspend_test_{Guid.NewGuid()}.txt");
@@ -59,16 +45,14 @@ public class CreateSuspendedTests
             ProcessStartOptions options = OperatingSystem.IsWindows()
                 ? new("cmd.exe") 
                 { 
-                    Arguments = { "/c", $"echo test > {tempFile}" },
-                    CreateSuspended = true 
+                    Arguments = { "/c", $"echo test > {tempFile}" }
                 }
                 : new("sh") 
                 { 
-                    Arguments = { "-c", $"echo test > {tempFile}" },
-                    CreateSuspended = true 
+                    Arguments = { "-c", $"echo test > {tempFile}" }
                 };
 
-            using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+            using SafeChildProcessHandle processHandle = SafeChildProcessHandle.StartSuspended(options, input: null, output: null, error: null);
             
             // Give it time to verify it's suspended
             Thread.Sleep(100);
@@ -97,13 +81,13 @@ public class CreateSuspendedTests
     }
 
     [Fact]
-    public async Task CreateSuspended_WorksWithAsync()
+    public async Task StartSuspended_WorksWithAsync()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd.exe") { Arguments = { "/c", "echo", "async_test" }, CreateSuspended = true }
-            : new("echo") { Arguments = { "async_test" }, CreateSuspended = true };
+            ? new("cmd.exe") { Arguments = { "/c", "echo", "async_test" } }
+            : new("echo") { Arguments = { "async_test" } };
 
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.StartSuspended(options, input: null, output: null, error: null);
         
         // Resume
         processHandle.Resume();
@@ -114,13 +98,13 @@ public class CreateSuspendedTests
     }
 
     [Fact]
-    public void CreateSuspended_ProcessCanBeKilledWhileSuspended()
+    public void StartSuspended_ProcessCanBeKilledWhileSuspended()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd.exe") { Arguments = { "/c", "timeout /t 60 /nobreak" }, CreateSuspended = true }
-            : new("sleep") { Arguments = { "60" }, CreateSuspended = true };
+            ? new("cmd.exe") { Arguments = { "/c", "timeout /t 60 /nobreak" } }
+            : new("sleep") { Arguments = { "60" } };
 
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.StartSuspended(
             options,
             input: null,
             output: null,
