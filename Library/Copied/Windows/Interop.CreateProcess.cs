@@ -10,18 +10,10 @@ internal static partial class Interop
 {
     internal static partial class Kernel32
     {
-#if NETFRAMEWORK
-        [DllImport(Libraries.Kernel32, EntryPoint = "CreateProcessW", SetLastError = true, CharSet = CharSet.Unicode)]
-#else
         [LibraryImport(Libraries.Kernel32, EntryPoint = "CreateProcessW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
-#endif
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static unsafe
-#if NETFRAMEWORK
-        extern
-#else
         partial
-#endif
         bool CreateProcess(
             char* lpApplicationName,
             char* lpCommandLine,

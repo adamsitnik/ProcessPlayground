@@ -270,7 +270,7 @@ public partial class SafeChildProcessHandleTests
     private static void SetEnvVarForReal(string name, string? value)
     {
         Environment.SetEnvironmentVariable(name, value);
-#if WINDOWS || NETFRAMEWORK
+#if WINDOWS
     }
 #else
         // Environment.SetEnvironmentVariable is lame on Unix and does not affect the real process environment

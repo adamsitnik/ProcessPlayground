@@ -8,32 +8,15 @@ internal static partial class Interop
 {
     internal static partial class Kernel32
     {
-#if NETFRAMEWORK
-        [DllImport(Libraries.Kernel32, SetLastError = true)]
-#else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
-#endif
         internal static
-#if NETFRAMEWORK
-        extern
-#else
         partial
-#endif
         IntPtr CreateJobObjectW(IntPtr lpJobAttributes, IntPtr lpName);
 
-#if NETFRAMEWORK
-        [DllImport(Libraries.Kernel32, SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-#else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-#endif
         internal static
-#if NETFRAMEWORK
-        extern
-#else
         partial
-#endif
         bool AssignProcessToJobObject(IntPtr hJob, IntPtr hProcess);
 
         // Job object limit flags
@@ -82,18 +65,10 @@ internal static partial class Interop
             internal UIntPtr PeakJobMemoryUsed;
         }
 
-#if NETFRAMEWORK
-        [DllImport(Libraries.Kernel32, SetLastError = true)]
-#else
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
-#endif
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static
-#if NETFRAMEWORK
-        extern
-#else
         partial
-#endif
         bool SetInformationJobObject(IntPtr hJob, JOBOBJECTINFOCLASS JobObjectInfoClass, ref JOBOBJECT_EXTENDED_LIMIT_INFORMATION lpJobObjectInfo, uint cbJobObjectInfoLength);
     }
 }

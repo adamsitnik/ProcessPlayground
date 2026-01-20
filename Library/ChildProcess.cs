@@ -193,11 +193,7 @@ public static partial class ChildProcess
             {
                 while (true)
                 {
-#if NETFRAMEWORK
-                    int bytesRead = outputStream.Read(buffer, totalBytesRead, buffer.Length - totalBytesRead);
-#else
                     int bytesRead = outputStream.Read(buffer.AsSpan(totalBytesRead));
-#endif
                     if (bytesRead <= 0)
                     {
                         break;
@@ -266,11 +262,7 @@ public static partial class ChildProcess
             {
                 while (true)
                 {
-#if NETFRAMEWORK
-                    int bytesRead = await outputStream.ReadAsync(buffer, totalBytesRead, buffer.Length - totalBytesRead, cancellationToken);
-#else
                     int bytesRead = await outputStream.ReadAsync(buffer.AsMemory(totalBytesRead), cancellationToken);
-#endif
                     if (bytesRead <= 0)
                     {
                         break;
