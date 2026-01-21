@@ -219,26 +219,16 @@ public static partial class ChildProcess
 
             int outputStartIndex = 0, errorStartIndex = 0;
 
-            // It's possible for the process to exit but not report EOF on pipe.
-            // This happens when the child process starts a grandchild process that inherits the pipe handle and keeps it open.
-            // The EOF is then reported only when all handles are closed (all ancestors who derived the pipe handle has exited).
-            Task<int> processExit = processHandle.WaitForExitAsync(cancellationToken);
             Task<int> outputRead = outputStream.ReadAsync(outputBuffer, outputStartIndex, outputBuffer.Length - outputStartIndex, cancellationToken);
             Task<int> errorRead = errorStream.ReadAsync(errorBuffer, errorStartIndex, errorBuffer.Length - errorStartIndex, cancellationToken);
 
-            Task<int>[] tasks = [processExit, outputRead, errorRead];
+            Task<int>[] tasks = [outputRead, errorRead];
 
             try
             {
                 while (!readStdOut.IsClosed || !readStdErr.IsClosed)
                 {
                     Task<int> finished = await Task.WhenAny(tasks);
-                    if (finished == processExit)
-                    {
-                        // Process exited, we can stop reading.
-                        break;
-                    }
-
                     bool isError = finished == errorRead;
 
                     int bytesRead = await finished;
@@ -251,7 +241,8 @@ public static partial class ChildProcess
                             {
                                 BufferHelper.RentLargerBuffer(ref errorBuffer);
                             }
-                            tasks[2] = errorRead = errorStream.ReadAsync(errorBuffer, errorStartIndex, errorBuffer.Length - errorStartIndex, cancellationToken);
+                            // The tasks array may get resized, so we refer to error as last element.
+                            tasks[^1] = errorRead = errorStream.ReadAsync(errorBuffer, errorStartIndex, errorBuffer.Length - errorStartIndex, cancellationToken);
                         }
                         else
                         {
@@ -260,7 +251,7 @@ public static partial class ChildProcess
                             {
                                 BufferHelper.RentLargerBuffer(ref outputBuffer);
                             }
-                            tasks[1] = outputRead = outputStream.ReadAsync(outputBuffer, outputStartIndex, outputBuffer.Length - outputStartIndex, cancellationToken);
+                            tasks[0] = outputRead = outputStream.ReadAsync(outputBuffer, outputStartIndex, outputBuffer.Length - outputStartIndex, cancellationToken);
                         }
                     }
                     else
@@ -268,17 +259,28 @@ public static partial class ChildProcess
                         if (isError)
                         {
                             errorStream.Close();
-                            tasks[2] = processExit;
+
+                            if (tasks.Length == 2)
+                            {
+                                tasks = [outputRead];
+                            }
                         }
                         else
                         {
                             outputStream.Close();
-                            tasks[1] = processExit;
+
+                            if (tasks.Length == 2)
+                            {
+                                tasks = [errorRead];
+                            }
                         }
                     }
                 }
 
-                int exitCode = await processExit;
+                if (!processHandle.TryGetExitCode(out int exitCode))
+                {
+                    exitCode = await processHandle.WaitForExitAsync(cancellationToken);
+                }
 
                 // Instead of decoding on the fly, we decode once at the end.
                 string output = (encoding ?? Encoding.UTF8).GetString(outputBuffer, 0, outputStartIndex);
