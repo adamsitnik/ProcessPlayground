@@ -23,8 +23,8 @@ public class ProcessOutputTests
             ? await ChildProcess.GetProcessOutputAsync(options)
             : ChildProcess.GetProcessOutput(options);
 
-        string stdOut = result.GetStandardOutputText();
-        string stdErr = result.GetStandardErrorText();
+        string stdOut = result.StandardOutput;
+        string stdErr = result.StandardError;
         
         Assert.Contains("Hello from stdout", stdOut);
         Assert.DoesNotContain("Error from stderr", stdOut);
@@ -64,8 +64,8 @@ public class ProcessOutputTests
             ? await ChildProcess.GetProcessOutputAsync(options)
             : ChildProcess.GetProcessOutput(options);
 
-        Assert.True(result.StandardOutput.IsEmpty);
-        Assert.True(result.StandardError.IsEmpty);
+        Assert.Empty(result.StandardOutput);
+        Assert.Empty(result.StandardError);
         Assert.Equal(0, result.ExitCode);
     }
 
@@ -82,8 +82,8 @@ public class ProcessOutputTests
             ? await ChildProcess.GetProcessOutputAsync(options)
             : ChildProcess.GetProcessOutput(options);
 
-        Assert.True(result.StandardOutput.IsEmpty);
-        Assert.True(result.StandardError.IsEmpty);
+        Assert.Empty(result.StandardOutput);
+        Assert.Empty(result.StandardError);
         Assert.Equal(0, result.ExitCode);
     }
 
@@ -101,7 +101,7 @@ public class ProcessOutputTests
             ? await ChildProcess.GetProcessOutputAsync(options)
             : ChildProcess.GetProcessOutput(options);
 
-        string output = result.GetStandardOutputText();
+        string output = result.StandardOutput;
         
         // Build expected output
         StringBuilder expected = new();
@@ -111,7 +111,7 @@ public class ProcessOutputTests
         }
         
         Assert.Equal(expected.ToString(), output, ignoreLineEndingDifferences: true);
-        Assert.True(result.StandardError.IsEmpty);
+        Assert.Empty(result.StandardError);
         Assert.Equal(0, result.ExitCode);
     }
 
@@ -129,7 +129,7 @@ public class ProcessOutputTests
             ? await ChildProcess.GetProcessOutputAsync(options)
             : ChildProcess.GetProcessOutput(options);
 
-        string errorOutput = result.GetStandardErrorText();
+        string errorOutput = result.StandardError;
         
         // Build expected output
         StringBuilder expected = new();
@@ -139,7 +139,7 @@ public class ProcessOutputTests
         }
         
         Assert.Equal(expected.ToString(), errorOutput, ignoreLineEndingDifferences: true);
-        Assert.True(result.StandardOutput.IsEmpty);
+        Assert.Empty(result.StandardOutput);
         Assert.Equal(0, result.ExitCode);
     }
 
@@ -157,8 +157,8 @@ public class ProcessOutputTests
             ? await ChildProcess.GetProcessOutputAsync(options)
             : ChildProcess.GetProcessOutput(options);
 
-        string stdOut = result.GetStandardOutputText();
-        string stdErr = result.GetStandardErrorText();
+        string stdOut = result.StandardOutput;
+        string stdErr = result.StandardError;
         
         // Verify stdout contains only OUT messages
         Assert.Contains("OUT1", stdOut);
@@ -182,9 +182,9 @@ public class ProcessOutputTests
 
         ProcessOutput result = ChildProcess.GetProcessOutput(options, timeout: TimeSpan.FromSeconds(5));
 
-        string output = result.GetStandardOutputText();
+        string output = result.StandardOutput;
         Assert.Contains("Quick output", output);
-        Assert.True(result.StandardError.IsEmpty);
+        Assert.Empty(result.StandardError);
         Assert.Equal(0, result.ExitCode);
     }
 
@@ -229,7 +229,7 @@ public class ProcessOutputTests
 
         // Accept either OperationCanceledException or TaskCanceledException (which derives from it)
         var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-            await ChildProcess.GetProcessOutputAsync(options, inputHandle, cancellationToken: cts.Token));
+            await ChildProcess.GetProcessOutputAsync(options, input: inputHandle, cancellationToken: cts.Token));
 
         Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(5));
     }
@@ -250,7 +250,7 @@ public class ProcessOutputTests
 
         ProcessOutput result = ChildProcess.GetProcessOutput(options, input: Console.OpenStandardInputHandle(), timeout: Timeout.InfiniteTimeSpan);
 
-        string output = result.GetStandardOutputText();
+        string output = result.StandardOutput;
         Assert.True(output.Contains("Waiting") || output.Contains("done"));
     }
 
@@ -273,9 +273,9 @@ public class ProcessOutputTests
         // Verify all completed successfully
         foreach (var result in results)
         {
-            string output = result.GetStandardOutputText();
+            string output = result.StandardOutput;
             Assert.Contains("Concurrent test", output);
-            Assert.True(result.StandardError.IsEmpty);
+            Assert.Empty(result.StandardError);
             Assert.Equal(0, result.ExitCode);
         }
     }
@@ -293,8 +293,8 @@ public class ProcessOutputTests
             ? await ChildProcess.GetProcessOutputAsync(options)
             : ChildProcess.GetProcessOutput(options);
 
-        Assert.True(result.StandardOutput.IsEmpty);
-        Assert.Contains("Only stderr", result.GetStandardErrorText());
+        Assert.Empty(result.StandardOutput);
+        Assert.Contains("Only stderr", result.StandardError);
         Assert.Equal(0, result.ExitCode);
     }
 
@@ -311,8 +311,8 @@ public class ProcessOutputTests
             ? await ChildProcess.GetProcessOutputAsync(options)
             : ChildProcess.GetProcessOutput(options);
 
-        Assert.Contains("Only stdout", result.GetStandardOutputText());
-        Assert.True(result.StandardError.IsEmpty);
+        Assert.Contains("Only stdout", result.StandardOutput);
+        Assert.Empty(result.StandardError);
         Assert.Equal(0, result.ExitCode);
     }
 

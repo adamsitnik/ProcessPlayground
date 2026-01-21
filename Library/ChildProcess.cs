@@ -142,16 +142,17 @@ public static partial class ChildProcess
     /// Starts a process with the specified options and returns the standard output and error.
     /// </summary>
     /// <param name="options">The configuration options used to start the process. Cannot be null.</param>
+    /// <param name="encoding">The encoding to use when reading the output. If null, the default encoding is used (UTF-8).</param>
     /// <param name="input">An optional handle to a file that provides input to the process's standard input stream. If null, no input is provided.</param>
     /// <param name="timeout">An optional timeout that specifies the maximum duration to wait for the process to complete. If null, the
     /// process will wait indefinitely.</param>
     /// <returns>A <see cref="ProcessOutput" /> object containing the process's exit code, id, standard output and standard error data.</returns>
     /// <remarks>Use <see cref="Console.OpenStandardInput()"/> to provide input of the process.</remarks>
-    public static ProcessOutput GetProcessOutput(ProcessStartOptions options, SafeFileHandle? input = null, TimeSpan? timeout = null)
+    public static ProcessOutput GetProcessOutput(ProcessStartOptions options, Encoding? encoding = null, SafeFileHandle? input = null, TimeSpan? timeout = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        SafeFileHandle? readStdOut = null, writeStdOut = null, readStdErr = null, writeStdErr = null;
+        SafeFileHandle readStdOut, writeStdOut, readStdErr, writeStdErr;
         TimeoutHelper timeoutHelper = TimeoutHelper.Start(timeout);
 
         if (OperatingSystem.IsWindows())
@@ -173,7 +174,7 @@ public static partial class ChildProcess
         using (SafeFileHandle inputHandle = input ?? File.OpenNullFileHandle())
         using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, inputHandle, output: writeStdOut, error: writeStdErr))
         {
-            return GetProcessOutputCore(processHandle, readStdOut, readStdErr, timeoutHelper);
+            return GetProcessOutputCore(processHandle, readStdOut, readStdErr, timeoutHelper, encoding ?? Encoding.UTF8);
         }
     }
 
@@ -181,15 +182,16 @@ public static partial class ChildProcess
     /// Starts a process with the specified options and returns the standard output and error.
     /// </summary>
     /// <param name="options">The configuration options used to start the process. Cannot be null.</param>
+    /// <param name="encoding">The encoding to use when reading the output. If null, the default encoding is used (UTF-8).</param>
     /// <param name="input">An optional handle to a file that provides input to the process's standard input stream. If null, no input is provided.</param>
     /// <param name="cancellationToken">A cancellation token to cancel the operation.</param>
     /// <returns>A <see cref="ProcessOutput" /> object containing the process's exit code, id, standard output and standard error data.</returns>
     /// <remarks>Use <see cref="Console.OpenStandardInput()"/> to provide input of the process.</remarks>
-    public static async Task<ProcessOutput> GetProcessOutputAsync(ProcessStartOptions options, SafeFileHandle? input = null, CancellationToken cancellationToken = default)
+    public static async Task<ProcessOutput> GetProcessOutputAsync(ProcessStartOptions options, Encoding? encoding = null, SafeFileHandle? input = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        SafeFileHandle? readStdOut = null, writeStdOut = null, readStdErr = null, writeStdErr = null;
+        SafeFileHandle readStdOut, writeStdOut, readStdErr, writeStdErr;
 
         if (OperatingSystem.IsWindows())
         {
@@ -278,7 +280,11 @@ public static partial class ChildProcess
 
                 int exitCode = await processExit;
 
-                return new(exitCode, BufferHelper.CreateCopy(outputBuffer, outputStartIndex), BufferHelper.CreateCopy(errorBuffer, errorStartIndex), processHandle.ProcessId);
+                // Instead of decoding on the fly, we decode once at the end.
+                string output = (encoding ?? Encoding.UTF8).GetString(outputBuffer, 0, outputStartIndex);
+                string error = (encoding ?? Encoding.UTF8).GetString(errorBuffer, 0, errorStartIndex);
+
+                return new(exitCode, output, error, processHandle.ProcessId);
             }
             finally
             {

@@ -7,7 +7,7 @@ namespace System.TBA;
 
 public static partial class ChildProcess
 {
-    private static ProcessOutput GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout)
+    private static ProcessOutput GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout, Encoding encoding)
     {
         throw new NotImplementedException();
     }

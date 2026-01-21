@@ -2,6 +2,7 @@
 using System.Threading;
 using Microsoft.Win32.SafeHandles;
 using System.Buffers;
+using System.Text;
 
 namespace System.TBA;
 
@@ -62,7 +63,7 @@ public static partial class ChildProcess
         }
     }
 
-    private static ProcessOutput GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout)
+    private static ProcessOutput GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout, Encoding encoding)
     {
         int outputBytesRead = 0, errorBytesRead = 0;
 
@@ -153,7 +154,11 @@ public static partial class ChildProcess
                 exitCode = processHandle.WaitForExit(timeout.GetRemainingOrThrow());
             }
 
-            return new(exitCode, BufferHelper.CreateCopy(outputBuffer, outputBytesRead), BufferHelper.CreateCopy(errorBuffer, errorBytesRead), processHandle.ProcessId);
+            // Instead of decoding on the fly, we decode once at the end.
+            string output = encoding.GetString(outputBuffer, 0, outputBytesRead);
+            string error = encoding.GetString(errorBuffer, 0, errorBytesRead);
+
+            return new(exitCode, output, error, processHandle.ProcessId);
         }
         finally
         {
