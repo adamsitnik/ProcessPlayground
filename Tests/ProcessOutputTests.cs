@@ -5,6 +5,7 @@ using Microsoft.Win32.SafeHandles;
 using System.TBA;
 using System.Text;
 using System.Diagnostics;
+using System.Linq;
 
 namespace Tests;
 
@@ -23,15 +24,8 @@ public class ProcessOutputTests
             ? await ChildProcess.GetProcessOutputAsync(options)
             : ChildProcess.GetProcessOutput(options);
 
-        string stdOut = result.StandardOutput;
-        string stdErr = result.StandardError;
-        
-        Assert.Contains("Hello from stdout", stdOut);
-        Assert.DoesNotContain("Error from stderr", stdOut);
-        
-        Assert.Contains("Error from stderr", stdErr);
-        Assert.DoesNotContain("Hello from stdout", stdErr);
-        
+        Assert.Equal(OperatingSystem.IsWindows() ? "Hello from stdout \r\n" : "Hello from stdout\n", result.StandardOutput);
+        Assert.Equal(OperatingSystem.IsWindows() ? "Error from stderr \r\n" : "Error from stderr\n", result.StandardError);
         Assert.Equal(0, result.ExitCode);
     }
 
@@ -49,6 +43,8 @@ public class ProcessOutputTests
             : ChildProcess.GetProcessOutput(options);
 
         Assert.Equal(42, result.ExitCode);
+        Assert.Empty(result.StandardOutput);
+        Assert.Empty(result.StandardError);
     }
 
     [Theory]
@@ -92,7 +88,6 @@ public class ProcessOutputTests
     [InlineData(false)]
     public async Task ProcessOutput_HandlesLargeOutput(bool useAsync)
     {
-        // Generate a large amount of output
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "for /L %i in (1,1,1000) do @echo Line %i" } }
             : new("sh") { Arguments = { "-c", "for i in $(seq 1 1000); do echo \"Line $i\"; done" } };
@@ -101,16 +96,13 @@ public class ProcessOutputTests
             ? await ChildProcess.GetProcessOutputAsync(options)
             : ChildProcess.GetProcessOutput(options);
 
-        string output = result.StandardOutput;
-        
-        // Build expected output
         StringBuilder expected = new();
         for (int i = 1; i <= 1000; i++)
         {
             expected.AppendLine($"Line {i}");
         }
         
-        Assert.Equal(expected.ToString(), output, ignoreLineEndingDifferences: true);
+        Assert.Equal(expected.ToString(), result.StandardOutput);
         Assert.Empty(result.StandardError);
         Assert.Equal(0, result.ExitCode);
     }
@@ -129,16 +121,13 @@ public class ProcessOutputTests
             ? await ChildProcess.GetProcessOutputAsync(options)
             : ChildProcess.GetProcessOutput(options);
 
-        string errorOutput = result.StandardError;
-        
-        // Build expected output
         StringBuilder expected = new();
         for (int i = 1; i <= 1000; i++)
         {
             expected.AppendLine(OperatingSystem.IsWindows() ? $"Error {i} " : $"Error {i}");
         }
         
-        Assert.Equal(expected.ToString(), errorOutput, ignoreLineEndingDifferences: true);
+        Assert.Equal(expected.ToString(), result.StandardError);
         Assert.Empty(result.StandardOutput);
         Assert.Equal(0, result.ExitCode);
     }
@@ -157,33 +146,28 @@ public class ProcessOutputTests
             ? await ChildProcess.GetProcessOutputAsync(options)
             : ChildProcess.GetProcessOutput(options);
 
-        string stdOut = result.StandardOutput;
-        string stdErr = result.StandardError;
-        
-        // Verify stdout contains only OUT messages
-        Assert.Contains("OUT1", stdOut);
-        Assert.Contains("OUT2", stdOut);
-        Assert.DoesNotContain("ERR1", stdOut);
-        Assert.DoesNotContain("ERR2", stdOut);
-        
-        // Verify stderr contains only ERR messages
-        Assert.Contains("ERR1", stdErr);
-        Assert.Contains("ERR2", stdErr);
-        Assert.DoesNotContain("OUT1", stdErr);
-        Assert.DoesNotContain("OUT2", stdErr);
+        Assert.Equal(OperatingSystem.IsWindows() ? "OUT1 \r\nOUT2 \r\n" : "OUT1\nOUT2\n", result.StandardOutput);
+        Assert.Equal(OperatingSystem.IsWindows() ? "ERR1  \r\nERR2 \r\n" : "ERR1\nERR2\n", result.StandardError);
+        Assert.Equal(0, result.ExitCode);
     }
 
-    [Fact]
-    public void ProcessOutput_WithTimeout_CompletesBeforeTimeout()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ProcessOutput_WithTimeout_CompletesBeforeTimeout(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Quick output" } }
             : new("sh") { Arguments = { "-c", "echo 'Quick output'" } };
 
-        ProcessOutput result = ChildProcess.GetProcessOutput(options, timeout: TimeSpan.FromSeconds(5));
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(5));
+        Stopwatch started = Stopwatch.StartNew();
+        ProcessOutput result = useAsync
+            ? await ChildProcess.GetProcessOutputAsync(options, cancellationToken: cts.Token)
+            : ChildProcess.GetProcessOutput(options, timeout: TimeSpan.FromSeconds(5));
 
-        string output = result.StandardOutput;
-        Assert.Contains("Quick output", output);
+        Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+        Assert.Equal(OperatingSystem.IsWindows() ? "Quick output\r\n" : "Quick output\n", result.StandardOutput);
         Assert.Empty(result.StandardError);
         Assert.Equal(0, result.ExitCode);
     }
@@ -204,8 +188,10 @@ public class ProcessOutputTests
 
         using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
 
+        Stopwatch started = Stopwatch.StartNew();
         Assert.Throws<TimeoutException>(() =>
             ChildProcess.GetProcessOutput(options, input: inputHandle, timeout: TimeSpan.FromMilliseconds(500)));
+        Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1));
     }
 
     [Fact]
@@ -230,12 +216,13 @@ public class ProcessOutputTests
         // Accept either OperationCanceledException or TaskCanceledException (which derives from it)
         var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
             await ChildProcess.GetProcessOutputAsync(options, input: inputHandle, cancellationToken: cts.Token));
-
-        Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(5));
+        Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1));
     }
 
-    [Fact]
-    public void ProcessOutput_WithInfiniteTimeout_Waits()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ProcessOutput_WithInfiniteTimeout_Waits(bool useAsync)
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
@@ -248,10 +235,13 @@ public class ProcessOutputTests
             ? new("cmd") { Arguments = { "/c", "timeout /t 3 /nobreak" } }
             : new("sh") { Arguments = { "-c", "sleep 3 && echo 'Waiting done'" } };
 
-        ProcessOutput result = ChildProcess.GetProcessOutput(options, input: Console.OpenStandardInputHandle(), timeout: Timeout.InfiniteTimeSpan);
+        Stopwatch started = Stopwatch.StartNew();
+        ProcessOutput result = useAsync
+            ? await ChildProcess.GetProcessOutputAsync(options, input: Console.OpenStandardInputHandle())
+            : ChildProcess.GetProcessOutput(options, input: Console.OpenStandardInputHandle(), timeout: Timeout.InfiniteTimeSpan);
 
-        string output = result.StandardOutput;
-        Assert.True(output.Contains("Waiting") || output.Contains("done"));
+        Assert.InRange(started.Elapsed, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4));
+        Assert.Contains("Waiting", result.StandardOutput);
     }
 
     [Fact]
@@ -262,19 +252,14 @@ public class ProcessOutputTests
             : new("sh") { Arguments = { "-c", "echo 'Concurrent test'" } };
 
         // Run multiple concurrent operations
-        Task<ProcessOutput>[] tasks = new Task<ProcessOutput>[10];
-        for (int i = 0; i < tasks.Length; i++)
-        {
-            tasks[i] = ChildProcess.GetProcessOutputAsync(options);
-        }
+        Task<ProcessOutput>[] tasks = Enumerable.Range(0, 10).Select(_ => ChildProcess.GetProcessOutputAsync(options)).ToArray();
 
         ProcessOutput[] results = await Task.WhenAll(tasks);
 
         // Verify all completed successfully
         foreach (var result in results)
         {
-            string output = result.StandardOutput;
-            Assert.Contains("Concurrent test", output);
+            Assert.Equal(OperatingSystem.IsWindows() ? "Concurrent test\r\n" : "Concurrent test\n", result.StandardOutput);
             Assert.Empty(result.StandardError);
             Assert.Equal(0, result.ExitCode);
         }
@@ -294,7 +279,7 @@ public class ProcessOutputTests
             : ChildProcess.GetProcessOutput(options);
 
         Assert.Empty(result.StandardOutput);
-        Assert.Contains("Only stderr", result.StandardError);
+        Assert.Equal(OperatingSystem.IsWindows() ? "Only stderr \r\n" : "Only stderr\n", result.StandardError);
         Assert.Equal(0, result.ExitCode);
     }
 
@@ -311,7 +296,7 @@ public class ProcessOutputTests
             ? await ChildProcess.GetProcessOutputAsync(options)
             : ChildProcess.GetProcessOutput(options);
 
-        Assert.Contains("Only stdout", result.StandardOutput);
+        Assert.Equal(OperatingSystem.IsWindows() ? "Only stdout\r\n" : "Only stdout\n", result.StandardOutput);
         Assert.Empty(result.StandardError);
         Assert.Equal(0, result.ExitCode);
     }
@@ -331,5 +316,6 @@ public class ProcessOutputTests
 
         // ProcessId should be a positive number
         Assert.True(result.ProcessId > 0);
+        Assert.Equal(0, result.ExitCode);
     }
 }
