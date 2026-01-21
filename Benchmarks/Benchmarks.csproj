@@ -6,6 +6,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>preview</LangVersion>
+    <NoWarn>$(NoWarn);CA1822;IDE0063</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

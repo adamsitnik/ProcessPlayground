@@ -312,8 +312,7 @@ public static partial class ChildProcess
         SafeFileHandle? write = null;
         TimeoutHelper timeoutHelper = TimeoutHelper.Start(timeout);
 
-#if WINDOWS
-        if (timeoutHelper.CanExpire)
+        if (OperatingSystem.IsWindows() && timeoutHelper.CanExpire)
         {
             // We open ASYNC read handle and sync write handle to allow for cancellation for timeout.
             File.CreateNamedPipe(out read, out write);
@@ -322,9 +321,6 @@ public static partial class ChildProcess
         {
             File.CreateAnonymousPipe(out read, out write);
         }
-#else
-        File.CreateAnonymousPipe(out read, out write);
-#endif
 
         using (read)
         using (write)
@@ -393,15 +389,17 @@ public static partial class ChildProcess
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        SafeFileHandle? read = null;
-        SafeFileHandle? write = null;
+        SafeFileHandle read, write;
 
-#if WINDOWS
-        // We open ASYNC read handle and sync write handle to allow for cancellation.
-        File.CreateNamedPipe(out read, out write);
-#else
-        File.CreateAnonymousPipe(out read, out write);
-#endif
+        if (OperatingSystem.IsWindows())
+        {
+            // We open ASYNC read handle and sync write handle to allow for cancellation.
+            File.CreateNamedPipe(out read, out write);
+        }
+        else
+        {
+            File.CreateAnonymousPipe(out read, out write);
+        }
 
         using (read)
         using (write)
@@ -438,6 +436,7 @@ public static partial class ChildProcess
                 {
                     exitCode = await processHandle.WaitForExitAsync(cancellationToken);
                 }
+
                 return new(exitCode, resultBuffer, processId);
             }
             finally

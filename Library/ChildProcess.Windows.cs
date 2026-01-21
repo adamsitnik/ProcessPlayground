@@ -1,12 +1,9 @@
-﻿using System;
-using System.Threading;
+﻿using System.Threading;
 using Microsoft.Win32.SafeHandles;
 using System.Buffers;
 using System.Text;
 
 namespace System.TBA;
-
-#pragma warning disable CA1416 // Validate platform compatibility
 
 public static partial class ChildProcess
 {
