@@ -8,12 +8,12 @@ public readonly struct ProcessOutput
     public int ExitCode { get; }
 
     /// <summary>
-    /// Gets the underlying sequence of bytes representing standard output.
+    /// Gets the decoded string content written to standard output.
     /// </summary>
     public string StandardOutput { get; }
 
     /// <summary>
-    /// Gets the underlying sequence of bytes representing standard error.
+    /// Gets the decoded string content written to standard error.
     /// </summary>
     public string StandardError { get; }
 

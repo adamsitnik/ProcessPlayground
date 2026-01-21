@@ -147,7 +147,7 @@ public static partial class ChildProcess
     /// <param name="timeout">An optional timeout that specifies the maximum duration to wait for the process to complete. If null, the
     /// process will wait indefinitely.</param>
     /// <returns>A <see cref="ProcessOutput" /> object containing the process's exit code, id, standard output and standard error data.</returns>
-    /// <remarks>Use <see cref="Console.OpenStandardInput()"/> to provide input of the process.</remarks>
+    /// <remarks>Use <see cref="Console.OpenStandardInputHandle()"/> to provide input of the process.</remarks>
     public static ProcessOutput CaptureOutput(ProcessStartOptions options, Encoding? encoding = null, SafeFileHandle? input = null, TimeSpan? timeout = null)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -171,8 +171,7 @@ public static partial class ChildProcess
         using (writeStdOut)
         using (readStdErr)
         using (writeStdErr)
-        using (SafeFileHandle inputHandle = input ?? File.OpenNullFileHandle())
-        using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, inputHandle, output: writeStdOut, error: writeStdErr))
+        using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input, output: writeStdOut, error: writeStdErr))
         {
             int outputBytesRead = 0, errorBytesRead = 0;
 
@@ -212,7 +211,7 @@ public static partial class ChildProcess
     /// <param name="input">An optional handle to a file that provides input to the process's standard input stream. If null, no input is provided.</param>
     /// <param name="cancellationToken">A cancellation token to cancel the operation.</param>
     /// <returns>A <see cref="ProcessOutput" /> object containing the process's exit code, id, standard output and standard error data.</returns>
-    /// <remarks>Use <see cref="Console.OpenStandardInput()"/> to provide input of the process.</remarks>
+    /// <remarks>Use <see cref="Console.OpenStandardInputHandle()"/> to provide input of the process.</remarks>
     public static async Task<ProcessOutput> CaptureOutputAsync(ProcessStartOptions options, Encoding? encoding = null, SafeFileHandle? input = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);

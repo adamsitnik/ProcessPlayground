@@ -216,7 +216,7 @@ public class ProcessOutputTests
         Stopwatch started = Stopwatch.StartNew();
 
         // Accept either OperationCanceledException or TaskCanceledException (which derives from it)
-        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
             await ChildProcess.CaptureOutputAsync(options, input: inputHandle, cancellationToken: cts.Token));
         Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1));
     }
