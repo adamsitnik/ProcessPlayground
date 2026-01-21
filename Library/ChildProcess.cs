@@ -148,7 +148,7 @@ public static partial class ChildProcess
     /// process will wait indefinitely.</param>
     /// <returns>A <see cref="ProcessOutput" /> object containing the process's exit code, id, standard output and standard error data.</returns>
     /// <remarks>Use <see cref="Console.OpenStandardInput()"/> to provide input of the process.</remarks>
-    public static ProcessOutput GetProcessOutput(ProcessStartOptions options, Encoding? encoding = null, SafeFileHandle? input = null, TimeSpan? timeout = null)
+    public static ProcessOutput CaptureOutput(ProcessStartOptions options, Encoding? encoding = null, SafeFileHandle? input = null, TimeSpan? timeout = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -187,7 +187,7 @@ public static partial class ChildProcess
     /// <param name="cancellationToken">A cancellation token to cancel the operation.</param>
     /// <returns>A <see cref="ProcessOutput" /> object containing the process's exit code, id, standard output and standard error data.</returns>
     /// <remarks>Use <see cref="Console.OpenStandardInput()"/> to provide input of the process.</remarks>
-    public static async Task<ProcessOutput> GetProcessOutputAsync(ProcessStartOptions options, Encoding? encoding = null, SafeFileHandle? input = null, CancellationToken cancellationToken = default)
+    public static async Task<ProcessOutput> CaptureOutputAsync(ProcessStartOptions options, Encoding? encoding = null, SafeFileHandle? input = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
 

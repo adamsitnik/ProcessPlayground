@@ -67,7 +67,7 @@ public class ReadBoth
             Arguments = { "--help" },
         };
 
-        ProcessOutput processOutput = ChildProcess.GetProcessOutput(info);
+        ProcessOutput processOutput = ChildProcess.CaptureOutput(info);
         return processOutput.ExitCode ^ (processOutput.StandardOutput.Length + processOutput.StandardError.Length);
     }
 
@@ -79,7 +79,7 @@ public class ReadBoth
             Arguments = { "--help" },
         };
 
-        ProcessOutput processOutput = await ChildProcess.GetProcessOutputAsync(info);
+        ProcessOutput processOutput = await ChildProcess.CaptureOutputAsync(info);
         return processOutput.ExitCode ^ (processOutput.StandardOutput.Length + processOutput.StandardError.Length);
     }
 }
