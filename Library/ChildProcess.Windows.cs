@@ -60,13 +60,9 @@ public static partial class ChildProcess
         }
     }
 
-    private static ProcessOutput GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout, Encoding encoding)
+    private static void GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout,
+        ref int outputBytesRead, ref int errorBytesRead, ref byte[] outputBuffer, ref byte[] errorBuffer)
     {
-        int outputBytesRead = 0, errorBytesRead = 0;
-
-        byte[] outputBuffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
-        byte[] errorBuffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
-
         MemoryHandle outputPin = outputBuffer.AsMemory().Pin();
         MemoryHandle errorPin = errorBuffer.AsMemory().Pin();
 
@@ -144,25 +140,11 @@ public static partial class ChildProcess
                     throw new InvalidOperationException($"Unexpected wait result: {waitResult}.");
                 }
             }
-
-            if (!processHandle.TryGetExitCode(out int exitCode))
-            {
-                exitCode = processHandle.WaitForExit(timeout.GetRemainingOrThrow());
-            }
-
-            // Instead of decoding on the fly, we decode once at the end.
-            string output = encoding.GetString(outputBuffer, 0, outputBytesRead);
-            string error = encoding.GetString(errorBuffer, 0, errorBytesRead);
-
-            return new(exitCode, output, error, processHandle.ProcessId);
         }
         finally
         {
             outputPin.Dispose();
             errorPin.Dispose();
-
-            ArrayPool<byte>.Shared.Return(outputBuffer);
-            ArrayPool<byte>.Shared.Return(errorBuffer);
         }
     }
 

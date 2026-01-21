@@ -174,7 +174,33 @@ public static partial class ChildProcess
         using (SafeFileHandle inputHandle = input ?? File.OpenNullFileHandle())
         using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, inputHandle, output: writeStdOut, error: writeStdErr))
         {
-            return GetProcessOutputCore(processHandle, readStdOut, readStdErr, timeoutHelper, encoding ?? Encoding.UTF8);
+            int outputBytesRead = 0, errorBytesRead = 0;
+
+            byte[] outputBuffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
+            byte[] errorBuffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
+
+            try
+            {
+                GetProcessOutputCore(processHandle, readStdOut, readStdErr, timeoutHelper,
+                    ref outputBytesRead, ref errorBytesRead, ref outputBuffer, ref errorBuffer);
+
+                if (!processHandle.TryGetExitCode(out int exitCode))
+                {
+                    exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow());
+                }
+
+                // Instead of decoding on the fly, we decode once at the end.
+                encoding ??= Encoding.UTF8;
+                string output = encoding.GetString(outputBuffer, 0, outputBytesRead);
+                string error = encoding.GetString(errorBuffer, 0, errorBytesRead);
+
+                return new(exitCode, output, error, processHandle.ProcessId);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(outputBuffer);
+                ArrayPool<byte>.Shared.Return(errorBuffer);
+            }
         }
     }
 
@@ -209,8 +235,7 @@ public static partial class ChildProcess
         using (writeStdOut)
         using (readStdErr)
         using (writeStdErr)
-        using (SafeFileHandle inputHandle = input ?? File.OpenNullFileHandle())
-        using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, inputHandle, output: writeStdOut, error: writeStdErr))
+        using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input, output: writeStdOut, error: writeStdErr))
         using (Stream outputStream = StreamHelper.CreateReadStream(readStdOut, cancellationToken))
         using (Stream errorStream = StreamHelper.CreateReadStream(readStdErr, cancellationToken))
         {
@@ -256,23 +281,11 @@ public static partial class ChildProcess
                     }
                     else
                     {
-                        if (isError)
-                        {
-                            errorStream.Close();
+                        (isError ? errorStream : outputStream).Close();
 
-                            if (tasks.Length == 2)
-                            {
-                                tasks = [outputRead];
-                            }
-                        }
-                        else
+                        if (tasks.Length == 2)
                         {
-                            outputStream.Close();
-
-                            if (tasks.Length == 2)
-                            {
-                                tasks = [errorRead];
-                            }
+                            tasks = [(isError ? outputRead : errorRead)];
                         }
                     }
                 }
