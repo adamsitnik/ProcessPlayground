@@ -145,7 +145,6 @@ public static partial class ChildProcess
                 }
             }
 
-
             if (!processHandle.TryGetExitCode(out int exitCode))
             {
                 exitCode = processHandle.WaitForExit(timeout.GetRemainingOrThrow());

@@ -41,6 +41,11 @@ internal sealed class CancellableAsyncPipeStream : Stream
 
     public override long Position { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
 
+    public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken = default)
+    {
+        return _socket.ReceiveAsync(new Memory<byte>(buffer, offset, count), cancellationToken).AsTask();
+    }
+
     public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
     {
         return _socket.ReceiveAsync(buffer, cancellationToken);
