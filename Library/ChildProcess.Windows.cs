@@ -1,11 +1,9 @@
-﻿using System;
-using System.Threading;
+﻿using System.Threading;
 using Microsoft.Win32.SafeHandles;
 using System.Buffers;
+using System.Text;
 
 namespace System.TBA;
-
-#pragma warning disable CA1416 // Validate platform compatibility
 
 public static partial class ChildProcess
 {
@@ -59,6 +57,94 @@ public static partial class ChildProcess
         finally
         {
             ArrayPool<byte>.Shared.Return(array);
+        }
+    }
+
+    private static void GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout,
+        ref int outputBytesRead, ref int errorBytesRead, ref byte[] outputBuffer, ref byte[] errorBuffer)
+    {
+        MemoryHandle outputPin = outputBuffer.AsMemory().Pin();
+        MemoryHandle errorPin = errorBuffer.AsMemory().Pin();
+
+        try
+        {
+            using OverlappedContext outputContext = OverlappedContext.Allocate();
+            using OverlappedContext errorContext = OverlappedContext.Allocate();
+
+            // First of all, we need to drain STD OUT and ERR pipes.
+            // We don't optimize for reading one (when other is closed).
+            // This is a rare scenario, as they are usually both closed at the end of process lifetime.
+            WaitHandle[] waitHandles = [outputContext.WaitHandle, errorContext.WaitHandle];
+
+            unsafe
+            {
+                // Issue first reads.
+                Interop.Kernel32.ReadFile(readStdOut, (byte*)outputPin.Pointer, outputBuffer.Length, IntPtr.Zero, outputContext.GetOverlapped());
+                Interop.Kernel32.ReadFile(readStdErr, (byte*)errorPin.Pointer, errorBuffer.Length, IntPtr.Zero, errorContext.GetOverlapped());
+            }
+
+            while (!readStdOut.IsClosed || !readStdErr.IsClosed)
+            {
+                int waitResult = WaitHandle.WaitAny(waitHandles, timeout.GetRemainingMillisecondsOrThrow());
+
+                if (waitResult == WaitHandle.WaitTimeout)
+                {
+                    throw new TimeoutException("Timed out waiting for process OUT and ERR.");
+                }
+                else if (waitResult is 0 or 1)
+                {
+                    bool isError = waitResult == 1;
+
+                    OverlappedContext currentContext = isError ? errorContext : outputContext;
+                    SafeFileHandle currentFileHandle = isError ? readStdErr : readStdOut;
+                    ref int totalBytesRead = ref (isError ? ref errorBytesRead : ref outputBytesRead);
+                    ref byte[] currentBuffer = ref (isError ? ref errorBuffer : ref outputBuffer);
+
+                    int bytesRead = currentContext.GetOverlappedResult(currentFileHandle);
+                    if (bytesRead > 0)
+                    {
+                        totalBytesRead += bytesRead;
+
+                        if (totalBytesRead == currentBuffer.Length)
+                        {
+                            ref MemoryHandle currentPin = ref (isError ? ref errorPin : ref outputPin);
+                            currentPin.Dispose();
+
+                            BufferHelper.RentLargerBuffer(ref currentBuffer);
+
+                            currentPin = currentBuffer.AsMemory().Pin();
+                        }
+
+                        unsafe
+                        {
+                            void* pinPointer = isError ? errorPin.Pointer : outputPin.Pointer;
+                            int sliceLength = currentBuffer.Length - totalBytesRead;
+                            byte* targetPointer = (byte*)pinPointer + totalBytesRead;
+
+                            Interop.Kernel32.ReadFile(currentFileHandle, targetPointer, sliceLength, IntPtr.Zero, currentContext.GetOverlapped());
+                        }
+                    }
+                    else
+                    {
+                        if (!currentFileHandle.IsClosed)
+                        {
+                            // Close the handle to stop further reads.
+                            currentFileHandle.Close();
+                            // And reset the wait handle to avoid triggering on closed handle.
+                            currentContext.WaitHandle.Reset();
+                        }
+                    }
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Unexpected wait result: {waitResult}.");
+                }
+            }
+        }
+        finally
+        {
+            outputPin.Dispose();
+            errorPin.Dispose();
         }
     }
 

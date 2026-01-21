@@ -8,31 +8,12 @@ using System.Buffers;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
+using static System.TBA.PollHelper;
 
 namespace System.TBA;
 
 public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, IEnumerable<ProcessOutputLine>
 {
-    // P/Invoke declarations for poll
-    [StructLayout(LayoutKind.Sequential)]
-    private struct PollFd
-    {
-        public int fd;
-        public short events;
-        public short revents;
-    }
-
-    private const short POLLIN = 0x0001;
-    private const short POLLHUP = 0x0010;
-    private const short POLLERR = 0x0008;
-    private const int EINTR = 4; // Interrupted system call
-
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe int poll(PollFd* fds, nuint nfds, int timeout);
-
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe nint read(int fd, byte* buf, nuint count);
-
     public IEnumerator<ProcessOutputLine> GetEnumerator()
     {
         // NOTE: we could get current console Encoding here, it's omitted for the sake of simplicity of the proof of concept.

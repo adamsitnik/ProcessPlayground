@@ -139,6 +139,176 @@ public static partial class ChildProcess
     }
 
     /// <summary>
+    /// Starts a process with the specified options and returns the standard output and error.
+    /// </summary>
+    /// <param name="options">The configuration options used to start the process. Cannot be null.</param>
+    /// <param name="encoding">The encoding to use when reading the output. If null, the default encoding is used (UTF-8).</param>
+    /// <param name="input">An optional handle to a file that provides input to the process's standard input stream. If null, no input is provided.</param>
+    /// <param name="timeout">An optional timeout that specifies the maximum duration to wait for the process to complete. If null, the
+    /// process will wait indefinitely.</param>
+    /// <returns>A <see cref="ProcessOutput" /> object containing the process's exit code, id, standard output and standard error data.</returns>
+    /// <remarks>Use <see cref="Console.OpenStandardInputHandle()"/> to provide input of the process.</remarks>
+    public static ProcessOutput CaptureOutput(ProcessStartOptions options, Encoding? encoding = null, SafeFileHandle? input = null, TimeSpan? timeout = null)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        SafeFileHandle readStdOut, writeStdOut, readStdErr, writeStdErr;
+        TimeoutHelper timeoutHelper = TimeoutHelper.Start(timeout);
+
+        if (OperatingSystem.IsWindows())
+        {
+            // We open ASYNC read handles to allow for cancellation for timeout.
+            File.CreateNamedPipe(out readStdOut, out writeStdOut);
+            File.CreateNamedPipe(out readStdErr, out writeStdErr);
+        }
+        else
+        {
+            File.CreateAnonymousPipe(out readStdOut, out writeStdOut);
+            File.CreateAnonymousPipe(out readStdErr, out writeStdErr);
+        }
+
+        using (readStdOut)
+        using (writeStdOut)
+        using (readStdErr)
+        using (writeStdErr)
+        using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input, output: writeStdOut, error: writeStdErr))
+        {
+            int outputBytesRead = 0, errorBytesRead = 0;
+
+            byte[] outputBuffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
+            byte[] errorBuffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
+
+            try
+            {
+                GetProcessOutputCore(processHandle, readStdOut, readStdErr, timeoutHelper,
+                    ref outputBytesRead, ref errorBytesRead, ref outputBuffer, ref errorBuffer);
+
+                if (!processHandle.TryGetExitCode(out int exitCode))
+                {
+                    exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow());
+                }
+
+                // Instead of decoding on the fly, we decode once at the end.
+                encoding ??= Encoding.UTF8;
+                string output = encoding.GetString(outputBuffer, 0, outputBytesRead);
+                string error = encoding.GetString(errorBuffer, 0, errorBytesRead);
+
+                return new(exitCode, output, error, processHandle.ProcessId);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(outputBuffer);
+                ArrayPool<byte>.Shared.Return(errorBuffer);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Starts a process with the specified options and returns the standard output and error.
+    /// </summary>
+    /// <param name="options">The configuration options used to start the process. Cannot be null.</param>
+    /// <param name="encoding">The encoding to use when reading the output. If null, the default encoding is used (UTF-8).</param>
+    /// <param name="input">An optional handle to a file that provides input to the process's standard input stream. If null, no input is provided.</param>
+    /// <param name="cancellationToken">A cancellation token to cancel the operation.</param>
+    /// <returns>A <see cref="ProcessOutput" /> object containing the process's exit code, id, standard output and standard error data.</returns>
+    /// <remarks>Use <see cref="Console.OpenStandardInputHandle()"/> to provide input of the process.</remarks>
+    public static async Task<ProcessOutput> CaptureOutputAsync(ProcessStartOptions options, Encoding? encoding = null, SafeFileHandle? input = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        SafeFileHandle readStdOut, writeStdOut, readStdErr, writeStdErr;
+
+        if (OperatingSystem.IsWindows())
+        {
+            // We open ASYNC read handles to allow for cancellation for timeout.
+            File.CreateNamedPipe(out readStdOut, out writeStdOut);
+            File.CreateNamedPipe(out readStdErr, out writeStdErr);
+        }
+        else
+        {
+            File.CreateAnonymousPipe(out readStdOut, out writeStdOut);
+            File.CreateAnonymousPipe(out readStdErr, out writeStdErr);
+        }
+
+        using (readStdOut)
+        using (writeStdOut)
+        using (readStdErr)
+        using (writeStdErr)
+        using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input, output: writeStdOut, error: writeStdErr))
+        using (Stream outputStream = StreamHelper.CreateReadStream(readStdOut, cancellationToken))
+        using (Stream errorStream = StreamHelper.CreateReadStream(readStdErr, cancellationToken))
+        {
+            byte[] outputBuffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
+            byte[] errorBuffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
+
+            int outputStartIndex = 0, errorStartIndex = 0;
+
+            Task<int> outputRead = outputStream.ReadAsync(outputBuffer, outputStartIndex, outputBuffer.Length - outputStartIndex, cancellationToken);
+            Task<int> errorRead = errorStream.ReadAsync(errorBuffer, errorStartIndex, errorBuffer.Length - errorStartIndex, cancellationToken);
+
+            Task<int>[] tasks = [outputRead, errorRead];
+
+            try
+            {
+                while (!readStdOut.IsClosed || !readStdErr.IsClosed)
+                {
+                    Task<int> finished = await Task.WhenAny(tasks);
+                    bool isError = finished == errorRead;
+
+                    int bytesRead = await finished;
+                    if (bytesRead > 0)
+                    {
+                        if (isError)
+                        {
+                            errorStartIndex += bytesRead;
+                            if (errorStartIndex == errorBuffer.Length)
+                            {
+                                BufferHelper.RentLargerBuffer(ref errorBuffer);
+                            }
+                            // The tasks array may get resized, so we refer to error as last element.
+                            tasks[^1] = errorRead = errorStream.ReadAsync(errorBuffer, errorStartIndex, errorBuffer.Length - errorStartIndex, cancellationToken);
+                        }
+                        else
+                        {
+                            outputStartIndex += bytesRead;
+                            if (outputStartIndex == outputBuffer.Length)
+                            {
+                                BufferHelper.RentLargerBuffer(ref outputBuffer);
+                            }
+                            tasks[0] = outputRead = outputStream.ReadAsync(outputBuffer, outputStartIndex, outputBuffer.Length - outputStartIndex, cancellationToken);
+                        }
+                    }
+                    else
+                    {
+                        (isError ? errorStream : outputStream).Close();
+
+                        if (tasks.Length == 2)
+                        {
+                            tasks = [(isError ? outputRead : errorRead)];
+                        }
+                    }
+                }
+
+                if (!processHandle.TryGetExitCode(out int exitCode))
+                {
+                    exitCode = await processHandle.WaitForExitAsync(cancellationToken);
+                }
+
+                // Instead of decoding on the fly, we decode once at the end.
+                string output = (encoding ?? Encoding.UTF8).GetString(outputBuffer, 0, outputStartIndex);
+                string error = (encoding ?? Encoding.UTF8).GetString(errorBuffer, 0, errorStartIndex);
+
+                return new(exitCode, output, error, processHandle.ProcessId);
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(outputBuffer);
+                ArrayPool<byte>.Shared.Return(errorBuffer);
+            }
+        }
+    }
+
+    /// <summary>
     /// Starts a process with the specified options and returns the combined output, including both standard output and
     /// standard error streams.
     /// </summary>
@@ -156,8 +326,7 @@ public static partial class ChildProcess
         SafeFileHandle? write = null;
         TimeoutHelper timeoutHelper = TimeoutHelper.Start(timeout);
 
-#if WINDOWS
-        if (timeoutHelper.CanExpire)
+        if (OperatingSystem.IsWindows() && timeoutHelper.CanExpire)
         {
             // We open ASYNC read handle and sync write handle to allow for cancellation for timeout.
             File.CreateNamedPipe(out read, out write);
@@ -166,9 +335,6 @@ public static partial class ChildProcess
         {
             File.CreateAnonymousPipe(out read, out write);
         }
-#else
-        File.CreateAnonymousPipe(out read, out write);
-#endif
 
         using (read)
         using (write)
@@ -237,15 +403,17 @@ public static partial class ChildProcess
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        SafeFileHandle? read = null;
-        SafeFileHandle? write = null;
+        SafeFileHandle read, write;
 
-#if WINDOWS
-        // We open ASYNC read handle and sync write handle to allow for cancellation.
-        File.CreateNamedPipe(out read, out write);
-#else
-        File.CreateAnonymousPipe(out read, out write);
-#endif
+        if (OperatingSystem.IsWindows())
+        {
+            // We open ASYNC read handle and sync write handle to allow for cancellation.
+            File.CreateNamedPipe(out read, out write);
+        }
+        else
+        {
+            File.CreateAnonymousPipe(out read, out write);
+        }
 
         using (read)
         using (write)
@@ -282,6 +450,7 @@ public static partial class ChildProcess
                 {
                     exitCode = await processHandle.WaitForExitAsync(cancellationToken);
                 }
+
                 return new(exitCode, resultBuffer, processId);
             }
             finally
