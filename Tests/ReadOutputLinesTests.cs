@@ -25,14 +25,14 @@ public class ReadOutputLinesTests
 
         if (useAsync)
         {
-            await foreach (var line in ChildProcess.ReadOutputLines(options))
+            await foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options))
+            foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -59,14 +59,14 @@ public class ReadOutputLinesTests
 
         if (useAsync)
         {
-            await foreach (var line in ChildProcess.ReadOutputLines(options))
+            await foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options))
+            foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -97,14 +97,14 @@ public class ReadOutputLinesTests
 
         if (useAsync)
         {
-            await foreach (var line in ChildProcess.ReadOutputLines(options))
+            await foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options))
+            foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -126,14 +126,14 @@ public class ReadOutputLinesTests
 
         if (useAsync)
         {
-            await foreach (var line in ChildProcess.ReadOutputLines(options))
+            await foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options))
+            foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -160,14 +160,14 @@ public class ReadOutputLinesTests
 
         if (useAsync)
         {
-            await foreach (var line in ChildProcess.ReadOutputLines(options))
+            await foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options))
+            foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -205,14 +205,14 @@ public class ReadOutputLinesTests
 
         if (useAsync)
         {
-            await foreach (var line in ChildProcess.ReadOutputLines(options))
+            await foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options))
+            foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -238,14 +238,14 @@ public class ReadOutputLinesTests
 
         if (useAsync)
         {
-            await foreach (var line in ChildProcess.ReadOutputLines(options))
+            await foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options))
+            foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -266,7 +266,7 @@ public class ReadOutputLinesTests
             : new("sh") { Arguments = { "-c", "echo 'Quick output'" } };
 
         List<ProcessOutputLine> lines = [];
-        foreach (var line in ChildProcess.ReadOutputLines(options, timeout: TimeSpan.FromSeconds(5)))
+        foreach (var line in ChildProcess.StreamOutputLines(options, timeout: TimeSpan.FromSeconds(5)))
         {
             lines.Add(line);
         }
@@ -294,7 +294,7 @@ public class ReadOutputLinesTests
 
         Assert.Throws<TimeoutException>(() =>
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options, timeout: TimeSpan.FromMilliseconds(500)))
+            foreach (var line in ChildProcess.StreamOutputLines(options, timeout: TimeSpan.FromMilliseconds(500)))
             {
                 _ = line;
             }
@@ -324,7 +324,7 @@ public class ReadOutputLinesTests
         // Accept either OperationCanceledException or TaskCanceledException (which derives from it)
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
-            await foreach (var line in ChildProcess.ReadOutputLines(options).WithCancellation(cts.Token))
+            await foreach (var line in ChildProcess.StreamOutputLines(options).WithCancellation(cts.Token))
             {
                 _ = line;
             }
@@ -347,7 +347,7 @@ public class ReadOutputLinesTests
             tasks[i] = Task.Run(async () =>
             {
                 List<ProcessOutputLine> lines = [];
-                await foreach (var line in ChildProcess.ReadOutputLines(options))
+                await foreach (var line in ChildProcess.StreamOutputLines(options))
                 {
                     lines.Add(line);
                 }
@@ -379,14 +379,14 @@ public class ReadOutputLinesTests
 
         if (useAsync)
         {
-            await foreach (var line in ChildProcess.ReadOutputLines(options))
+            await foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options))
+            foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -417,14 +417,14 @@ public class ReadOutputLinesTests
 
         if (useAsync)
         {
-            await foreach (var line in ChildProcess.ReadOutputLines(options))
+            await foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options))
+            foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lines.Add(line);
             }
@@ -447,7 +447,7 @@ public class ReadOutputLinesTests
 
         if (useAsync)
         {
-            await foreach (var line in ChildProcess.ReadOutputLines(options))
+            await foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lineCount++;
                 Assert.Equal($"Line {lineCount}", line.Content.TrimEnd(' '));
@@ -455,7 +455,7 @@ public class ReadOutputLinesTests
         }
         else
         {
-            foreach (var line in ChildProcess.ReadOutputLines(options))
+            foreach (var line in ChildProcess.StreamOutputLines(options))
             {
                 lineCount++;
                 Assert.Equal($"Line {lineCount}", line.Content.TrimEnd(' '));
