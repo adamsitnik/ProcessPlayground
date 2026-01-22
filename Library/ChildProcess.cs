@@ -15,7 +15,7 @@ public static partial class ChildProcess
     /// <param name="timeout">The maximum time to wait for the process to exit.</param>
     /// <returns>The exit code of the process.</returns>
     /// <remarks>When <paramref name="timeout"/> is not specified, the default is to wait indefinitely.</remarks>
-    public static int Execute(ProcessStartOptions options, TimeSpan? timeout = default)
+    public static int Inherit(ProcessStartOptions options, TimeSpan? timeout = default)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -34,7 +34,7 @@ public static partial class ChildProcess
     /// </summary>
     /// <param name="cancellationToken">The cancellation token to cancel the operation.</param>
     /// <returns>The exit code of the process.</returns>
-    public static async Task<int> ExecuteAsync(ProcessStartOptions options, CancellationToken cancellationToken = default)
+    public static async Task<int> InheritAsync(ProcessStartOptions options, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -131,7 +131,7 @@ public static partial class ChildProcess
     /// <param name="timeout">The timeout to use when reading the output. If null, no timeout is applied.</param>
     /// <param name="encoding">The encoding to use when reading the output. If null, the default encoding is used.</param>
     /// <returns>An instance of <see cref="ProcessOutputLines"/> ready to be enumerated.</returns>
-    public static ProcessOutputLines ReadOutputLines(ProcessStartOptions options, TimeSpan? timeout = null, Encoding? encoding = null)
+    public static ProcessOutputLines StreamOutputLines(ProcessStartOptions options, TimeSpan? timeout = null, Encoding? encoding = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -318,7 +318,7 @@ public static partial class ChildProcess
     /// process will wait indefinitely.</param>
     /// <returns>A <see cref="CombinedOutput" /> object containing the process's exit code, id, standard output and standard error data.</returns>
     /// <remarks>Use <see cref="Console.OpenStandardInput()"/> to provide input of the process.</remarks>
-    public static CombinedOutput GetCombinedOutput(ProcessStartOptions options, SafeFileHandle? input = null, TimeSpan? timeout = null)
+    public static CombinedOutput CaptureCombined(ProcessStartOptions options, SafeFileHandle? input = null, TimeSpan? timeout = null)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -399,7 +399,7 @@ public static partial class ChildProcess
     /// <param name="cancellationToken">A cancellation token to cancel the operation.</param>
     /// <returns>A <see cref="CombinedOutput" /> object containing the process's exit code, id, standard output and standard error data.</returns>
     /// <remarks>Use <see cref="Console.OpenStandardInput()"/> to provide input of the process.</remarks>
-    public static async Task<CombinedOutput> GetCombinedOutputAsync(ProcessStartOptions options, SafeFileHandle? input = null, CancellationToken cancellationToken = default)
+    public static async Task<CombinedOutput> CaptureCombinedAsync(ProcessStartOptions options, SafeFileHandle? input = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
 

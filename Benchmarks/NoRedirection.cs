@@ -49,7 +49,7 @@ public class NoRedirection
             Arguments = { "--help" },
         };
 
-        return ChildProcess.Execute(info);
+        return ChildProcess.Inherit(info);
     }
 
     [Benchmark]
@@ -60,7 +60,7 @@ public class NoRedirection
             Arguments = { "--help" },
         };
 
-        return ChildProcess.ExecuteAsync(info);
+        return ChildProcess.InheritAsync(info);
     }
 
     [GlobalSetup(Targets = new string[2] { nameof(New_Resolved), nameof(NewAsync_Resolved) })]
@@ -71,8 +71,8 @@ public class NoRedirection
     }
 
     [Benchmark]
-    public int New_Resolved() => ChildProcess.Execute(_resolved);
+    public int New_Resolved() => ChildProcess.Inherit(_resolved);
 
     [Benchmark]
-    public Task<int> NewAsync_Resolved() => ChildProcess.ExecuteAsync(_resolved);
+    public Task<int> NewAsync_Resolved() => ChildProcess.InheritAsync(_resolved);
 }

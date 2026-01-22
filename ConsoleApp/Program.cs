@@ -6,7 +6,7 @@ using System.Diagnostics;
 
 ProcessStartOptions info = new("pwd");
 
-int exitCode = await ChildProcess.ExecuteAsync(info);
+int exitCode = await ChildProcess.InheritAsync(info);
 Console.WriteLine(exitCode);
 
 static void LongRunningWithTimeout()
@@ -17,7 +17,7 @@ static void LongRunningWithTimeout()
         KillOnParentDeath = true,
     };
 
-    int exitCode = ChildProcess.Execute(info, TimeSpan.FromSeconds(3));
+    int exitCode = ChildProcess.Inherit(info, TimeSpan.FromSeconds(3));
     Console.WriteLine($"Process exited with: {exitCode}");
 }
 
@@ -30,7 +30,7 @@ static async Task LongRunningWithTimeoutAsync()
     };
 
     using CancellationTokenSource cts = new(TimeSpan.FromSeconds(3));
-    int exitCode = await ChildProcess.ExecuteAsync(info, cts.Token);
+    int exitCode = await ChildProcess.InheritAsync(info, cts.Token);
     Console.WriteLine($"Process exited with: {exitCode}");
 }
 
@@ -42,7 +42,7 @@ static void LongRunningWithCtrlC()
         KillOnParentDeath = true,
     };
 
-    int exitCode = ChildProcess.Execute(info);
+    int exitCode = ChildProcess.Inherit(info);
     Console.WriteLine($"Process exited with: {exitCode}");
 }
 
@@ -67,7 +67,7 @@ static void Execute()
         Arguments = { "--help" },
     };
 
-    int exitCode = ChildProcess.Execute(info);
+    int exitCode = ChildProcess.Inherit(info);
     Console.WriteLine($"Process exited with: {exitCode}");
 }
 
@@ -79,7 +79,7 @@ static async Task ExecuteAsync()
         Arguments = { "--help" },
     };
 
-    int exitCode = await ChildProcess.ExecuteAsync(info);
+    int exitCode = await ChildProcess.InheritAsync(info);
     Console.WriteLine($"Process exited with: {exitCode}");
 }
 
@@ -113,7 +113,7 @@ static async Task StreamAsync()
         Arguments = { "--help" },
     };
 
-    var output = ChildProcess.ReadOutputLines(info);
+    var output = ChildProcess.StreamOutputLines(info);
     await foreach (var line in output)
     {
         if (line.StandardError)
@@ -157,7 +157,7 @@ static void StreamSync()
         Arguments = { "--help" },
     };
 
-    var output = ChildProcess.ReadOutputLines(info);
+    var output = ChildProcess.StreamOutputLines(info);
     foreach (var line in output)
     {
         if (line.StandardError)
@@ -181,7 +181,7 @@ static async Task StreamLongRunningWithTimeoutAsync()
     };
 
     using CancellationTokenSource cts = new(TimeSpan.FromSeconds(3));
-    await foreach (var line in ChildProcess.ReadOutputLines(info).WithCancellation(cts.Token))
+    await foreach (var line in ChildProcess.StreamOutputLines(info).WithCancellation(cts.Token))
     {
         Console.WriteLine(line.Content);
     }

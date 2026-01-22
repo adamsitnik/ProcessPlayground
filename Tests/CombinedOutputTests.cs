@@ -23,8 +23,8 @@ public class CombinedOutputTests
             : new("sh") { Arguments = { "-c", "echo 'Hello from stdout' && echo 'Error from stderr' >&2" } };
 
         CombinedOutput result = useAsync
-            ? await ChildProcess.GetCombinedOutputAsync(options)
-            : ChildProcess.GetCombinedOutput(options);
+            ? await ChildProcess.CaptureCombinedAsync(options)
+            : ChildProcess.CaptureCombined(options);
 
         string output = result.GetText();
         Assert.Contains("Hello from stdout", output);
@@ -42,8 +42,8 @@ public class CombinedOutputTests
             : new("sh") { Arguments = { "-c", "exit 42" } };
 
         CombinedOutput result = useAsync
-            ? await ChildProcess.GetCombinedOutputAsync(options)
-            : ChildProcess.GetCombinedOutput(options);
+            ? await ChildProcess.CaptureCombinedAsync(options)
+            : ChildProcess.CaptureCombined(options);
 
         Assert.Equal(42, result.ExitCode);
     }
@@ -58,8 +58,8 @@ public class CombinedOutputTests
             : new("sh") { Arguments = { "-c", "" } };
 
         CombinedOutput result = useAsync
-            ? await ChildProcess.GetCombinedOutputAsync(options)
-            : ChildProcess.GetCombinedOutput(options);
+            ? await ChildProcess.CaptureCombinedAsync(options)
+            : ChildProcess.CaptureCombined(options);
 
         Assert.True(result.Bytes.IsEmpty);
         Assert.Equal(0, result.ExitCode);
@@ -75,8 +75,8 @@ public class CombinedOutputTests
             : new("sh") { Arguments = { "-c", "# This is a comment that produces no output" } };
 
         CombinedOutput result = useAsync
-            ? await ChildProcess.GetCombinedOutputAsync(options)
-            : ChildProcess.GetCombinedOutput(options);
+            ? await ChildProcess.CaptureCombinedAsync(options)
+            : ChildProcess.CaptureCombined(options);
 
         Assert.True(result.Bytes.IsEmpty);
         Assert.Equal(0, result.ExitCode);
@@ -93,8 +93,8 @@ public class CombinedOutputTests
             : new("sh") { Arguments = { "-c", "for i in $(seq 1 1000); do echo \"Line $i\"; done" } };
 
         CombinedOutput result = useAsync
-            ? await ChildProcess.GetCombinedOutputAsync(options)
-            : ChildProcess.GetCombinedOutput(options);
+            ? await ChildProcess.CaptureCombinedAsync(options)
+            : ChildProcess.CaptureCombined(options);
 
         string output = result.GetText();
         
@@ -120,8 +120,8 @@ public class CombinedOutputTests
             : new("sh") { Arguments = { "-c", "echo OUT1 && echo ERR1 >&2 && echo OUT2 && echo ERR2 >&2" } };
 
         CombinedOutput result = useAsync
-            ? await ChildProcess.GetCombinedOutputAsync(options)
-            : ChildProcess.GetCombinedOutput(options);
+            ? await ChildProcess.CaptureCombinedAsync(options)
+            : ChildProcess.CaptureCombined(options);
 
         string output = result.GetText();
         
@@ -139,7 +139,7 @@ public class CombinedOutputTests
             ? new("cmd") { Arguments = { "/c", "echo Quick output" } }
             : new("sh") { Arguments = { "-c", "echo 'Quick output'" } };
 
-        CombinedOutput result = ChildProcess.GetCombinedOutput(options, timeout: TimeSpan.FromSeconds(5));
+        CombinedOutput result = ChildProcess.CaptureCombined(options, timeout: TimeSpan.FromSeconds(5));
 
         string output = result.GetText();
         Assert.Contains("Quick output", output);
@@ -163,7 +163,7 @@ public class CombinedOutputTests
         using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
 
         Assert.Throws<TimeoutException>(() =>
-            ChildProcess.GetCombinedOutput(options, input: inputHandle, timeout: TimeSpan.FromMilliseconds(500)));
+            ChildProcess.CaptureCombined(options, input: inputHandle, timeout: TimeSpan.FromMilliseconds(500)));
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public class CombinedOutputTests
 
         // Accept either OperationCanceledException or TaskCanceledException (which derives from it)
         var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-            await ChildProcess.GetCombinedOutputAsync(options, inputHandle, cancellationToken: cts.Token));
+            await ChildProcess.CaptureCombinedAsync(options, inputHandle, cancellationToken: cts.Token));
 
         Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(5));
     }
@@ -206,7 +206,7 @@ public class CombinedOutputTests
             ? new("cmd") { Arguments = { "/c", "timeout /t 3 /nobreak" } }
             : new("sh") { Arguments = { "-c", "sleep 3 && echo 'Waiting done'" } };
 
-        CombinedOutput result = ChildProcess.GetCombinedOutput(options, input: Console.OpenStandardInputHandle(), timeout: Timeout.InfiniteTimeSpan);
+        CombinedOutput result = ChildProcess.CaptureCombined(options, input: Console.OpenStandardInputHandle(), timeout: Timeout.InfiniteTimeSpan);
 
         string output = result.GetText();
         Assert.True(output.Contains("Waiting") || output.Contains("done"));
@@ -223,7 +223,7 @@ public class CombinedOutputTests
         Task<CombinedOutput>[] tasks = new Task<CombinedOutput>[10];
         for (int i = 0; i < tasks.Length; i++)
         {
-            tasks[i] = ChildProcess.GetCombinedOutputAsync(options);
+            tasks[i] = ChildProcess.CaptureCombinedAsync(options);
         }
 
         CombinedOutput[] results = await Task.WhenAll(tasks);

@@ -114,7 +114,7 @@ public class RedirectToPipe
             Arguments = { "--help" },
         };
 
-        var lines = ChildProcess.ReadOutputLines(info);
+        var lines = ChildProcess.StreamOutputLines(info);
         foreach (var line in lines)
         {
             // We don't re-print, so the benchmark focuses on reading only.
@@ -131,7 +131,7 @@ public class RedirectToPipe
             Arguments = { "--help" },
         };
 
-        CombinedOutput output = ChildProcess.GetCombinedOutput(info);
+        CombinedOutput output = ChildProcess.CaptureCombined(info);
         return output.ExitCode;
     }
 
@@ -143,7 +143,7 @@ public class RedirectToPipe
             Arguments = { "--help" },
         };
 
-        CombinedOutput output = ChildProcess.GetCombinedOutput(info, timeout: TimeSpan.FromSeconds(3));
+        CombinedOutput output = ChildProcess.CaptureCombined(info, timeout: TimeSpan.FromSeconds(3));
         return output.ExitCode;
     }
 
@@ -155,7 +155,7 @@ public class RedirectToPipe
             Arguments = { "--help" },
         };
 
-        CombinedOutput output = await ChildProcess.GetCombinedOutputAsync(info);
+        CombinedOutput output = await ChildProcess.CaptureCombinedAsync(info);
         return output.ExitCode;
     }
 
@@ -167,7 +167,7 @@ public class RedirectToPipe
             Arguments = { "--help" },
         };
 
-        var lines = ChildProcess.ReadOutputLines(info);
+        var lines = ChildProcess.StreamOutputLines(info);
         await foreach (var line in lines)
         {
             // We don't re-print, so the benchmark focuses on reading only.

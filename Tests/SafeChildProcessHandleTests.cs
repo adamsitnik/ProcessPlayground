@@ -260,7 +260,7 @@ public partial class SafeChildProcessHandleTests
 
     private static string GetSingleOutputLine(ProcessStartOptions options)
     {
-        ProcessOutputLines output = ChildProcess.ReadOutputLines(options);
+        ProcessOutputLines output = ChildProcess.StreamOutputLines(options);
         ProcessOutputLine singleLine = Assert.Single((IEnumerable<ProcessOutputLine>)output);
         Assert.False(singleLine.StandardError, "Expected standard output line");
         Assert.Equal(0, output.ExitCode);
