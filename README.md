@@ -165,8 +165,8 @@ namespace System.TBA
         /// <summary>
         /// Executes the process with STD IN/OUT/ERR redirected to current process. Waits for its completion, returns exit code.
         /// </summary>
-        public static int Execute(ProcessStartOptions options, TimeSpan? timeout = default);
-        public static Task<int> ExecuteAsync(ProcessStartOptions options, CancellationToken cancellationToken = default);
+        public static int Inherit(ProcessStartOptions options, TimeSpan? timeout = default);
+        public static Task<int> InheritAsync(ProcessStartOptions options, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// Executes the process with STD IN/OUT/ERR discarded. Waits for its completion, returns exit code.
@@ -183,13 +183,13 @@ namespace System.TBA
         /// <summary>
         /// Creates an instance of <see cref="ProcessOutputLines"/> to stream the output of the process.
         /// </summary>
-        public static ProcessOutputLines ReadOutputLines(ProcessStartOptions options, TimeSpan? timeout = null, Encoding? encoding = null);
+        public static ProcessOutputLines StreamOutputLines(ProcessStartOptions options, TimeSpan? timeout = null, Encoding? encoding = null);
         
         /// <summary>
         /// Executes the process and returns the combined output (stdout + stderr) as bytes.
         /// </summary>
-        public static CombinedOutput GetCombinedOutput(ProcessStartOptions options, SafeFileHandle? input = null, TimeSpan? timeout = null);
-        public static Task<CombinedOutput> GetCombinedOutputAsync(ProcessStartOptions options, SafeFileHandle? input = null, CancellationToken cancellationToken = default);
+        public static CombinedOutput CaptureCombined(ProcessStartOptions options, SafeFileHandle? input = null, TimeSpan? timeout = null);
+        public static Task<CombinedOutput> CaptureCombinedAsync(ProcessStartOptions options, SafeFileHandle? input = null, CancellationToken cancellationToken = default);
     }
 }
 ```
@@ -255,9 +255,9 @@ ProcessStartOptions options = new("dotnet")
     Arguments = { "--help" }
 };
 
-int exitCode = ChildProcess.Execute(options);
+int exitCode = ChildProcess.Inherit(options);
 // or async
-int exitCode = await ChildProcess.ExecuteAsync(options);
+int exitCode = await ChildProcess.InheritAsync(options);
 ```
 
 ### Execute with Timeout
@@ -269,11 +269,11 @@ ProcessStartOptions options = new("ping")
 };
 
 // Kill after 3 seconds
-int exitCode = ChildProcess.Execute(options, TimeSpan.FromSeconds(3));
+int exitCode = ChildProcess.Inherit(options, TimeSpan.FromSeconds(3));
 
 // or with CancellationToken
 using CancellationTokenSource cts = new(TimeSpan.FromSeconds(3));
-int exitCode = await ChildProcess.ExecuteAsync(options, cts.Token);
+int exitCode = await ChildProcess.InheritAsync(options, cts.Token);
 ```
 
 ### Discard Output
@@ -341,7 +341,7 @@ ProcessStartOptions options = new("dotnet")
     Arguments = { "--help" }
 };
 
-var output = ChildProcess.ReadOutputLines(options);
+var output = ChildProcess.StreamOutputLines(options);
 await foreach (var line in output)
 {
     if (line.StandardError)
@@ -367,13 +367,13 @@ ProcessStartOptions options = new("dotnet")
 };
 
 // Synchronous version
-CombinedOutput output = ChildProcess.GetCombinedOutput(options);
+CombinedOutput output = ChildProcess.CaptureCombined(options);
 string text = output.GetText();
 Console.WriteLine($"Output: {text}");
 Console.WriteLine($"Exit code: {output.ExitCode}");
 
 // Async version
-CombinedOutput output = await ChildProcess.GetCombinedOutputAsync(options);
+CombinedOutput output = await ChildProcess.CaptureCombinedAsync(options);
 string text = output.GetText();
 Console.WriteLine($"Output: {text}");
 ```
@@ -382,15 +382,15 @@ Console.WriteLine($"Output: {text}");
 
 | Task | Process API | New API |
 |------|-------------|---------|
-| Run and wait | `Process.Start()` + `WaitForExit()` | `ChildProcess.Execute()` |
-| Run async | `Process.Start()` + `WaitForExitAsync()` | `ChildProcess.ExecuteAsync()` |
+| Run and wait | `Process.Start()` + `WaitForExit()` | `ChildProcess.Inherit()` |
+| Run async | `Process.Start()` + `WaitForExitAsync()` | `ChildProcess.InheritAsync()` |
 | Discard output | Redirect + empty event handlers | `ChildProcess.Discard()` |
 | Redirect to file | Redirect + read + write to file | `ChildProcess.RedirectToFiles()` |
-| Stream output | Redirect + `ReadLineAsync` loop | `ChildProcess.ReadOutputLines()` |
-| Capture all output | Redirect + `ReadToEndAsync()` | `ChildProcess.GetCombinedOutput()` |
+| Stream output | Redirect + `ReadLineAsync` loop | `ChildProcess.StreamOutputLines()` |
+| Capture all output | Redirect + `ReadToEndAsync()` | `ChildProcess.CaptureCombined()` |
 | Piping between processes | Complex handle management | `ProcessHandle.Start()` with pipes |
 | Parent death handling | Manual implementation | `KillOnParentDeath = true` |
-| Timeout | `WaitForExit(int)` + `Kill` | `Execute(TimeSpan)` or `CancellationToken` |
+| Timeout | `WaitForExit(int)` + `Kill` | `Inherit(TimeSpan)` or `CancellationToken` |
 | Path resolution | Manual PATH search | `ProcessStartOptions.ResolvePath()` |
 
 ## Project Structure
