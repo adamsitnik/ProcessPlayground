@@ -24,7 +24,6 @@ internal static partial class Multiplexing
         // Get the pidfd for process exit detection
         int pidfd = (int)processHandle.DangerousGetHandle();
         bool hasPidFd = pidfd != SafeChildProcessHandle.NoPidFd;
-        bool processExited = false;
 
         // Allocate pollfd buffer once, outside the loop
         // We need up to 3 entries: stdout, stderr, and optionally pidfd
@@ -34,7 +33,6 @@ internal static partial class Multiplexing
         while (!outputClosed || !errorClosed)
         {
             int numFds = 0;
-            int pidfdIndex = -1;
 
             if (!outputClosed)
             {
@@ -53,11 +51,10 @@ internal static partial class Multiplexing
             }
 
             // Add pidfd to detect process exit, if available and not yet exited
-            if (hasPidFd && !processExited)
+            if (hasPidFd)
             {
-                pidfdIndex = numFds;
                 pollFdsBuffer[numFds].fd = pidfd;
-                pollFdsBuffer[numFds].events = POLLIN;
+                pollFdsBuffer[numFds].events = POLLIN | POLLHUP; // Linux uses POLLIN, FreeBSD uses POLLHUP.
                 pollFdsBuffer[numFds].revents = 0;
                 numFds++;
             }
@@ -86,13 +83,6 @@ internal static partial class Multiplexing
                 throw new TimeoutException("Timed out waiting for process OUT and ERR.");
             }
 
-            // Check if the process has exited
-            if (pidfdIndex >= 0 && (pollFdsBuffer[pidfdIndex].revents & (POLLIN | POLLHUP | POLLERR)) != 0)
-            {
-                // Process has exited, mark it but continue reading available data
-                processExited = true;
-            }
-
             // Check which file descriptors have data available
             for (int i = 0; i < numFds; i++)
             {
@@ -101,10 +91,24 @@ internal static partial class Multiplexing
                     continue; // No events on this fd
                 }
 
-                // Skip pidfd handling (already handled above)
-                if (i == pidfdIndex)
+                if (hasPidFd && i == numFds - 1)
                 {
-                    continue;
+                    // Process is the last descriptor if pidfd is used.
+                    // Since we have already checked both stdout and stderr,
+                    // we just close any remaining open streams and exit.
+                    if (!outputClosed)
+                    {
+                        stdoutStream.Close();
+                        outputClosed = true;
+                    }
+
+                    if (!errorClosed)
+                    {
+                        stderrStream.Close();
+                        errorClosed = true;
+                    }
+
+                    return;
                 }
 
                 bool isError = pollFdsBuffer[i].fd == errorFd;
@@ -128,58 +132,6 @@ internal static partial class Multiplexing
                     currentFs.Close();
                     closed = true;
                 }
-            }
-
-            // If the process has exited, drain any remaining data and finish
-            if (processExited)
-            {
-                // If both streams are closed, we're done
-                if (outputClosed && errorClosed)
-                {
-                    return;
-                }
-
-                // Check if there's still data to read by doing a non-blocking poll
-                numFds = 0;
-                if (!outputClosed)
-                {
-                    pollFdsBuffer[numFds].fd = outputFd;
-                    pollFdsBuffer[numFds].events = POLLIN;
-                    pollFdsBuffer[numFds].revents = 0;
-                    numFds++;
-                }
-                if (!errorClosed)
-                {
-                    pollFdsBuffer[numFds].fd = errorFd;
-                    pollFdsBuffer[numFds].events = POLLIN;
-                    pollFdsBuffer[numFds].revents = 0;
-                    numFds++;
-                }
-
-                unsafe
-                {
-                    fixed (PollFd* pollFds = pollFdsBuffer)
-                    {
-                        pollResult = poll(pollFds, (nuint)numFds, 0); // Non-blocking
-                    }
-                }
-
-                // Handle errors from non-blocking poll
-                if (pollResult < 0)
-                {
-                    int errno = Marshal.GetLastPInvokeError();
-                    if (errno != EINTR)
-                    {
-                        throw new Win32Exception(errno, "poll() failed during process exit drain");
-                    }
-                }
-
-                // If there's no data available (pollResult == 0), we're done
-                if (pollResult == 0)
-                {
-                    return;
-                }
-                // If pollResult > 0, there's data available, continue to next iteration to read it
             }
         }
     }
