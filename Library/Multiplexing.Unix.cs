@@ -27,6 +27,10 @@ internal static partial class Multiplexing
 
         // Allocate pollfd buffer once, outside the loop
         // We need up to 3 entries: stdout, stderr, and optionally pidfd
+        // We watch for pidfd, because it's possible for a process to exit
+        // without signaling EOF on stdout or stderr.
+        // It happens when the child process spawns other processes
+        // that derive the file descriptors.
         PollFd[] pollFdsBuffer = new PollFd[3];
 
         // Main loop: use poll to wait for data on either stdout or stderr
