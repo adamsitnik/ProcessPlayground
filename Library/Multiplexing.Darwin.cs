@@ -125,28 +125,16 @@ internal static partial class Multiplexing
                 }
 
                 // Process all events
+                // First pass: handle all EVFILT_READ events to read available data
+                // Second pass: handle EVFILT_PROC if process exited
+                // This ensures we don't lose data when both events arrive together
+                bool processExited = false;
+                
                 for (int i = 0; i < numEvents; i++)
                 {
                     ref KEvent evt = ref events[i];
 
-                    if (evt.filter == EVFILT_PROC)
-                    {
-                        // Process has exited. Close any remaining streams and return.
-                        if (!outputClosed)
-                        {
-                            stdoutStream.Close();
-                            outputClosed = true;
-                        }
-
-                        if (!errorClosed)
-                        {
-                            stderrStream.Close();
-                            errorClosed = true;
-                        }
-
-                        return;
-                    }
-                    else if (evt.filter == EVFILT_READ)
+                    if (evt.filter == EVFILT_READ)
                     {
                         // Data available on stdout or stderr
                         int fd = (int)evt.ident;
@@ -178,6 +166,31 @@ internal static partial class Multiplexing
                             closed = true;
                         }
                     }
+                    else if (evt.filter == EVFILT_PROC)
+                    {
+                        // Process has exited. Mark it but don't return yet - 
+                        // we need to process any pending EVFILT_READ events first
+                        processExited = true;
+                    }
+                }
+
+                // After processing all read events, check if process exited
+                if (processExited)
+                {
+                    // Process has exited. Close any remaining streams and return.
+                    if (!outputClosed)
+                    {
+                        stdoutStream.Close();
+                        outputClosed = true;
+                    }
+
+                    if (!errorClosed)
+                    {
+                        stderrStream.Close();
+                        errorClosed = true;
+                    }
+
+                    return;
                 }
             }
         }

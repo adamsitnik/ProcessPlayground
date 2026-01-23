@@ -28,11 +28,11 @@
   </ItemGroup>
 
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
-    <Compile Remove="**/*.Unix.cs" />
+    <Compile Remove="Multiplexing.Unix.cs" />
   </ItemGroup>
 
   <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('OSX')) And '$(OS)' != 'Windows_NT'">
-    <Compile Remove="**/*.Darwin.cs" />
+    <Compile Remove="Multiplexing.Darwin.cs" />
   </ItemGroup>
 
   <ItemGroup>
