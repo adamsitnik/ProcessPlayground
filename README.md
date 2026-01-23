@@ -433,8 +433,8 @@ Console.WriteLine($"Output: {text}");
 | Discard output | Redirect + empty event handlers | `ChildProcess.Discard()` |
 | Redirect to file | Redirect + read + write to file | `ChildProcess.RedirectToFiles()` |
 | Stream output | Redirect + `ReadLineAsync` loop | `ChildProcess.StreamOutputLines()` |
-| Capture output as strings | Redirect + `ReadToEndAsync()` | `ChildProcess.CaptureOutput()` |
-| Capture all output as bytes | Redirect + `ReadToEndAsync()` | `ChildProcess.CaptureCombined()` |
+| Capture stdout/stderr as separate strings | Redirect + `ReadToEndAsync()` | `ChildProcess.CaptureOutput()` |
+| Capture combined stdout/stderr as bytes | Redirect + `ReadToEndAsync()` | `ChildProcess.CaptureCombined()` |
 | Piping between processes | Complex handle management | `ProcessHandle.Start()` with pipes |
 | Parent death handling | Manual implementation | `KillOnParentDeath = true` |
 | Timeout | `WaitForExit(int)` + `Kill` | `Inherit(TimeSpan)` or `CancellationToken` |
