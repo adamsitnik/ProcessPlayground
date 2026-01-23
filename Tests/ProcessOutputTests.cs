@@ -328,6 +328,13 @@ public class ProcessOutputTests
     // [InlineData(true)] // https://github.com/adamsitnik/ProcessPlayground/issues/61
     public async Task ProcessOutput_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {
+        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
+        {
+            // On Windows, if standard input is redirected, the test cannot proceed
+            // because timeout utility requires it.
+            return;
+        }
+
         // This test verifies that CaptureOutput/CaptureOutputAsync returns when the direct child process exits,
         // even if that child has spawned a grandchild process that outlives the child.
         // This is important because:
