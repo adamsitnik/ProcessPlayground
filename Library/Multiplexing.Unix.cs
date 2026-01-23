@@ -164,11 +164,22 @@ internal static partial class Multiplexing
                     }
                 }
 
-                // If there's no data available, we're done
-                if (pollResult <= 0)
+                // Handle errors from non-blocking poll
+                if (pollResult < 0)
+                {
+                    int errno = Marshal.GetLastPInvokeError();
+                    if (errno != EINTR)
+                    {
+                        throw new Win32Exception(errno, "poll() failed during process exit drain");
+                    }
+                }
+
+                // If there's no data available (pollResult == 0), we're done
+                if (pollResult == 0)
                 {
                     return;
                 }
+                // If pollResult > 0, there's data available, continue to next iteration to read it
             }
         }
     }
