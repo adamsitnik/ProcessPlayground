@@ -93,16 +93,15 @@ internal static class Multiplexing
                 TimeSpec timeoutSpec = new TimeSpec
                 {
                     tv_sec = timeoutMs / 1000,
-                    tv_nsec = (long)(timeoutMs % 1000) * 1000000
+                    tv_nsec = (nint)((timeoutMs % 1000) * 1000000)
                 };
 
                 int numEvents;
                 unsafe
                 {
                     fixed (KEvent* pEvents = events)
-                    fixed (TimeSpec* pTimeout = &timeoutSpec)
                     {
-                        numEvents = kevent(kq, null, 0, pEvents, events.Length, pTimeout);
+                        numEvents = kevent(kq, null, 0, pEvents, events.Length, &timeoutSpec);
                     }
                 }
 
