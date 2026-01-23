@@ -81,7 +81,13 @@ internal static class Multiplexing
 
             if (ret == -1)
             {
-                throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to register kqueue events");
+                int errno = Marshal.GetLastPInvokeError();
+                // If the process doesn't exist at registration time (ESRCH), it has already exited
+                // Just continue without EVFILT_PROC monitoring - we'll read remaining data and exit
+                if (errno != ESRCH)
+                {
+                    throw new Win32Exception(errno, "Failed to register kqueue events");
+                }
             }
 
             // Main loop: use kqueue to wait for data on stdout, stderr, or process exit
@@ -90,15 +96,15 @@ internal static class Multiplexing
                 Span<KEvent> events = stackalloc KEvent[3];
                 int timeoutMs = timeout.GetRemainingMillisecondsOrThrow();
 
-                TimeSpec timeoutSpec = new TimeSpec
-                {
-                    tv_sec = timeoutMs / 1000,
-                    tv_nsec = (nint)((timeoutMs % 1000) * 1000000)
-                };
-
                 int numEvents;
                 unsafe
                 {
+                    TimeSpec timeoutSpec = new TimeSpec
+                    {
+                        tv_sec = timeoutMs / 1000,
+                        tv_nsec = (nint)((timeoutMs % 1000) * 1000000)
+                    };
+
                     fixed (KEvent* pEvents = events)
                     {
                         numEvents = kevent(kq, null, 0, pEvents, events.Length, &timeoutSpec);
@@ -111,6 +117,22 @@ internal static class Multiplexing
                     if (errno == EINTR)
                     {
                         continue;
+                    }
+                    // If process doesn't exist (ESRCH), it has already exited
+                    // Close remaining streams and return
+                    if (errno == ESRCH)
+                    {
+                        if (!outputClosed)
+                        {
+                            stdoutStream.Close();
+                            outputClosed = true;
+                        }
+                        if (!errorClosed)
+                        {
+                            stderrStream.Close();
+                            errorClosed = true;
+                        }
+                        return;
                     }
                     throw new Win32Exception(errno, "kevent() failed");
                 }
@@ -227,6 +249,7 @@ internal static class Multiplexing
 
     // errno values
     private const int EINTR = 4;
+    private const int ESRCH = 3; // No such process
 
     [DllImport("libc", SetLastError = true)]
     private static extern unsafe int kevent(int kq, KEvent* changelist, int nchanges, KEvent* eventlist, int nevents, TimeSpec* timeout);
