@@ -21,8 +21,14 @@ internal static partial class Multiplexing
         int errorFd = (int)readStdErr.DangerousGetHandle();
         bool outputClosed = false, errorClosed = false;
 
+        // Get the pidfd for process exit detection
+        int pidfd = (int)processHandle.DangerousGetHandle();
+        bool hasPidFd = pidfd != -1; // SafeChildProcessHandle.NoPidFd
+        bool processExited = false;
+
         // Allocate pollfd buffer once, outside the loop
-        PollFd[] pollFdsBuffer = new PollFd[2];
+        // We need up to 3 entries: stdout, stderr, and optionally pidfd
+        PollFd[] pollFdsBuffer = new PollFd[3];
 
         // Main loop: use poll to wait for data on either stdout or stderr
         while (!outputClosed || !errorClosed)
@@ -40,6 +46,15 @@ internal static partial class Multiplexing
             if (!errorClosed)
             {
                 pollFdsBuffer[numFds].fd = errorFd;
+                pollFdsBuffer[numFds].events = POLLIN;
+                pollFdsBuffer[numFds].revents = 0;
+                numFds++;
+            }
+
+            // Add pidfd to detect process exit, if available and not yet exited
+            if (hasPidFd && !processExited)
+            {
+                pollFdsBuffer[numFds].fd = pidfd;
                 pollFdsBuffer[numFds].events = POLLIN;
                 pollFdsBuffer[numFds].revents = 0;
                 numFds++;
@@ -69,12 +84,29 @@ internal static partial class Multiplexing
                 throw new TimeoutException("Timed out waiting for process OUT and ERR.");
             }
 
+            // Check if the process has exited (pidfd is always the last fd if present)
+            if (hasPidFd && !processExited)
+            {
+                int pidfdIndex = numFds - 1;
+                if ((pollFdsBuffer[pidfdIndex].revents & (POLLIN | POLLHUP | POLLERR)) != 0)
+                {
+                    // Process has exited, mark it but continue reading available data
+                    processExited = true;
+                }
+            }
+
             // Check which file descriptors have data available
             for (int i = 0; i < numFds; i++)
             {
                 if ((pollFdsBuffer[i].revents & (POLLIN | POLLHUP | POLLERR)) == 0)
                 {
                     continue; // No events on this fd
+                }
+
+                // Skip pidfd handling (already handled above)
+                if (hasPidFd && pollFdsBuffer[i].fd == pidfd)
+                {
+                    continue;
                 }
 
                 bool isError = pollFdsBuffer[i].fd == errorFd;
@@ -97,6 +129,49 @@ internal static partial class Multiplexing
                 {
                     currentFs.Close();
                     closed = true;
+                }
+            }
+
+            // If the process has exited and we got EOF or POLLHUP on both streams, we're done
+            if (processExited)
+            {
+                // Check if there's still data to read by doing a non-blocking poll with timeout 0
+                if (!outputClosed || !errorClosed)
+                {
+                    numFds = 0;
+                    if (!outputClosed)
+                    {
+                        pollFdsBuffer[numFds].fd = outputFd;
+                        pollFdsBuffer[numFds].events = POLLIN;
+                        pollFdsBuffer[numFds].revents = 0;
+                        numFds++;
+                    }
+                    if (!errorClosed)
+                    {
+                        pollFdsBuffer[numFds].fd = errorFd;
+                        pollFdsBuffer[numFds].events = POLLIN;
+                        pollFdsBuffer[numFds].revents = 0;
+                        numFds++;
+                    }
+
+                    unsafe
+                    {
+                        fixed (PollFd* pollFds = pollFdsBuffer)
+                        {
+                            pollResult = poll(pollFds, (nuint)numFds, 0); // Non-blocking
+                        }
+                    }
+
+                    // If there's no data available, we're done
+                    if (pollResult <= 0)
+                    {
+                        return;
+                    }
+                }
+                else
+                {
+                    // Both streams closed and process exited
+                    return;
                 }
             }
         }

@@ -321,7 +321,7 @@ public class ProcessOutputTests
         Assert.Equal(0, result.ExitCode);
     }
 
-#if WINDOWS 
+#if WINDOWS || LINUX
     [Theory]
     [InlineData(false)]
 #endif
