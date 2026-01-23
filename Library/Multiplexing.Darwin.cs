@@ -1,15 +1,11 @@
 using Microsoft.Win32.SafeHandles;
-using System;
-using System.Buffers;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
-using System.Text;
 using System.Runtime.InteropServices;
 
 namespace System.TBA;
 
-internal static partial class Multiplexing
+internal static class Multiplexing
 {
     internal static void GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout,
         ref int outputBytesRead, ref int errorBytesRead, ref byte[] outputBuffer, ref byte[] errorBuffer)

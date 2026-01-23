@@ -31,7 +31,7 @@
     <Compile Remove="Multiplexing.Unix.cs" />
   </ItemGroup>
 
-  <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('OSX')) And '$(OS)' != 'Windows_NT'">
+  <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('OSX'))">
     <Compile Remove="Multiplexing.Darwin.cs" />
   </ItemGroup>
 
