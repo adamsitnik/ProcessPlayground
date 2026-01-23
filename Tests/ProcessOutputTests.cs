@@ -321,10 +321,8 @@ public class ProcessOutputTests
         Assert.Equal(0, result.ExitCode);
     }
 
-#if WINDOWS || LINUX
     [Theory]
     [InlineData(false)]
-#endif
     // [InlineData(true)] // https://github.com/adamsitnik/ProcessPlayground/issues/61
     public async Task ProcessOutput_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {

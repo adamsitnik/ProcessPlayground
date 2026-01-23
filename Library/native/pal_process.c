@@ -75,7 +75,7 @@ static int create_cloexec_pipe(int pipefd[2]) {
 }
 
 #if defined(HAVE_KQUEUE) || defined(HAVE_KQUEUEX)
-static inline int create_kqueue_cloexec(void) {
+int create_kqueue_cloexec(void) {
 #ifdef HAVE_KQUEUEX
     // FreeBSD has kqueuex
     return kqueuex(KQUEUE_CLOEXEC);
