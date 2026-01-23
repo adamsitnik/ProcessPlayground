@@ -321,11 +321,11 @@ public class ProcessOutputTests
         Assert.Equal(0, result.ExitCode);
     }
 
+#if WINDOWS 
     [Theory]
     [InlineData(false)]
-//#if WINDOWS // https://github.com/adamsitnik/ProcessPlayground/issues/61
-//    [InlineData(true)]
-//#endif
+#endif
+    // [InlineData(true)] // https://github.com/adamsitnik/ProcessPlayground/issues/61
     public async Task ProcessOutput_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {
         // This test verifies that CaptureOutput/CaptureOutputAsync returns when the direct child process exits,
