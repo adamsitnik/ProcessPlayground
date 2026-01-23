@@ -16,11 +16,15 @@ internal static class Multiplexing
         {
             using OverlappedContext outputContext = OverlappedContext.Allocate();
             using OverlappedContext errorContext = OverlappedContext.Allocate();
+            using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(processHandle);
 
-            // First of all, we need to drain STD OUT and ERR pipes.
-            // We don't optimize for reading one (when other is closed).
-            // This is a rare scenario, as they are usually both closed at the end of process lifetime.
-            WaitHandle[] waitHandles = [outputContext.WaitHandle, errorContext.WaitHandle];
+            // A pipe signals EOF by returning 0 bytes read.
+            // It happens when the write end of the pipe is closed.
+            // But to be exact, it happens when all write handles to the pipe are closed.
+            // It's possible that the child process spawns other processes inheriting the write handle.
+            // In such case, the pipe won't signal EOF until all those processes exit.
+            // So we wait until EOF or process exit.
+            WaitHandle[] waitHandles = [processWaitHandle, outputContext.WaitHandle, errorContext.WaitHandle];
 
             unsafe
             {
@@ -33,13 +37,9 @@ internal static class Multiplexing
             {
                 int waitResult = WaitHandle.WaitAny(waitHandles, timeout.GetRemainingMillisecondsOrThrow());
 
-                if (waitResult == WaitHandle.WaitTimeout)
+                if (waitResult is 1 or 2)
                 {
-                    throw new TimeoutException("Timed out waiting for process OUT and ERR.");
-                }
-                else if (waitResult is 0 or 1)
-                {
-                    bool isError = waitResult == 1;
+                    bool isError = waitResult == 2;
 
                     OverlappedContext currentContext = isError ? errorContext : outputContext;
                     SafeFileHandle currentFileHandle = isError ? readStdErr : readStdOut;
@@ -79,6 +79,26 @@ internal static class Multiplexing
                             // And reset the wait handle to avoid triggering on closed handle.
                             currentContext.WaitHandle.Reset();
                         }
+                    }
+                }
+                else if (waitResult == 0 || waitResult == WaitHandle.WaitTimeout)
+                {
+                    // Either the process has exited, or we have timed out.
+                    // In both cases, we stop reading.
+
+                    if (!readStdOut.IsClosed)
+                    {
+                        outputContext.CancelPendingIO(readStdOut);
+                    }
+
+                    if (!readStdErr.IsClosed)
+                    {
+                        errorContext.CancelPendingIO(readStdErr);
+                    }
+
+                    if (waitResult == WaitHandle.WaitTimeout)
+                    {
+                        throw new TimeoutException("Timed out waiting for process OUT and ERR.");
                     }
                 }
                 else
