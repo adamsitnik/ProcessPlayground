@@ -180,7 +180,7 @@ public static partial class ChildProcess
 
             try
             {
-                GetProcessOutputCore(processHandle, readStdOut, readStdErr, timeoutHelper,
+                Multiplexing.GetProcessOutputCore(processHandle, readStdOut, readStdErr, timeoutHelper,
                     ref outputBytesRead, ref errorBytesRead, ref outputBuffer, ref errorBuffer);
 
                 if (!processHandle.TryGetExitCode(out int exitCode))
@@ -348,7 +348,7 @@ public static partial class ChildProcess
             // We can also implement in on Unix, but for now, we only do it on Windows.
             if (timeout is not null)
             {
-                return ReadAllBytesWithTimeout(read, processHandle, processId, timeoutHelper);
+                return Multiplexing.ReadAllBytesWithTimeout(read, processHandle, processId, timeoutHelper);
             }
 #endif
             using FileStream outputStream = new(read, FileAccess.Read, bufferSize: 1, isAsync: false);

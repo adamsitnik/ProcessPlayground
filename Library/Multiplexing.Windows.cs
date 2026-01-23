@@ -1,66 +1,12 @@
-﻿using System.Threading;
-using Microsoft.Win32.SafeHandles;
+﻿using Microsoft.Win32.SafeHandles;
 using System.Buffers;
-using System.Text;
+using System.Threading;
 
 namespace System.TBA;
 
-public static partial class ChildProcess
+internal static class Multiplexing
 {
-    private static unsafe CombinedOutput ReadAllBytesWithTimeout(SafeFileHandle fileHandle, SafeChildProcessHandle processHandle, int processId, TimeoutHelper timeout)
-    {
-        int totalBytesRead = 0;
-
-        byte[] array = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
-        try
-        {
-            using OverlappedContext overlappedContext = OverlappedContext.Allocate();
-            while (true)
-            {
-                Span<byte> remainingBytes = array.AsSpan(totalBytesRead);
-                fixed (byte* pinnedRemaining = remainingBytes)
-                {
-                    Interop.Kernel32.ReadFile(fileHandle, pinnedRemaining, remainingBytes.Length, IntPtr.Zero, overlappedContext.GetOverlapped());
-
-                    int errorCode = fileHandle.GetLastWin32ErrorAndDisposeHandleIfInvalid();
-                    if (errorCode == Interop.Errors.ERROR_IO_PENDING)
-                    {
-                        if (timeout.HasExpired || !overlappedContext.WaitHandle.WaitOne(timeout.GetRemainingMillisecondsOrThrow()))
-                        {
-                            HandleTimeout(processHandle, fileHandle, overlappedContext.GetOverlapped());
-                        }
-
-                        errorCode = Interop.Errors.ERROR_SUCCESS;
-                    }
-
-                    int bytesRead = overlappedContext.GetOverlappedResult(fileHandle);
-                    if (bytesRead <= 0)
-                    {
-                        break;
-                    }
-
-                    totalBytesRead += bytesRead;
-                    if (array.Length == totalBytesRead)
-                    {
-                        BufferHelper.RentLargerBuffer(ref array);
-                    }
-                }
-            }
-
-            if (!processHandle.TryGetExitCode(out int exitCode))
-            {
-                exitCode = processHandle.WaitForExit(timeout.GetRemainingOrThrow());
-            }
-
-            return new(exitCode, BufferHelper.CreateCopy(array, totalBytesRead), processId);
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(array);
-        }
-    }
-
-    private static void GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout,
+    internal static void GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout,
         ref int outputBytesRead, ref int errorBytesRead, ref byte[] outputBuffer, ref byte[] errorBuffer)
     {
         MemoryHandle outputPin = outputBuffer.AsMemory().Pin();
@@ -145,6 +91,59 @@ public static partial class ChildProcess
         {
             outputPin.Dispose();
             errorPin.Dispose();
+        }
+    }
+
+    internal static unsafe CombinedOutput ReadAllBytesWithTimeout(SafeFileHandle fileHandle, SafeChildProcessHandle processHandle, int processId, TimeoutHelper timeout)
+    {
+        int totalBytesRead = 0;
+
+        byte[] array = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
+        try
+        {
+            using OverlappedContext overlappedContext = OverlappedContext.Allocate();
+            while (true)
+            {
+                Span<byte> remainingBytes = array.AsSpan(totalBytesRead);
+                fixed (byte* pinnedRemaining = remainingBytes)
+                {
+                    Interop.Kernel32.ReadFile(fileHandle, pinnedRemaining, remainingBytes.Length, IntPtr.Zero, overlappedContext.GetOverlapped());
+
+                    int errorCode = fileHandle.GetLastWin32ErrorAndDisposeHandleIfInvalid();
+                    if (errorCode == Interop.Errors.ERROR_IO_PENDING)
+                    {
+                        if (timeout.HasExpired || !overlappedContext.WaitHandle.WaitOne(timeout.GetRemainingMillisecondsOrThrow()))
+                        {
+                            HandleTimeout(processHandle, fileHandle, overlappedContext.GetOverlapped());
+                        }
+
+                        errorCode = Interop.Errors.ERROR_SUCCESS;
+                    }
+
+                    int bytesRead = overlappedContext.GetOverlappedResult(fileHandle);
+                    if (bytesRead <= 0)
+                    {
+                        break;
+                    }
+
+                    totalBytesRead += bytesRead;
+                    if (array.Length == totalBytesRead)
+                    {
+                        BufferHelper.RentLargerBuffer(ref array);
+                    }
+                }
+            }
+
+            if (!processHandle.TryGetExitCode(out int exitCode))
+            {
+                exitCode = processHandle.WaitForExit(timeout.GetRemainingOrThrow());
+            }
+
+            return new(exitCode, BufferHelper.CreateCopy(array, totalBytesRead), processId);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(array);
         }
     }
 
