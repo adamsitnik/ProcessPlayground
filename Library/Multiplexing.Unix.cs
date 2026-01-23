@@ -23,7 +23,7 @@ internal static partial class Multiplexing
 
         // Get the pidfd for process exit detection
         int pidfd = (int)processHandle.DangerousGetHandle();
-        bool hasPidFd = pidfd != -1; // SafeChildProcessHandle.NoPidFd
+        bool hasPidFd = pidfd != SafeChildProcessHandle.NoPidFd;
         bool processExited = false;
 
         // Allocate pollfd buffer once, outside the loop
@@ -34,6 +34,7 @@ internal static partial class Multiplexing
         while (!outputClosed || !errorClosed)
         {
             int numFds = 0;
+            int pidfdIndex = -1;
 
             if (!outputClosed)
             {
@@ -54,6 +55,7 @@ internal static partial class Multiplexing
             // Add pidfd to detect process exit, if available and not yet exited
             if (hasPidFd && !processExited)
             {
+                pidfdIndex = numFds;
                 pollFdsBuffer[numFds].fd = pidfd;
                 pollFdsBuffer[numFds].events = POLLIN;
                 pollFdsBuffer[numFds].revents = 0;
@@ -84,15 +86,11 @@ internal static partial class Multiplexing
                 throw new TimeoutException("Timed out waiting for process OUT and ERR.");
             }
 
-            // Check if the process has exited (pidfd is always the last fd if present)
-            if (hasPidFd && !processExited)
+            // Check if the process has exited
+            if (pidfdIndex >= 0 && (pollFdsBuffer[pidfdIndex].revents & (POLLIN | POLLHUP | POLLERR)) != 0)
             {
-                int pidfdIndex = numFds - 1;
-                if ((pollFdsBuffer[pidfdIndex].revents & (POLLIN | POLLHUP | POLLERR)) != 0)
-                {
-                    // Process has exited, mark it but continue reading available data
-                    processExited = true;
-                }
+                // Process has exited, mark it but continue reading available data
+                processExited = true;
             }
 
             // Check which file descriptors have data available
@@ -104,7 +102,7 @@ internal static partial class Multiplexing
                 }
 
                 // Skip pidfd handling (already handled above)
-                if (hasPidFd && pollFdsBuffer[i].fd == pidfd)
+                if (i == pidfdIndex)
                 {
                     continue;
                 }
@@ -132,45 +130,43 @@ internal static partial class Multiplexing
                 }
             }
 
-            // If the process has exited and we got EOF or POLLHUP on both streams, we're done
+            // If the process has exited, drain any remaining data and finish
             if (processExited)
             {
-                // Check if there's still data to read by doing a non-blocking poll with timeout 0
-                if (!outputClosed || !errorClosed)
+                // If both streams are closed, we're done
+                if (outputClosed && errorClosed)
                 {
-                    numFds = 0;
-                    if (!outputClosed)
-                    {
-                        pollFdsBuffer[numFds].fd = outputFd;
-                        pollFdsBuffer[numFds].events = POLLIN;
-                        pollFdsBuffer[numFds].revents = 0;
-                        numFds++;
-                    }
-                    if (!errorClosed)
-                    {
-                        pollFdsBuffer[numFds].fd = errorFd;
-                        pollFdsBuffer[numFds].events = POLLIN;
-                        pollFdsBuffer[numFds].revents = 0;
-                        numFds++;
-                    }
+                    return;
+                }
 
-                    unsafe
-                    {
-                        fixed (PollFd* pollFds = pollFdsBuffer)
-                        {
-                            pollResult = poll(pollFds, (nuint)numFds, 0); // Non-blocking
-                        }
-                    }
+                // Check if there's still data to read by doing a non-blocking poll
+                numFds = 0;
+                if (!outputClosed)
+                {
+                    pollFdsBuffer[numFds].fd = outputFd;
+                    pollFdsBuffer[numFds].events = POLLIN;
+                    pollFdsBuffer[numFds].revents = 0;
+                    numFds++;
+                }
+                if (!errorClosed)
+                {
+                    pollFdsBuffer[numFds].fd = errorFd;
+                    pollFdsBuffer[numFds].events = POLLIN;
+                    pollFdsBuffer[numFds].revents = 0;
+                    numFds++;
+                }
 
-                    // If there's no data available, we're done
-                    if (pollResult <= 0)
+                unsafe
+                {
+                    fixed (PollFd* pollFds = pollFdsBuffer)
                     {
-                        return;
+                        pollResult = poll(pollFds, (nuint)numFds, 0); // Non-blocking
                     }
                 }
-                else
+
+                // If there's no data available, we're done
+                if (pollResult <= 0)
                 {
-                    // Both streams closed and process exited
                     return;
                 }
             }
