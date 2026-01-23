@@ -15,7 +15,7 @@ namespace Microsoft.Win32.SafeHandles;
 // https://github.com/dotnet/runtime/blob/main/src/native/libs/System.Native/pal_process.c
 public partial class SafeChildProcessHandle
 {
-    private const int NoPidFd = -1;
+    internal const int NoPidFd = -1;
     // Buffer for reading from exit pipe (reused to avoid allocations)
     private static readonly byte[] s_exitPipeBuffer = new byte[1];
 

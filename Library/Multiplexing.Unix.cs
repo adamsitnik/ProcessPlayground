@@ -21,8 +21,17 @@ internal static partial class Multiplexing
         int errorFd = (int)readStdErr.DangerousGetHandle();
         bool outputClosed = false, errorClosed = false;
 
+        // Get the pidfd for process exit detection
+        int pidfd = (int)processHandle.DangerousGetHandle();
+        bool hasPidFd = pidfd != SafeChildProcessHandle.NoPidFd;
+
         // Allocate pollfd buffer once, outside the loop
-        PollFd[] pollFdsBuffer = new PollFd[2];
+        // We need up to 3 entries: stdout, stderr, and optionally pidfd
+        // We watch for pidfd, because it's possible for a process to exit
+        // without signaling EOF on stdout or stderr.
+        // It happens when the child process spawns other processes
+        // that derive the file descriptors.
+        PollFd[] pollFdsBuffer = new PollFd[3];
 
         // Main loop: use poll to wait for data on either stdout or stderr
         while (!outputClosed || !errorClosed)
@@ -41,6 +50,15 @@ internal static partial class Multiplexing
             {
                 pollFdsBuffer[numFds].fd = errorFd;
                 pollFdsBuffer[numFds].events = POLLIN;
+                pollFdsBuffer[numFds].revents = 0;
+                numFds++;
+            }
+
+            // Add pidfd to detect process exit, if available and not yet exited
+            if (hasPidFd)
+            {
+                pollFdsBuffer[numFds].fd = pidfd;
+                pollFdsBuffer[numFds].events = POLLIN | POLLHUP; // Linux uses POLLIN, FreeBSD uses POLLHUP.
                 pollFdsBuffer[numFds].revents = 0;
                 numFds++;
             }
@@ -75,6 +93,26 @@ internal static partial class Multiplexing
                 if ((pollFdsBuffer[i].revents & (POLLIN | POLLHUP | POLLERR)) == 0)
                 {
                     continue; // No events on this fd
+                }
+
+                if (hasPidFd && i == numFds - 1)
+                {
+                    // Process is the last descriptor if pidfd is used.
+                    // Since we have already checked both stdout and stderr,
+                    // we just close any remaining open streams and exit.
+                    if (!outputClosed)
+                    {
+                        stdoutStream.Close();
+                        outputClosed = true;
+                    }
+
+                    if (!errorClosed)
+                    {
+                        stderrStream.Close();
+                        errorClosed = true;
+                    }
+
+                    return;
                 }
 
                 bool isError = pollFdsBuffer[i].fd == errorFd;
