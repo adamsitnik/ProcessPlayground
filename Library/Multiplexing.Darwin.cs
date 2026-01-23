@@ -97,7 +97,7 @@ internal static partial class Multiplexing
                 TimeSpec timeoutSpec = new TimeSpec
                 {
                     tv_sec = timeoutMs / 1000,
-                    tv_nsec = (timeoutMs % 1000) * 1000 * 1000
+                    tv_nsec = (long)(timeoutMs % 1000) * 1000000
                 };
 
                 int numEvents;
