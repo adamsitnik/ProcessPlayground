@@ -7,12 +7,11 @@ using System.IO;
 using System.Text;
 using System.Runtime.InteropServices;
 using static System.TBA.PollHelper;
-
 namespace System.TBA;
 
-public static partial class ChildProcess
+internal static partial class Multiplexing
 {
-    private static void GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout,
+    internal static void GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout,
         ref int outputBytesRead, ref int errorBytesRead, ref byte[] outputBuffer, ref byte[] errorBuffer)
     {
         using FileStream stdoutStream = new(readStdOut, FileAccess.Read, bufferSize: 1, isAsync: false);

@@ -3,6 +3,7 @@ using System.Threading;
 using Microsoft.Win32.SafeHandles;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 
 namespace System.TBA;
 
@@ -74,6 +75,35 @@ internal sealed unsafe class OverlappedContext : IDisposable
         // It's not EOF or an error, so we Reset the event handle and clear the overlapped structure for the next operation
         Reset();
         return bytesRead;
+    }
+
+    internal void CancelPendingIO(SafeFileHandle handle)
+    {
+        // CancelIoEx marks matching outstanding I/O requests for cancellation.
+        // It does not wait for all canceled operations to complete.
+        // When CancelIoEx returns true, it means that the cancel request was successfully queued.
+        if (!Interop.Kernel32.CancelIoEx(handle, _overlapped))
+        {
+            // Failure has two common meanings:
+            // ERROR_NOT_FOUND (extremely common). It means:
+            // - The I/O already completed.
+            // - Or it never existed.
+            // - Or it completed between your decision and the call.
+            // Other errors indicate real failures (invalid handle, driver limitation, etc.).
+            int errorCode = Marshal.GetLastPInvokeError();
+            Debug.Assert(errorCode == Interop.Errors.ERROR_NOT_FOUND, $"CancelIoEx failed with {errorCode}.");
+        }
+
+        // We must observe completion before freeing the OVERLAPPED in all the above scenarios.
+        int bytesRead = 0;
+        if (!Interop.Kernel32.GetOverlappedResult(handle, _overlapped, ref bytesRead, bWait: false))
+        {
+            int errorCode = Marshal.GetLastPInvokeError();
+            Debug.Assert(errorCode == Interop.Errors.ERROR_OPERATION_ABORTED, $"GetOverlappedResult failed with {errorCode}.");
+        }
+        Debug.Assert(bytesRead == 0, $"Expected non-zero bytes read after cancellation, got {bytesRead}.");
+
+        handle.Close();
     }
 
     private NativeOverlapped* Reset()
