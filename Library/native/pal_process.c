@@ -77,7 +77,7 @@ static int create_cloexec_pipe(int pipefd[2]) {
 // Helper function to create a pipe with CLOEXEC flag and optional O_NONBLOCK on either end
 // async_read: if non-zero, sets O_NONBLOCK on the read end (pipefd[0])
 // async_write: if non-zero, sets O_NONBLOCK on the write end (pipefd[1])
-int create_cloexec_pipe_ex(int pipefd[2], int async_read, int async_write) {
+int create_pipe(int pipefd[2], int async_read, int async_write) {
     // First create the pipe with CLOEXEC
     if (create_cloexec_pipe(pipefd) != 0) {
         return -1;

@@ -11,7 +11,7 @@ public static partial class FileExtensions
     private static unsafe partial int open(byte* pathname, int flags);
 
     [LibraryImport("pal_process", SetLastError = true)]
-    private static unsafe partial int create_cloexec_pipe_ex(int* pipefd, int async_read, int async_write);
+    private static unsafe partial int create_pipe(int* pipefd, int async_read, int async_write);
 
     private const int O_RDONLY = 0x0000, O_WRONLY = 0x0001, O_RDWR = 0x0002;
     private static readonly int O_CLOEXEC = OperatingSystem.IsMacOS() ? 0x1000000 : 0x80000;
@@ -40,7 +40,7 @@ public static partial class FileExtensions
     {
         int* fds = stackalloc int[2];
 
-        int result = create_cloexec_pipe_ex(fds, asyncRead ? 1 : 0, asyncWrite ? 1 : 0);
+        int result = create_pipe(fds, asyncRead ? 1 : 0, asyncWrite ? 1 : 0);
         if (result < 0)
         {
             throw new ComponentModel.Win32Exception(Marshal.GetLastPInvokeError());

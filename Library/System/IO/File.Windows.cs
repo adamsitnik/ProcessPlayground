@@ -34,9 +34,9 @@ public static partial class FileExtensions
         // When neither end is async, use the simple CreatePipe API
         if (!asyncRead && !asyncWrite)
         {
-            Interop.Kernel32.SECURITY_ATTRIBUTES securityAttributesParent = default;
+            Interop.Kernel32.SECURITY_ATTRIBUTES securityAttributes = default;
 
-            bool ret = Interop.Kernel32.CreatePipe(out read, out write, ref securityAttributesParent, 0);
+            bool ret = Interop.Kernel32.CreatePipe(out read, out write, ref securityAttributes, 0);
             if (!ret || read.IsInvalid || write.IsInvalid)
             {
                 throw new Win32Exception(Marshal.GetLastPInvokeError());
@@ -46,22 +46,25 @@ public static partial class FileExtensions
 
         // When one or both ends are async, use named pipes to support async I/O
         string pipeName = $@"\\.\pipe\{Guid.NewGuid()}";
-        Interop.Kernel32.SECURITY_ATTRIBUTES securityAttributesParent = default;
+        Interop.Kernel32.SECURITY_ATTRIBUTES securityAttributes = default;
+        // TODO: think about security attributes
+        // Example: current-user: https://github.com/dotnet/runtime/blob/ed58e5fd2d5bce794c1d5acafa9f268151fefd47/src/libraries/System.IO.Pipes/src/System/IO/Pipes/NamedPipeServerStream.Windows.cs#L102-L123
 
         // Determine the open mode for the read end
         int openMode = Interop.Kernel32.FileOperations.PIPE_ACCESS_INBOUND |
-                       Interop.Kernel32.FileOperations.FILE_FLAG_FIRST_PIPE_INSTANCE;
+                       Interop.Kernel32.FileOperations.FILE_FLAG_FIRST_PIPE_INSTANCE; // Only one can be created with this name
         
         if (asyncRead)
         {
-            openMode |= Interop.Kernel32.FileOperations.FILE_FLAG_OVERLAPPED;
+            openMode |= Interop.Kernel32.FileOperations.FILE_FLAG_OVERLAPPED; // Asynchronous I/O
         }
 
-        int pipeMode = Interop.Kernel32.FileOperations.PIPE_TYPE_BYTE |
-                       Interop.Kernel32.FileOperations.PIPE_READMODE_BYTE |
-                       Interop.Kernel32.FileOperations.PIPE_WAIT;
+        int pipeMode = Interop.Kernel32.FileOperations.PIPE_TYPE_BYTE | // the alternative would be to use "Message"
+                       Interop.Kernel32.FileOperations.PIPE_READMODE_BYTE | // Data is read from the pipe as a stream of bytes
+                       Interop.Kernel32.FileOperations.PIPE_WAIT; // Blocking mode is enabled (the operations are not completed until there is data to read)
 
-        read = Interop.Kernel32.CreateNamedPipe(pipeName, openMode, pipeMode, 1, 0, 0, 0, ref securityAttributesParent);
+        // TODO: handle pipe name collisions (very unlikely)
+        read = Interop.Kernel32.CreateNamedPipe(pipeName, openMode, pipeMode, 1, 0, 0, 0, ref securityAttributes);
 
         if (read.IsInvalid)
         {
@@ -70,7 +73,7 @@ public static partial class FileExtensions
 
         try
         {
-            // Open the write end with appropriate options
+            // STD OUT and ERR can't use async IO
             FileOptions writeOptions = asyncWrite ? FileOptions.Asynchronous : FileOptions.None;
             write = File.OpenHandle(pipeName, FileMode.Open, FileAccess.Write, FileShare.Read, writeOptions);
         }
