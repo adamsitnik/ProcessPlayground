@@ -40,10 +40,8 @@ internal static class Multiplexing
             while (!outputClosed || !errorClosed)
             {
                 Span<KEvent> events = stackalloc KEvent[processExited ? 2 : 3];
-                // To avoid race between process exit and reading remaining output,
-                // if the process has exited, wait for a short timeout to read remaining output.
-                int timeoutMs = processExited ? 3 : timeout.GetRemainingMillisecondsOrThrow();
-                int numEvents = WaitForEvents(kq, events, timeoutMs, !processExited);
+                int timeoutMs = processExited ? NonBlockingTimeout : timeout.GetRemainingMillisecondsOrThrow();
+                int numEvents = WaitForEvents(kq, events, timeoutMs);
 
                 // Process all events from this kevent() call
                 for (int i = 0; i < numEvents; i++)
@@ -69,6 +67,26 @@ internal static class Multiplexing
                         // Process has exited
                         processExited = true;
                     }
+                }
+
+                // If process exited, drain any remaining buffered data from pipes
+                if (processExited)
+                {
+                    Thread.Sleep(TimeSpan.FromMilliseconds(10)); // Small delay to allow data to arrive
+
+                    if (!outputClosed)
+                    {
+                        ReadNonBlocking(outputFd, ref outputBuffer, ref outputBytesRead);
+                        outputClosed = true;
+                    }
+                    
+                    if (!errorClosed)
+                    {
+                        ReadNonBlocking(errorFd, ref errorBuffer, ref errorBytesRead);
+                        errorClosed = true;
+                    }
+                    
+                    return;
                 }
             }
         }
@@ -156,7 +174,7 @@ internal static class Multiplexing
         }
     }
 
-    private static int WaitForEvents(int kq, Span<KEvent> events, int timeoutMs, bool throwOnTimeout)
+    private static int WaitForEvents(int kq, Span<KEvent> events, int timeoutMs)
     {
         unsafe
         {
@@ -187,7 +205,7 @@ internal static class Multiplexing
                     ThrowForLastError(nameof(kevent));
                 }
                 
-                if (numEvents == 0 && throwOnTimeout)
+                if (numEvents == 0 && timeoutMs != NonBlockingTimeout)
                 {
                     throw new TimeoutException("Timed out waiting for process OUT and ERR.");
                 }
