@@ -22,7 +22,7 @@ internal static class Multiplexing
         int kq = create_kqueue_cloexec();
         if (kq == -1)
         {
-            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to create kqueue");
+            ThrowForLastError(nameof(create_kqueue_cloexec));
         }
 
         try
@@ -97,12 +97,12 @@ internal static class Multiplexing
         int flags = fcntl(fd, F_GETFL, 0);
         if (flags == -1)
         {
-            throw new Win32Exception(Marshal.GetLastPInvokeError(), "fcntl(F_GETFL) failed");
+            ThrowForLastError("fcntl(F_GETFL)");
         }
 
         if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
         {
-            throw new Win32Exception(Marshal.GetLastPInvokeError(), "fcntl(F_SETFL) failed");
+            ThrowForLastError("fcntl(F_SETFL)");
         }
     }
 
@@ -149,7 +149,7 @@ internal static class Multiplexing
             {
                 if (kevent(kq, pChanges, 3, null, 0, null) == -1)
                 {
-                    throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to register kqueue events");
+                    ThrowForLastError("kevent() registration");
                 }
             }
         }
@@ -185,7 +185,7 @@ internal static class Multiplexing
                     {
                         return 0; // Interrupted, caller will retry
                     }
-                    throw new Win32Exception(errno, "kevent() failed");
+                    ThrowForLastError(nameof(kevent));
                 }
                 
                 if (numEvents == 0)
@@ -245,6 +245,12 @@ internal static class Multiplexing
                 }
             }
         }
+    }
+
+    private static void ThrowForLastError(string msg)
+    {
+        int errno = Marshal.GetLastPInvokeError();
+        throw new Win32Exception($"{msg}: {errno}");
     }
 
     // P/Invoke declarations
