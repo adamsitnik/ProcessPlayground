@@ -99,15 +99,23 @@ internal static class Multiplexing
                 int numEvents;
                 unsafe
                 {
-                    TimeSpec timeoutSpec = new TimeSpec
+                    TimeSpec* timeoutPtr = null;
+                    TimeSpec timeoutSpec = default;
+                    
+                    if (timeoutMs >= 0)
                     {
-                        tv_sec = timeoutMs / 1000,
-                        tv_nsec = (nint)((timeoutMs % 1000) * 1000000)
-                    };
+                        timeoutSpec = new TimeSpec
+                        {
+                            tv_sec = timeoutMs / 1000,
+                            tv_nsec = (timeoutMs % 1000) * 1000000
+                        };
+                        timeoutPtr = &timeoutSpec;
+                    }
+                    // else: timeoutMs < 0 means infinite timeout, pass null to kevent
 
                     fixed (KEvent* pEvents = events)
                     {
-                        numEvents = kevent(kq, null, 0, pEvents, events.Length, &timeoutSpec);
+                        numEvents = kevent(kq, null, 0, pEvents, events.Length, timeoutPtr);
                     }
                 }
 
