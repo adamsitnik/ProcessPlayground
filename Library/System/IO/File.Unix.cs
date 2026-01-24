@@ -29,6 +29,8 @@ public static partial class FileExtensions
     private static readonly int O_CLOEXEC = OperatingSystem.IsMacOS() ? 0x1000000 : 0x80000;
     private const int F_SETFD = 2;
     private const int FD_CLOEXEC = 1;
+    private const int F_GETFL = 3;
+    private const int F_SETFL = 4;
     private const int O_NONBLOCK = 0x0004;
     // Unix file mode: 0666 (read/write for user, group, and others)
     private const int UnixFifoMode = 0x1B6;
@@ -51,6 +53,92 @@ public static partial class FileExtensions
                 return new SafeFileHandle(result, ownsHandle: true);
             }
         }
+    }
+
+    private static unsafe void CreatePipeCore(out SafeFileHandle read, out SafeFileHandle write, bool asyncRead, bool asyncWrite)
+    {
+        int* fds = stackalloc int[2];
+
+        if (OperatingSystem.IsMacOS())
+        {
+            // macOS doesn't have pipe2, use pipe + fcntl
+            if (pipe(fds) < 0)
+            {
+                throw new ComponentModel.Win32Exception(Marshal.GetLastPInvokeError());
+            }
+
+            // Set FD_CLOEXEC on both file descriptors
+            if (fcntl(fds[0], F_SETFD, FD_CLOEXEC) < 0 || fcntl(fds[1], F_SETFD, FD_CLOEXEC) < 0)
+            {
+                int errno = Marshal.GetLastPInvokeError();
+
+                close(fds[0]);
+                close(fds[1]);
+
+                throw new ComponentModel.Win32Exception(errno);
+            }
+
+            // Set O_NONBLOCK if async is requested
+            if (asyncRead)
+            {
+                int flags = fcntl(fds[0], F_GETFL, 0);
+                if (flags < 0 || fcntl(fds[0], F_SETFL, flags | O_NONBLOCK) < 0)
+                {
+                    int errno = Marshal.GetLastPInvokeError();
+                    close(fds[0]);
+                    close(fds[1]);
+                    throw new ComponentModel.Win32Exception(errno);
+                }
+            }
+
+            if (asyncWrite)
+            {
+                int flags = fcntl(fds[1], F_GETFL, 0);
+                if (flags < 0 || fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) < 0)
+                {
+                    int errno = Marshal.GetLastPInvokeError();
+                    close(fds[0]);
+                    close(fds[1]);
+                    throw new ComponentModel.Win32Exception(errno);
+                }
+            }
+        }
+        else
+        {
+            // Linux has pipe2 (atomic creation with O_CLOEXEC)
+            if (pipe2(fds, O_CLOEXEC) < 0)
+            {
+                throw new ComponentModel.Win32Exception(Marshal.GetLastPInvokeError());
+            }
+
+            // Set O_NONBLOCK if async is requested
+            if (asyncRead)
+            {
+                int flags = fcntl(fds[0], F_GETFL, 0);
+                if (flags < 0 || fcntl(fds[0], F_SETFL, flags | O_NONBLOCK) < 0)
+                {
+                    int errno = Marshal.GetLastPInvokeError();
+                    close(fds[0]);
+                    close(fds[1]);
+                    throw new ComponentModel.Win32Exception(errno);
+                }
+            }
+
+            if (asyncWrite)
+            {
+                int flags = fcntl(fds[1], F_GETFL, 0);
+                if (flags < 0 || fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) < 0)
+                {
+                    int errno = Marshal.GetLastPInvokeError();
+                    close(fds[0]);
+                    close(fds[1]);
+                    throw new ComponentModel.Win32Exception(errno);
+                }
+            }
+        }
+
+        read = new SafeFileHandle(fds[0], ownsHandle: true);
+        write = new SafeFileHandle(fds[1], ownsHandle: true);
     }
 
     private static unsafe void CreateAnonymousPipeCore(out SafeFileHandle read, out SafeFileHandle write)

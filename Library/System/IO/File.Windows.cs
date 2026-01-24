@@ -29,6 +29,52 @@ public static partial class FileExtensions
         return handle;
     }
 
+    private static void CreatePipeCore(out SafeFileHandle read, out SafeFileHandle write, bool asyncRead, bool asyncWrite)
+    {
+        // When neither end is async, use the simple CreatePipe API
+        if (!asyncRead && !asyncWrite)
+        {
+            CreateAnonymousPipeCore(out read, out write);
+            return;
+        }
+
+        // When one or both ends are async, use named pipes to support async I/O
+        string pipeName = $@"\\.\pipe\{Guid.NewGuid()}";
+        Interop.Kernel32.SECURITY_ATTRIBUTES securityAttributesParent = default;
+
+        // Determine the open mode for the read end
+        int openMode = Interop.Kernel32.FileOperations.PIPE_ACCESS_INBOUND |
+                       Interop.Kernel32.FileOperations.FILE_FLAG_FIRST_PIPE_INSTANCE;
+        
+        if (asyncRead)
+        {
+            openMode |= Interop.Kernel32.FileOperations.FILE_FLAG_OVERLAPPED;
+        }
+
+        int pipeMode = Interop.Kernel32.FileOperations.PIPE_TYPE_BYTE |
+                       Interop.Kernel32.FileOperations.PIPE_READMODE_BYTE |
+                       Interop.Kernel32.FileOperations.PIPE_WAIT;
+
+        read = Interop.Kernel32.CreateNamedPipe(pipeName, openMode, pipeMode, 1, 0, 0, 0, ref securityAttributesParent);
+
+        if (read.IsInvalid)
+        {
+            throw new Win32Exception(Marshal.GetLastPInvokeError());
+        }
+
+        try
+        {
+            // Open the write end with appropriate options
+            FileOptions writeOptions = asyncWrite ? FileOptions.Asynchronous : FileOptions.None;
+            write = File.OpenHandle(pipeName, FileMode.Open, FileAccess.Write, FileShare.Read, writeOptions);
+        }
+        catch
+        {
+            read.Dispose();
+            throw;
+        }
+    }
+
     private static void CreateAnonymousPipeCore(out SafeFileHandle read, out SafeFileHandle write)
     {
         Interop.Kernel32.SECURITY_ATTRIBUTES securityAttributesParent = default;
