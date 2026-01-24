@@ -37,7 +37,7 @@ internal static class Multiplexing
             bool errorClosed = false;
 
             // Main event loop
-            while (!processExited || !outputClosed || !errorClosed)
+            while (!outputClosed || !errorClosed)
             {
                 Span<KEvent> events = stackalloc KEvent[processExited ? 2 : 3];
                 int timeoutMs = processExited ? NonBlockingTimeout : timeout.GetRemainingMillisecondsOrThrow();
@@ -155,17 +155,18 @@ internal static class Multiplexing
                 if (kevent(kq, pChanges, 3, null, 0, null) == -1)
                 {
                     int errno = Marshal.GetLastPInvokeError();
-                    if (errno == 3) // ESRCH - process does not exist
+                    if (errno == ESRCH) // Process does not exist
                     {
+                        // Process already exited, register only the fd events
                         if (kevent(kq, pChanges, 2, null, 0, null) == -1)
                         {
-                            ThrowForLastError("kevent() registration for 2");
+                            ThrowForLastError("kevent() registration");
                         }
 
                         return true; // Process already exited
                     }
 
-                    ThrowForLastError("kevent() registration for 3");
+                    ThrowForLastError("kevent() registration");
                 }
 
                 return false;
@@ -307,6 +308,7 @@ internal static class Multiplexing
 
     // errno values
     private const int EINTR = 4;
+    private const int ESRCH = 3; // No such process
     private const int EAGAIN = 35;
     private const int EWOULDBLOCK = EAGAIN; // On macOS, EWOULDBLOCK == EAGAIN
 
