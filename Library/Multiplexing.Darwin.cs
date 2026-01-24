@@ -84,7 +84,7 @@ internal static class Multiplexing
                 int errno = Marshal.GetLastPInvokeError();
                 // If the process doesn't exist at registration time (ESRCH), it has already exited
                 // Just continue without EVFILT_PROC monitoring - we'll read remaining data and exit
-                if (errno != ESRCH)
+                //if (errno != ESRCH)
                 {
                     throw new Win32Exception(errno, $"Failed to register kqueue events with error {errno}");
                 }
