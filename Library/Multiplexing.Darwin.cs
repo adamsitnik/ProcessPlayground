@@ -10,12 +10,13 @@ internal static class Multiplexing
     internal static void GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout,
         ref int outputBytesRead, ref int errorBytesRead, ref byte[] outputBuffer, ref byte[] errorBuffer)
     {
-        using FileStream stdoutStream = new(readStdOut, FileAccess.Read, bufferSize: 1, isAsync: false);
-        using FileStream stderrStream = new(readStdErr, FileAccess.Read, bufferSize: 1, isAsync: false);
-
         int outputFd = (int)readStdOut.DangerousGetHandle();
         int errorFd = (int)readStdErr.DangerousGetHandle();
         int pid = processHandle.ProcessId;
+
+        // Set both file descriptors to non-blocking mode
+        SetNonBlocking(outputFd);
+        SetNonBlocking(errorFd);
 
         // Create kqueue
         int kq = create_kqueue_cloexec();
@@ -51,11 +52,11 @@ internal static class Multiplexing
                         
                         if (fd == outputFd && !outputClosed)
                         {
-                            outputClosed = !ReadAvailableData(stdoutStream, ref outputBuffer, ref outputBytesRead);
+                            outputClosed = !ReadNonBlocking(outputFd, ref outputBuffer, ref outputBytesRead);
                         }
                         else if (fd == errorFd && !errorClosed)
                         {
-                            errorClosed = !ReadAvailableData(stderrStream, ref errorBuffer, ref errorBytesRead);
+                            errorClosed = !ReadNonBlocking(errorFd, ref errorBuffer, ref errorBytesRead);
                         }
                     }
                     else if (evt.filter == EVFILT_PROC && (evt.fflags & NOTE_EXIT) != 0)
@@ -70,13 +71,13 @@ internal static class Multiplexing
                 {
                     if (!outputClosed)
                     {
-                        DrainStream(stdoutStream, ref outputBuffer, ref outputBytesRead);
+                        ReadNonBlocking(outputFd, ref outputBuffer, ref outputBytesRead);
                         outputClosed = true;
                     }
                     
                     if (!errorClosed)
                     {
-                        DrainStream(stderrStream, ref errorBuffer, ref errorBytesRead);
+                        ReadNonBlocking(errorFd, ref errorBuffer, ref errorBytesRead);
                         errorClosed = true;
                     }
                     
@@ -88,6 +89,20 @@ internal static class Multiplexing
         {
             // Closing the kqueue fd automatically removes all registered events
             close(kq);
+        }
+    }
+
+    private static void SetNonBlocking(int fd)
+    {
+        int flags = fcntl(fd, F_GETFL, 0);
+        if (flags == -1)
+        {
+            throw new Win32Exception(Marshal.GetLastPInvokeError(), "fcntl(F_GETFL) failed");
+        }
+
+        if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
+        {
+            throw new Win32Exception(Marshal.GetLastPInvokeError(), "fcntl(F_SETFL) failed");
         }
     }
 
@@ -183,44 +198,51 @@ internal static class Multiplexing
         }
     }
 
-    private static bool ReadAvailableData(FileStream stream, ref byte[] buffer, ref int bytesRead)
+    private static bool ReadNonBlocking(int fd, ref byte[] buffer, ref int bytesRead)
     {
-        int read = stream.Read(buffer.AsSpan(bytesRead));
-        if (read == 0)
-        {
-            return false; // EOF reached
-        }
-
-        bytesRead += read;
-        if (bytesRead == buffer.Length)
-        {
-            BufferHelper.RentLargerBuffer(ref buffer);
-        }
-
-        return true; // More data may be available
-    }
-
-    private static void DrainStream(FileStream stream, ref byte[] buffer, ref int bytesRead)
-    {
-        // Read all remaining data until EOF
+        // Read all available data from the file descriptor until EAGAIN/EWOULDBLOCK
         while (true)
         {
-            int read = stream.Read(buffer.AsSpan(bytesRead));
-            if (read == 0)
+            unsafe
             {
-                break; // EOF
+                fixed (byte* ptr = &buffer[bytesRead])
+                {
+                    nint result = read(fd, ptr, buffer.Length - bytesRead);
+                    
+                    if (result > 0)
+                    {
+                        bytesRead += (int)result;
+                        
+                        if (bytesRead == buffer.Length)
+                        {
+                            BufferHelper.RentLargerBuffer(ref buffer);
+                        }
+                    }
+                    else if (result == 0)
+                    {
+                        // EOF - pipe closed
+                        return false;
+                    }
+                    else
+                    {
+                        int errno = Marshal.GetLastPInvokeError();
+                        if (errno == EAGAIN || errno == EWOULDBLOCK)
+                        {
+                            // No more data available right now (non-blocking)
+                            return true;
+                        }
+                        else if (errno == EINTR)
+                        {
+                            // Interrupted, try again
+                            continue;
+                        }
+                        else
+                        {
+                            throw new Win32Exception(errno, $"read() failed on fd {fd}");
+                        }
+                    }
+                }
             }
-
-            bytesRead += read;
-            if (bytesRead == buffer.Length)
-            {
-                BufferHelper.RentLargerBuffer(ref buffer);
-            }
-            else
-            {
-                break; // No more data currently available
-            }
-
         }
     }
 
@@ -253,14 +275,29 @@ internal static class Multiplexing
     // EVFILT_PROC flags
     private const uint NOTE_EXIT = 0x80000000;
 
+    // fcntl commands
+    private const int F_GETFL = 3;
+    private const int F_SETFL = 4;
+
+    // File status flags
+    private const int O_NONBLOCK = 0x0004;
+
     // errno values
     private const int EINTR = 4;
+    private const int EAGAIN = 35;
+    private const int EWOULDBLOCK = EAGAIN; // On macOS, EWOULDBLOCK == EAGAIN
 
     [DllImport("libc", SetLastError = true)]
     private static extern unsafe int kevent(int kq, KEvent* changelist, int nchanges, KEvent* eventlist, int nevents, TimeSpec* timeout);
 
     [DllImport("libc", SetLastError = true)]
     private static extern int close(int fd);
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int fcntl(int fd, int cmd, int arg);
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern unsafe nint read(int fd, void* buf, nint count);
 
     [DllImport("libpal_process", EntryPoint = "create_kqueue_cloexec", SetLastError = true)]
     private static extern int create_kqueue_cloexec();
