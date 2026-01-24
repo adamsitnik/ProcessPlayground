@@ -50,6 +50,18 @@ public static partial class FileExtensions
         }
     }
 
+    private static unsafe void SetNonBlocking(int fd, int readFd, int writeFd)
+    {
+        int flags = fcntl(fd, F_GETFL, 0);
+        if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
+        {
+            int errno = Marshal.GetLastPInvokeError();
+            close(readFd);
+            close(writeFd);
+            throw new ComponentModel.Win32Exception(errno);
+        }
+    }
+
     private static unsafe void CreatePipeCore(out SafeFileHandle read, out SafeFileHandle write, bool asyncRead, bool asyncWrite)
     {
         int* fds = stackalloc int[2];
@@ -76,26 +88,12 @@ public static partial class FileExtensions
             // Set O_NONBLOCK if async is requested
             if (asyncRead)
             {
-                int flags = fcntl(fds[0], F_GETFL, 0);
-                if (flags < 0 || fcntl(fds[0], F_SETFL, flags | O_NONBLOCK) < 0)
-                {
-                    int errno = Marshal.GetLastPInvokeError();
-                    close(fds[0]);
-                    close(fds[1]);
-                    throw new ComponentModel.Win32Exception(errno);
-                }
+                SetNonBlocking(fds[0], fds[0], fds[1]);
             }
 
             if (asyncWrite)
             {
-                int flags = fcntl(fds[1], F_GETFL, 0);
-                if (flags < 0 || fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) < 0)
-                {
-                    int errno = Marshal.GetLastPInvokeError();
-                    close(fds[0]);
-                    close(fds[1]);
-                    throw new ComponentModel.Win32Exception(errno);
-                }
+                SetNonBlocking(fds[1], fds[0], fds[1]);
             }
         }
         else
@@ -109,26 +107,12 @@ public static partial class FileExtensions
             // Set O_NONBLOCK if async is requested
             if (asyncRead)
             {
-                int flags = fcntl(fds[0], F_GETFL, 0);
-                if (flags < 0 || fcntl(fds[0], F_SETFL, flags | O_NONBLOCK) < 0)
-                {
-                    int errno = Marshal.GetLastPInvokeError();
-                    close(fds[0]);
-                    close(fds[1]);
-                    throw new ComponentModel.Win32Exception(errno);
-                }
+                SetNonBlocking(fds[0], fds[0], fds[1]);
             }
 
             if (asyncWrite)
             {
-                int flags = fcntl(fds[1], F_GETFL, 0);
-                if (flags < 0 || fcntl(fds[1], F_SETFL, flags | O_NONBLOCK) < 0)
-                {
-                    int errno = Marshal.GetLastPInvokeError();
-                    close(fds[0]);
-                    close(fds[1]);
-                    throw new ComponentModel.Win32Exception(errno);
-                }
+                SetNonBlocking(fds[1], fds[0], fds[1]);
             }
         }
 
