@@ -9,7 +9,7 @@ public class AnonymousPipeTests
     [Fact]
     public void CreateAnonymousPipe_CreatesValidHandles()
     {
-        File.CreateAnonymousPipe(out SafeFileHandle readHandle, out SafeFileHandle writeHandle);
+        File.CreatePipe(out SafeFileHandle readHandle, out SafeFileHandle writeHandle);
 
         Assert.False(readHandle.IsInvalid);
         Assert.False(readHandle.IsClosed);
@@ -22,7 +22,7 @@ public class AnonymousPipeTests
     {
         byte[] message = "Hello, Pipe!"u8.ToArray();
 
-        File.CreateAnonymousPipe(out SafeFileHandle readHandle, out SafeFileHandle writeHandle);
+        File.CreatePipe(out SafeFileHandle readHandle, out SafeFileHandle writeHandle);
 
         using (readHandle)
         using (writeHandle)

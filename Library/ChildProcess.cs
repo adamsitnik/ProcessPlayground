@@ -158,13 +158,13 @@ public static partial class ChildProcess
         if (OperatingSystem.IsWindows())
         {
             // We open ASYNC read handles to allow for cancellation for timeout.
-            File.CreateNamedPipe(out readStdOut, out writeStdOut);
-            File.CreateNamedPipe(out readStdErr, out writeStdErr);
+            File.CreatePipe(out readStdOut, out writeStdOut, asyncRead: true);
+            File.CreatePipe(out readStdErr, out writeStdErr, asyncRead: true);
         }
         else
         {
-            File.CreateAnonymousPipe(out readStdOut, out writeStdOut);
-            File.CreateAnonymousPipe(out readStdErr, out writeStdErr);
+            File.CreatePipe(out readStdOut, out writeStdOut);
+            File.CreatePipe(out readStdErr, out writeStdErr);
         }
 
         using (readStdOut)
@@ -221,13 +221,13 @@ public static partial class ChildProcess
         if (OperatingSystem.IsWindows())
         {
             // We open ASYNC read handles to allow for cancellation for timeout.
-            File.CreateNamedPipe(out readStdOut, out writeStdOut);
-            File.CreateNamedPipe(out readStdErr, out writeStdErr);
+            File.CreatePipe(out readStdOut, out writeStdOut, asyncRead: true);
+            File.CreatePipe(out readStdErr, out writeStdErr, asyncRead: true);
         }
         else
         {
-            File.CreateAnonymousPipe(out readStdOut, out writeStdOut);
-            File.CreateAnonymousPipe(out readStdErr, out writeStdErr);
+            File.CreatePipe(out readStdOut, out writeStdOut);
+            File.CreatePipe(out readStdErr, out writeStdErr);
         }
 
         using (readStdOut)
@@ -329,11 +329,11 @@ public static partial class ChildProcess
         if (OperatingSystem.IsWindows() && timeoutHelper.CanExpire)
         {
             // We open ASYNC read handle and sync write handle to allow for cancellation for timeout.
-            File.CreateNamedPipe(out read, out write);
+            File.CreatePipe(out read, out write, asyncRead: true);
         }
         else
         {
-            File.CreateAnonymousPipe(out read, out write);
+            File.CreatePipe(out read, out write);
         }
 
         using (read)
@@ -408,11 +408,11 @@ public static partial class ChildProcess
         if (OperatingSystem.IsWindows())
         {
             // We open ASYNC read handle and sync write handle to allow for cancellation.
-            File.CreateNamedPipe(out read, out write);
+            File.CreatePipe(out read, out write, asyncRead: true);
         }
         else
         {
-            File.CreateAnonymousPipe(out read, out write);
+            File.CreatePipe(out read, out write);
         }
 
         using (read)

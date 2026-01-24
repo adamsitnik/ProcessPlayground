@@ -11,7 +11,7 @@ public class PipingTests
     [Fact]
     public async Task CanPipeFromEchoToFindstr()
     {
-        File.CreateAnonymousPipe(out SafeFileHandle readPipe, out SafeFileHandle writePipe);
+        File.CreatePipe(out SafeFileHandle readPipe, out SafeFileHandle writePipe);
 
         using (readPipe)
         using (writePipe)

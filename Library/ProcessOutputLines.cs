@@ -45,11 +45,11 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
     {
 #if WINDOWS
         // On Windows, we prefer named pipes to anonymous pipes to allow for 100% async reads.
-        File.CreateNamedPipe(out SafeFileHandle parentOutputHandle, out SafeFileHandle childOutputHandle);
-        File.CreateNamedPipe(out SafeFileHandle parentErrorHandle, out SafeFileHandle childErrorHandle);
+        File.CreatePipe(out SafeFileHandle parentOutputHandle, out SafeFileHandle childOutputHandle, asyncRead: true);
+        File.CreatePipe(out SafeFileHandle parentErrorHandle, out SafeFileHandle childErrorHandle, asyncRead: true);
 #else
-        File.CreateAnonymousPipe(out SafeFileHandle parentOutputHandle, out SafeFileHandle childOutputHandle);
-        File.CreateAnonymousPipe(out SafeFileHandle parentErrorHandle, out SafeFileHandle childErrorHandle);
+        File.CreatePipe(out SafeFileHandle parentOutputHandle, out SafeFileHandle childOutputHandle);
+        File.CreatePipe(out SafeFileHandle parentErrorHandle, out SafeFileHandle childErrorHandle);
 #endif
 
         using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();

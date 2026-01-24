@@ -25,11 +25,11 @@ public class RedirectionTests
         SafeFileHandle read, write;
         if (useNamedPipes)
         {
-            File.CreateNamedPipe(out read, out write);
+            File.CreatePipe(out read, out write, asyncRead: true);
         }
         else
         {
-            File.CreateAnonymousPipe(out read, out write);
+            File.CreatePipe(out read, out write);
         }
 
         // Start the process with both standard output and error redirected to the same handle.
