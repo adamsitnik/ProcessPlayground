@@ -733,10 +733,6 @@ int wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_e
             return -1;
         }
 
-        // kqueue is stateful, we need to delete the event.
-        // We could use EV_ONESHOT, but it would not handle timeout (no event was consumed).
-        change_list.flags = EV_DELETE;
-        kevent(queue, &change_list, 1, NULL, 0, NULL);
         close(queue);
 #else
         struct pollfd pfd = { 0 };
