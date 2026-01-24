@@ -1,6 +1,7 @@
 using Microsoft.Win32.SafeHandles;
 using System.ComponentModel;
 using System.IO;
+using System.Threading;
 using System.Runtime.InteropServices;
 
 namespace System.TBA;
@@ -71,6 +72,8 @@ internal static class Multiplexing
                 // If process exited, drain any remaining buffered data from pipes
                 if (processExited)
                 {
+                    Thread.Sleep(TimeSpan.FromMilliseconds(10)); // Small delay to allow data to arrive
+
                     if (!outputClosed)
                     {
                         ReadNonBlocking(outputFd, ref outputBuffer, ref outputBytesRead);
@@ -232,10 +235,6 @@ internal static class Multiplexing
                 if (bytesRead == buffer.Length)
                 {
                     BufferHelper.RentLargerBuffer(ref buffer);
-                }
-                else
-                {
-                    return true;
                 }
             }
             else if (result == 0)
