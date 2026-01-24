@@ -86,7 +86,7 @@ internal static class Multiplexing
                 // Just continue without EVFILT_PROC monitoring - we'll read remaining data and exit
                 if (errno != ESRCH)
                 {
-                    throw new Win32Exception(errno, "Failed to register kqueue events");
+                    throw new Win32Exception(errno, $"Failed to register kqueue events with error {errno}");
                 }
             }
 
@@ -134,7 +134,7 @@ internal static class Multiplexing
                         }
                         return;
                     }
-                    throw new Win32Exception(errno, "kevent() failed");
+                    throw new Win32Exception(errno, $"kevent() failed with error {errno}");
                 }
                 else if (numEvents == 0)
                 {
