@@ -201,46 +201,47 @@ internal static class Multiplexing
     private static bool ReadNonBlocking(int fd, ref byte[] buffer, ref int bytesRead)
     {
         // Read all available data from the file descriptor until EAGAIN/EWOULDBLOCK
+        nint result;
         while (true)
         {
             unsafe
             {
                 fixed (byte* ptr = &buffer[bytesRead])
                 {
-                    nint result = read(fd, ptr, buffer.Length - bytesRead);
-                    
-                    if (result > 0)
-                    {
-                        bytesRead += (int)result;
+                    result = read(fd, ptr, buffer.Length - bytesRead);
+                }
+            }
+
+            if (result > 0)
+            {
+                bytesRead += (int)result;
                         
-                        if (bytesRead == buffer.Length)
-                        {
-                            BufferHelper.RentLargerBuffer(ref buffer);
-                        }
-                    }
-                    else if (result == 0)
-                    {
-                        // EOF - pipe closed
-                        return false;
-                    }
-                    else
-                    {
-                        int errno = Marshal.GetLastPInvokeError();
-                        if (errno == EAGAIN || errno == EWOULDBLOCK)
-                        {
-                            // No more data available right now (non-blocking)
-                            return true;
-                        }
-                        else if (errno == EINTR)
-                        {
-                            // Interrupted, try again
-                            continue;
-                        }
-                        else
-                        {
-                            throw new Win32Exception(errno, $"read() failed on fd {fd}");
-                        }
-                    }
+                if (bytesRead == buffer.Length)
+                {
+                    BufferHelper.RentLargerBuffer(ref buffer);
+                }
+            }
+            else if (result == 0)
+            {
+                // EOF - pipe closed
+                return false;
+            }
+            else
+            {
+                int errno = Marshal.GetLastPInvokeError();
+                if (errno == EAGAIN || errno == EWOULDBLOCK)
+                {
+                    // No more data available right now (non-blocking)
+                    return true;
+                }
+                else if (errno == EINTR)
+                {
+                    // Interrupted, try again
+                    continue;
+                }
+                else
+                {
+                    throw new Win32Exception(errno, $"read() failed on fd {fd}");
                 }
             }
         }
