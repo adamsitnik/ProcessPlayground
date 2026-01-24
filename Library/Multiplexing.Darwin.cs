@@ -7,6 +7,8 @@ namespace System.TBA;
 
 internal static class Multiplexing
 {
+    private const int NonBlockingTimeout = 0; // Zero timeout for non-blocking kevent wait
+
     internal static void GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout,
         ref int outputBytesRead, ref int errorBytesRead, ref byte[] outputBuffer, ref byte[] errorBuffer)
     {
@@ -28,17 +30,17 @@ internal static class Multiplexing
         try
         {
             // Register three events: stdout read, stderr read, and process exit
-            RegisterKqueueEvents(kq, outputFd, errorFd, pid);
+            bool processExited = RegisterKqueueEvents(kq, outputFd, errorFd, pid);
 
             bool outputClosed = false;
             bool errorClosed = false;
-            bool processExited = false;
 
             // Main event loop
             while (!processExited || !outputClosed || !errorClosed)
             {
-                Span<KEvent> events = stackalloc KEvent[3];
-                int numEvents = WaitForEvents(kq, events, timeout);
+                Span<KEvent> events = stackalloc KEvent[processExited ? 2 : 3];
+                int timeoutMs = processExited ? NonBlockingTimeout : timeout.GetRemainingMillisecondsOrThrow();
+                int numEvents = WaitForEvents(kq, events, timeoutMs);
 
                 // Process all events from this kevent() call
                 for (int i = 0; i < numEvents; i++)
@@ -106,7 +108,7 @@ internal static class Multiplexing
         }
     }
 
-    private static void RegisterKqueueEvents(int kq, int outputFd, int errorFd, int pid)
+    private static bool RegisterKqueueEvents(int kq, int outputFd, int errorFd, int pid)
     {
         Span<KEvent> changes = stackalloc KEvent[3];
         
@@ -149,16 +151,27 @@ internal static class Multiplexing
             {
                 if (kevent(kq, pChanges, 3, null, 0, null) == -1)
                 {
-                    ThrowForLastError("kevent() registration");
+                    int errno = Marshal.GetLastPInvokeError();
+                    if (errno == 3) // ESRCH - process does not exist
+                    {
+                        if (kevent(kq, pChanges, 2, null, 0, null) == -1)
+                        {
+                            ThrowForLastError("kevent() registration for 2");
+                        }
+
+                        return true; // Process already exited
+                    }
+
+                    ThrowForLastError("kevent() registration for 3");
                 }
+
+                return false;
             }
         }
     }
 
-    private static int WaitForEvents(int kq, Span<KEvent> events, TimeoutHelper timeout)
+    private static int WaitForEvents(int kq, Span<KEvent> events, int timeoutMs)
     {
-        int timeoutMs = timeout.GetRemainingMillisecondsOrThrow();
-        
         unsafe
         {
             TimeSpec* timeoutPtr = null;
@@ -188,7 +201,7 @@ internal static class Multiplexing
                     ThrowForLastError(nameof(kevent));
                 }
                 
-                if (numEvents == 0)
+                if (numEvents == 0 && timeoutMs != NonBlockingTimeout)
                 {
                     throw new TimeoutException("Timed out waiting for process OUT and ERR.");
                 }
