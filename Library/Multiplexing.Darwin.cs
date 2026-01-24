@@ -72,7 +72,14 @@ internal static class Multiplexing
                 // If process exited, drain any remaining buffered data from pipes
                 if (processExited)
                 {
-                    WaitForEvents(kq, events, timeoutMs: NonBlockingTimeout);
+                    if (!outputClosed || !errorClosed)
+                    {
+                        // Small delay to allow data to arrive.
+                        // We have tried other solutions:
+                        // - Repeated non-blocking reads until EAGAIN: doesn't work, data may not have arrived yet.
+                        // - Waiting on kqueue with zero timeout: doesn't work, kqueue doesn't always signal again.
+                        Thread.Sleep(TimeSpan.FromMilliseconds(1));
+                    }
 
                     if (!outputClosed)
                     {
