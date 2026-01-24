@@ -86,13 +86,13 @@ internal static class Multiplexing
                         ReadNonBlocking(outputFd, ref outputBuffer, ref outputBytesRead);
                         outputClosed = true;
                     }
-                    
+
                     if (!errorClosed)
                     {
                         ReadNonBlocking(errorFd, ref errorBuffer, ref errorBytesRead);
                         errorClosed = true;
                     }
-                    
+
                     return;
                 }
             }
@@ -198,27 +198,28 @@ internal static class Multiplexing
                 timeoutPtr = &timeoutSpec;
             }
 
+            int numEvents;
             fixed (KEvent* pEvents = events)
             {
-                int numEvents = kevent(kq, null, 0, pEvents, events.Length, timeoutPtr);
-                
-                if (numEvents < 0)
-                {
-                    int errno = Marshal.GetLastPInvokeError();
-                    if (errno == EINTR)
-                    {
-                        return 0; // Interrupted, caller will retry
-                    }
-                    ThrowForLastError(nameof(kevent));
-                }
-                
-                if (numEvents == 0 && timeoutMs != NonBlockingTimeout)
-                {
-                    throw new TimeoutException("Timed out waiting for process OUT and ERR.");
-                }
-                
-                return numEvents;
+                numEvents = kevent(kq, null, 0, pEvents, events.Length, timeoutPtr);
             }
+
+            if (numEvents < 0)
+            {
+                int errno = Marshal.GetLastPInvokeError();
+                if (errno == EINTR)
+                {
+                    return 0; // Interrupted, caller will retry
+                }
+                ThrowForLastError(nameof(kevent));
+            }
+
+            if (numEvents == 0 && timeoutMs != NonBlockingTimeout)
+            {
+                throw new TimeoutException("Timed out waiting for process OUT and ERR.");
+            }
+
+            return numEvents;
         }
     }
 
