@@ -84,17 +84,6 @@ public static partial class FileExtensions
 
                 throw new ComponentModel.Win32Exception(errno);
             }
-
-            // Set O_NONBLOCK if async is requested
-            if (asyncRead)
-            {
-                SetNonBlocking(fds[0], fds[0], fds[1]);
-            }
-
-            if (asyncWrite)
-            {
-                SetNonBlocking(fds[1], fds[0], fds[1]);
-            }
         }
         else
         {
@@ -103,17 +92,17 @@ public static partial class FileExtensions
             {
                 throw new ComponentModel.Win32Exception(Marshal.GetLastPInvokeError());
             }
+        }
 
-            // Set O_NONBLOCK if async is requested
-            if (asyncRead)
-            {
-                SetNonBlocking(fds[0], fds[0], fds[1]);
-            }
+        // Set O_NONBLOCK if async is requested
+        if (asyncRead)
+        {
+            SetNonBlocking(fds[0], fds[0], fds[1]);
+        }
 
-            if (asyncWrite)
-            {
-                SetNonBlocking(fds[1], fds[0], fds[1]);
-            }
+        if (asyncWrite)
+        {
+            SetNonBlocking(fds[1], fds[0], fds[1]);
         }
 
         read = new SafeFileHandle(fds[0], ownsHandle: true);
