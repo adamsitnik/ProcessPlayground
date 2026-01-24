@@ -16,9 +16,18 @@ ProcessStartOptions options = OperatingSystem.IsWindows()
 
 Stopwatch started = Stopwatch.StartNew();
 
-ProcessOutput result = ChildProcess.CaptureOutput(options, timeout: TimeSpan.FromSeconds(5));
+Task<ProcessOutput>[] tasks = Enumerable.Range(0, 10)
+    .Select(_ => Task.Run(() => ChildProcess.CaptureOutput(options, timeout: TimeSpan.FromSeconds(5))))
+    .ToArray();
 
-// Should complete before the grandchild writes (which happens after 3 seconds)
-Console.WriteLine(started.Elapsed);
-Console.WriteLine($"Exit Code: {result.ExitCode}");
-Console.WriteLine($"Standard Output: '{result.StandardOutput}'");
+await Task.WhenAll(tasks);
+
+foreach (var task in tasks)
+{
+    ProcessOutput result = task.Result;
+
+    // Should complete before the grandchild writes (which happens after 3 seconds)
+    Console.WriteLine(started.Elapsed);
+    Console.WriteLine($"Exit Code: {result.ExitCode}");
+    Console.WriteLine($"Standard Output: '{result.StandardOutput}'");
+}
