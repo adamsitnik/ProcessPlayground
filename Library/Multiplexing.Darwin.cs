@@ -215,7 +215,7 @@ internal static class Multiplexing
             if (result > 0)
             {
                 bytesRead += (int)result;
-                        
+
                 if (bytesRead == buffer.Length)
                 {
                     BufferHelper.RentLargerBuffer(ref buffer);
