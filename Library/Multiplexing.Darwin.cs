@@ -72,7 +72,7 @@ internal static class Multiplexing
                 // If process exited, drain any remaining buffered data from pipes
                 if (processExited)
                 {
-                    Thread.Sleep(TimeSpan.FromMilliseconds(10)); // Small delay to allow data to arrive
+                    WaitForEvents(kq, events, timeoutMs: NonBlockingTimeout);
 
                     if (!outputClosed)
                     {
