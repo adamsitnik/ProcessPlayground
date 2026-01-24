@@ -233,6 +233,10 @@ internal static class Multiplexing
                 {
                     BufferHelper.RentLargerBuffer(ref buffer);
                 }
+                else
+                {
+                    return true;
+                }
             }
             else if (result == 0)
             {
