@@ -1,33 +1,188 @@
-﻿// This spawns a grandchild that writes to stdout after a delay, then the child exits immediately
-using System.Diagnostics;
+﻿// See https://aka.ms/new-console-template for more information
 using System.TBA;
+using System.Diagnostics;
 
-ProcessStartOptions options = OperatingSystem.IsWindows()
-    ? new("cmd.exe")
+#pragma warning disable  // Local function is declared but never used
+
+ProcessStartOptions info = new("pwd");
+
+int exitCode = await ChildProcess.InheritAsync(info);
+Console.WriteLine(exitCode);
+
+static void LongRunningWithTimeout()
+{
+    ProcessStartOptions info = new("ping")
     {
-        // Child writes "Child output", spawns grandchild to write after 3 seconds, then exits
-        Arguments = { "/c", "echo Child output && start cmd.exe /c timeout /t 3 /nobreak && exit" }
-    }
-    : new("sh")
-    {
-        // Child writes "Child output", spawns grandchild to write after 3 seconds, then exits
-        Arguments = { "-c", "echo 'Child output' && sleep 3 & exit" }
+        Arguments = { "microsoft.com", "-t" /* Ping the specified host until stopped */ },
+        KillOnParentDeath = true,
     };
 
-Stopwatch started = Stopwatch.StartNew();
+    int exitCode = ChildProcess.Inherit(info, TimeSpan.FromSeconds(3));
+    Console.WriteLine($"Process exited with: {exitCode}");
+}
 
-Task<ProcessOutput>[] tasks = Enumerable.Range(0, 10)
-    .Select(_ => Task.Run(() => ChildProcess.CaptureOutput(options, timeout: TimeSpan.FromSeconds(5))))
-    .ToArray();
-
-await Task.WhenAll(tasks);
-
-foreach (var task in tasks)
+static async Task LongRunningWithTimeoutAsync()
 {
-    ProcessOutput result = task.Result;
+    ProcessStartOptions info = new("ping")
+    {
+        Arguments = { "microsoft.com", "-t" /* Ping the specified host until stopped */ },
+        KillOnParentDeath = true,
+    };
 
-    // Should complete before the grandchild writes (which happens after 3 seconds)
-    Console.WriteLine(started.Elapsed);
-    Console.WriteLine($"Exit Code: {result.ExitCode}");
-    Console.WriteLine($"Standard Output: '{result.StandardOutput}'");
+    using CancellationTokenSource cts = new(TimeSpan.FromSeconds(3));
+    int exitCode = await ChildProcess.InheritAsync(info, cts.Token);
+    Console.WriteLine($"Process exited with: {exitCode}");
+}
+
+static void LongRunningWithCtrlC()
+{
+    ProcessStartOptions info = new("ping")
+    {
+        Arguments = { "microsoft.com", "-t" /* Ping the specified host until stopped */ },
+        KillOnParentDeath = true,
+    };
+
+    int exitCode = ChildProcess.Inherit(info);
+    Console.WriteLine($"Process exited with: {exitCode}");
+}
+
+static void StartAndWaitForExit()
+{
+    // If you don’t set RedirectStandardOutput = true, .NET does not create a pipe for you. The child process simply uses the inherited handle.
+    ProcessStartInfo info = new()
+    {
+        FileName = "dotnet",
+        ArgumentList = { "--help" },
+    };
+
+    using Process process = Process.Start(info)!;
+    process.WaitForExit();
+}
+
+static void Execute()
+{
+    // If you don’t set RedirectStandardOutput = true, .NET does not create a pipe for you. The child process simply uses the inherited handle.
+    ProcessStartOptions info = new("dotnet")
+    {
+        Arguments = { "--help" },
+    };
+
+    int exitCode = ChildProcess.Inherit(info);
+    Console.WriteLine($"Process exited with: {exitCode}");
+}
+
+static async Task ExecuteAsync()
+{
+    // If you don’t set RedirectStandardOutput = true, .NET does not create a pipe for you. The child process simply uses the inherited handle.
+    ProcessStartOptions info = new("dotnet")
+    {
+        Arguments = { "--help" },
+    };
+
+    int exitCode = await ChildProcess.InheritAsync(info);
+    Console.WriteLine($"Process exited with: {exitCode}");
+}
+
+static void RedirectToFileShell()
+{
+    using (Process process = new())
+    {
+        process.StartInfo.FileName = @"c:\windows\system32\cmd.exe";
+        process.StartInfo.Arguments = $"/c \"dotnet --help > shell.txt\"";
+
+        process.Start();
+
+        process.WaitForExit();
+    }
+}
+
+static void RedirectToFile()
+{
+    ProcessStartOptions info = new("dotnet")
+    {
+        Arguments = { "--help" },
+    };
+
+    ChildProcess.RedirectToFiles(info, inputFile: null, outputFile: "custom.txt", errorFile: null);
+}
+
+static async Task StreamAsync()
+{
+    ProcessStartOptions info = new("dotnet")
+    {
+        Arguments = { "--help" },
+    };
+
+    var output = ChildProcess.StreamOutputLines(info);
+    await foreach (var line in output)
+    {
+        if (line.StandardError)
+        {
+            Console.Error.WriteLine($"ERR: {line.Content}");
+        }
+        else
+        {
+            Console.WriteLine($"OUT: {line.Content}");
+        }
+    }
+    Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
+}
+
+static void OldReprint()
+{
+    using (Process process = new())
+    {
+        process.StartInfo.FileName = "dotnet";
+        process.StartInfo.Arguments = "--help";
+        process.StartInfo.CreateNoWindow = true;
+        process.StartInfo.RedirectStandardOutput = true;
+        process.StartInfo.RedirectStandardError = true;
+
+        process.OutputDataReceived += static (sender, e) => Console.WriteLine($"OUT: {e.Data}");
+        process.ErrorDataReceived += static (sender, e) => Console.Error.WriteLine($"ERR: {e.Data}");
+
+        process.Start();
+
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        process.WaitForExit();
+    }
+}
+
+static void StreamSync()
+{
+    ProcessStartOptions info = new("dotnet")
+    {
+        Arguments = { "--help" },
+    };
+
+    var output = ChildProcess.StreamOutputLines(info);
+    foreach (var line in output)
+    {
+        if (line.StandardError)
+        {
+            Console.Error.WriteLine($"ERR: {line.Content}");
+        }
+        else
+        {
+            Console.WriteLine($"OUT: {line.Content}");
+        }
+    }
+    Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
+}
+
+static async Task StreamLongRunningWithTimeoutAsync()
+{
+    ProcessStartOptions info = new("ping")
+    {
+        Arguments = { "microsoft.com", "-t" /* Ping the specified host until stopped */ },
+        KillOnParentDeath = true,
+    };
+
+    using CancellationTokenSource cts = new(TimeSpan.FromSeconds(3));
+    await foreach (var line in ChildProcess.StreamOutputLines(info).WithCancellation(cts.Token))
+    {
+        Console.WriteLine(line.Content);
+    }
 }
