@@ -216,6 +216,11 @@ internal static class Multiplexing
             {
                 BufferHelper.RentLargerBuffer(ref buffer);
             }
+            else
+            {
+                break; // No more data currently available
+            }
+
         }
     }
 
