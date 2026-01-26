@@ -8,25 +8,9 @@ namespace System.IO;
 
 public static partial class FileExtensions
 {
-    private static unsafe SafeFileHandle OpenNullFileHandleCore()
+    private static SafeFileHandle OpenNullFileHandleCore()
     {
-        Interop.Kernel32.SECURITY_ATTRIBUTES securityAttributes = default;
-
-        SafeFileHandle handle = Interop.Kernel32.CreateFile(
-            "NUL",
-            Interop.Kernel32.GenericOperations.GENERIC_WRITE | Interop.Kernel32.GenericOperations.GENERIC_READ,
-            FileShare.ReadWrite,
-            &securityAttributes,
-            FileMode.Open,
-            0,
-            IntPtr.Zero);
-
-        if (handle.IsInvalid)
-        {
-            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to open NUL device");
-        }
-
-        return handle;
+        return File.OpenHandle("NUL", FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite, FileOptions.None);
     }
 
     private static void CreatePipeCore(out SafeFileHandle read, out SafeFileHandle write, bool asyncRead, bool asyncWrite)
