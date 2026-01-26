@@ -62,8 +62,14 @@ public class CreatePipeTests
             Task writeTask = writeStream.WriteAsync(message, 0, message.Length);
 
             byte[] buffer = new byte[message.Length];
-            int bytesRead = await readStream.ReadAsync(buffer, 0, buffer.Length);
+#if !WINDOWS
+            // FileStream does not handle would-block on Unix
             await writeTask;
+#endif
+            int bytesRead = await readStream.ReadAsync(buffer, 0, buffer.Length);
+#if WINDOWS
+            await writeTask;
+#endif
 
             Assert.Equal(message.Length, bytesRead);
             Assert.Equal(message, buffer);
