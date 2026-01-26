@@ -155,17 +155,9 @@ public static partial class ChildProcess
         SafeFileHandle readStdOut, writeStdOut, readStdErr, writeStdErr;
         TimeoutHelper timeoutHelper = TimeoutHelper.Start(timeout);
 
-        if (OperatingSystem.IsWindows())
-        {
-            // We open ASYNC read handles to allow for cancellation for timeout.
-            File.CreateNamedPipe(out readStdOut, out writeStdOut);
-            File.CreateNamedPipe(out readStdErr, out writeStdErr);
-        }
-        else
-        {
-            File.CreateAnonymousPipe(out readStdOut, out writeStdOut);
-            File.CreateAnonymousPipe(out readStdErr, out writeStdErr);
-        }
+        // We open ASYNC read handles to allow for cancellation for timeout on Windows.
+        File.CreatePipe(out readStdOut, out writeStdOut, asyncRead: OperatingSystem.IsWindows());
+        File.CreatePipe(out readStdErr, out writeStdErr, asyncRead: OperatingSystem.IsWindows());
 
         using (readStdOut)
         using (writeStdOut)
@@ -218,17 +210,9 @@ public static partial class ChildProcess
 
         SafeFileHandle readStdOut, writeStdOut, readStdErr, writeStdErr;
 
-        if (OperatingSystem.IsWindows())
-        {
-            // We open ASYNC read handles to allow for cancellation for timeout.
-            File.CreateNamedPipe(out readStdOut, out writeStdOut);
-            File.CreateNamedPipe(out readStdErr, out writeStdErr);
-        }
-        else
-        {
-            File.CreateAnonymousPipe(out readStdOut, out writeStdOut);
-            File.CreateAnonymousPipe(out readStdErr, out writeStdErr);
-        }
+        // We open ASYNC read handles to allow for cancellation for timeout on Windows.
+        File.CreatePipe(out readStdOut, out writeStdOut, asyncRead: OperatingSystem.IsWindows());
+        File.CreatePipe(out readStdErr, out writeStdErr, asyncRead: OperatingSystem.IsWindows());
 
         using (readStdOut)
         using (writeStdOut)
@@ -326,15 +310,8 @@ public static partial class ChildProcess
         SafeFileHandle? write = null;
         TimeoutHelper timeoutHelper = TimeoutHelper.Start(timeout);
 
-        if (OperatingSystem.IsWindows() && timeoutHelper.CanExpire)
-        {
-            // We open ASYNC read handle and sync write handle to allow for cancellation for timeout.
-            File.CreateNamedPipe(out read, out write);
-        }
-        else
-        {
-            File.CreateAnonymousPipe(out read, out write);
-        }
+        // We open ASYNC read handle and sync write handle to allow for cancellation for timeout on Windows.
+        File.CreatePipe(out read, out write, asyncRead: OperatingSystem.IsWindows() && timeoutHelper.CanExpire);
 
         using (read)
         using (write)
@@ -405,15 +382,8 @@ public static partial class ChildProcess
 
         SafeFileHandle read, write;
 
-        if (OperatingSystem.IsWindows())
-        {
-            // We open ASYNC read handle and sync write handle to allow for cancellation.
-            File.CreateNamedPipe(out read, out write);
-        }
-        else
-        {
-            File.CreateAnonymousPipe(out read, out write);
-        }
+        // We open ASYNC read handle and sync write handle to allow for cancellation on Windows.
+        File.CreatePipe(out read, out write, asyncRead: OperatingSystem.IsWindows());
 
         using (read)
         using (write)

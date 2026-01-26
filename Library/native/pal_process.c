@@ -49,7 +49,7 @@ static inline void write_errno_and_exit(int pipe_fd, int err) {
     _exit(127);
 }
 
-// Helper function to create a pipe with CLOEXEC flag
+// Helper function to create a pipe with CLOEXEC flag and optional O_NONBLOCK
 static int create_cloexec_pipe(int pipefd[2]) {
 #ifdef HAVE_PIPE2
     // On systems with pipe2, use it for atomic CLOEXEC
@@ -72,6 +72,42 @@ static int create_cloexec_pipe(int pipefd[2]) {
     
     return 0;
 #endif
+}
+
+// Helper function to create a pipe with CLOEXEC flag and optional O_NONBLOCK on either end
+// async_read: if non-zero, sets O_NONBLOCK on the read end (pipefd[0])
+// async_write: if non-zero, sets O_NONBLOCK on the write end (pipefd[1])
+int create_pipe(int pipefd[2], int async_read, int async_write) {
+    // First create the pipe with CLOEXEC
+    if (create_cloexec_pipe(pipefd) != 0) {
+        return -1;
+    }
+    
+    // Set O_NONBLOCK on read end if requested
+    if (async_read) {
+        int flags = fcntl(pipefd[0], F_GETFL, 0);
+        if (flags == -1 || fcntl(pipefd[0], F_SETFL, flags | O_NONBLOCK) == -1) {
+            int saved_errno = errno;
+            close(pipefd[0]);
+            close(pipefd[1]);
+            errno = saved_errno;
+            return -1;
+        }
+    }
+    
+    // Set O_NONBLOCK on write end if requested
+    if (async_write) {
+        int flags = fcntl(pipefd[1], F_GETFL, 0);
+        if (flags == -1 || fcntl(pipefd[1], F_SETFL, flags | O_NONBLOCK) == -1) {
+            int saved_errno = errno;
+            close(pipefd[0]);
+            close(pipefd[1]);
+            errno = saved_errno;
+            return -1;
+        }
+    }
+    
+    return 0;
 }
 
 #if defined(HAVE_KQUEUE) || defined(HAVE_KQUEUEX)
@@ -733,10 +769,6 @@ int wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_e
             return -1;
         }
 
-        // kqueue is stateful, we need to delete the event.
-        // We could use EV_ONESHOT, but it would not handle timeout (no event was consumed).
-        change_list.flags = EV_DELETE;
-        kevent(queue, &change_list, 1, NULL, 0, NULL);
         close(queue);
 #else
         struct pollfd pfd = { 0 };

@@ -30,8 +30,8 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
         try
         {
             using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
-            File.CreateNamedPipe(out parentOutputHandle, out childOutputHandle);
-            File.CreateNamedPipe(out parentErrorHandle, out childErrorHandle);
+            File.CreatePipe(out parentOutputHandle, out childOutputHandle, asyncRead: true);
+            File.CreatePipe(out parentErrorHandle, out childErrorHandle, asyncRead: true);
 
             using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
             using OverlappedContext outputContext = OverlappedContext.Allocate();
