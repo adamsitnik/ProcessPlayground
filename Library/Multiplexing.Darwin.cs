@@ -15,9 +15,7 @@ internal static class Multiplexing
     {
         int outputFd = (int)readStdOut.DangerousGetHandle();
         int errorFd = (int)readStdErr.DangerousGetHandle();
-        int pid = processHandle.ProcessId;
 
-        // Create kqueue
         int kq = create_kqueue_cloexec();
         if (kq == -1)
         {
@@ -27,26 +25,26 @@ internal static class Multiplexing
         try
         {
             // Register three events: stdout read, stderr read, and process exit
-            bool processExited = RegisterKqueueEvents(kq, outputFd, errorFd, pid);
+            bool processExited = RegisterKqueueEvents(kq, outputFd, errorFd, processHandle.ProcessId);
 
             bool outputClosed = false;
             bool errorClosed = false;
 
-            // Main event loop
             while (!outputClosed || !errorClosed)
             {
+#pragma warning disable CA2014
                 Span<KEvent> events = stackalloc KEvent[processExited ? 2 : 3];
+#pragma warning restore CA2014
+                // If the process has already exited, we only need to wait on the two fds.
                 int timeoutMs = processExited ? NonBlockingTimeout : timeout.GetRemainingMillisecondsOrThrow();
                 int numEvents = WaitForEvents(kq, events, timeoutMs);
 
-                // Process all events from this kevent() call
                 for (int i = 0; i < numEvents; i++)
                 {
                     ref KEvent evt = ref events[i];
 
                     if (evt.filter == EVFILT_READ)
                     {
-                        // Data available for reading
                         int fd = (int)evt.ident;
                         
                         if (fd == outputFd && !outputClosed)
@@ -60,7 +58,6 @@ internal static class Multiplexing
                     }
                     else if (evt.filter == EVFILT_PROC && (evt.fflags & NOTE_EXIT) != 0)
                     {
-                        // Process has exited
                         processExited = true;
                     }
                 }
@@ -248,7 +245,7 @@ internal static class Multiplexing
                 }
                 else
                 {
-                    throw new Win32Exception(errno, $"read() failed on fd {fd}");
+                    throw new Win32Exception(errno, $"read() failed with errno={errno}");
                 }
             }
         }
