@@ -59,10 +59,11 @@ public class CreatePipeTests
         using (FileStream readStream = new(readHandle, FileAccess.Read, bufferSize: 1, isAsync: OperatingSystem.IsWindows()))
         using (FileStream writeStream = new(writeHandle, FileAccess.Write, bufferSize: 1, isAsync: false))
         {
-            await writeStream.WriteAsync(message, 0, message.Length);
+            Task writeTask = writeStream.WriteAsync(message, 0, message.Length);
 
             byte[] buffer = new byte[message.Length];
             int bytesRead = await readStream.ReadAsync(buffer, 0, buffer.Length);
+            await writeTask;
 
             Assert.Equal(message.Length, bytesRead);
             Assert.Equal(message, buffer);

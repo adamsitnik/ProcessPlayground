@@ -36,7 +36,6 @@ public static partial class FileExtensions
         // When neither end is async, use the simple CreatePipe API
         if (!asyncRead && !asyncWrite)
         {
-
             bool ret = Interop.Kernel32.CreatePipe(out read, out write, ref securityAttributes, 0);
             if (!ret || read.IsInvalid || write.IsInvalid)
             {
