@@ -69,4 +69,33 @@ public class CreatePipeTests
             Assert.Equal(message, buffer);
         }
     }
+
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+#if WINDOWS // FileStream does not handle would-block on Unix
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+#endif
+    public async Task CreatePipe_Async_AllowsCommunication(bool asyncRead, bool asyncWrite)
+    {
+        File.CreatePipe(out SafeFileHandle readHandle, out SafeFileHandle writeHandle, asyncRead, asyncWrite);
+        byte[] message = "Hello, Async Pipe!"u8.ToArray();
+
+        using (readHandle)
+        using (writeHandle)
+        using (FileStream readStream = new(readHandle, FileAccess.Read, bufferSize: 1, isAsync: asyncRead && OperatingSystem.IsWindows()))
+        using (FileStream writeStream = new(writeHandle, FileAccess.Write, bufferSize: 1, isAsync: asyncWrite && OperatingSystem.IsWindows()))
+        {
+            Task writeTask = writeStream.WriteAsync(message, 0, message.Length);
+
+            byte[] buffer = new byte[message.Length];
+            int bytesRead = await readStream.ReadAsync(buffer, 0, buffer.Length);
+            await writeTask;
+
+            Assert.Equal(message.Length, bytesRead);
+            Assert.Equal(message, buffer);
+        }
+    }
 }
