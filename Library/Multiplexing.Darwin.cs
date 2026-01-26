@@ -17,10 +17,6 @@ internal static class Multiplexing
         int errorFd = (int)readStdErr.DangerousGetHandle();
         int pid = processHandle.ProcessId;
 
-        // Set both file descriptors to non-blocking mode
-        SetNonBlocking(outputFd);
-        SetNonBlocking(errorFd);
-
         // Create kqueue
         int kq = create_kqueue_cloexec();
         if (kq == -1)
@@ -101,20 +97,6 @@ internal static class Multiplexing
         {
             // Closing the kqueue fd automatically removes all registered events
             close(kq);
-        }
-    }
-
-    private static void SetNonBlocking(int fd)
-    {
-        int flags = fcntl(fd, F_GETFL, 0);
-        if (flags == -1)
-        {
-            ThrowForLastError("fcntl(F_GETFL)");
-        }
-
-        if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
-        {
-            ThrowForLastError("fcntl(F_SETFL)");
         }
     }
 
@@ -307,13 +289,6 @@ internal static class Multiplexing
     // EVFILT_PROC flags
     private const uint NOTE_EXIT = 0x80000000;
 
-    // fcntl commands
-    private const int F_GETFL = 3;
-    private const int F_SETFL = 4;
-
-    // File status flags
-    private const int O_NONBLOCK = 0x0004;
-
     // errno values
     private const int EINTR = 4;
     private const int ESRCH = 3; // No such process
@@ -325,9 +300,6 @@ internal static class Multiplexing
 
     [DllImport("libc", SetLastError = true)]
     private static extern int close(int fd);
-
-    [DllImport("libc", SetLastError = true)]
-    private static extern int fcntl(int fd, int cmd, int arg);
 
     [DllImport("libc", SetLastError = true)]
     private static extern unsafe nint read(int fd, void* buf, nint count);
