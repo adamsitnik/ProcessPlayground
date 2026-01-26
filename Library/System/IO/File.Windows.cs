@@ -31,10 +31,11 @@ public static partial class FileExtensions
 
     private static void CreatePipeCore(out SafeFileHandle read, out SafeFileHandle write, bool asyncRead, bool asyncWrite)
     {
+        Interop.Kernel32.SECURITY_ATTRIBUTES securityAttributes = default;
+
         // When neither end is async, use the simple CreatePipe API
         if (!asyncRead && !asyncWrite)
         {
-            Interop.Kernel32.SECURITY_ATTRIBUTES securityAttributes = default;
 
             bool ret = Interop.Kernel32.CreatePipe(out read, out write, ref securityAttributes, 0);
             if (!ret || read.IsInvalid || write.IsInvalid)
@@ -46,7 +47,6 @@ public static partial class FileExtensions
 
         // When one or both ends are async, use named pipes to support async I/O
         string pipeName = $@"\\.\pipe\{Guid.NewGuid()}";
-        Interop.Kernel32.SECURITY_ATTRIBUTES securityAttributes = default;
         // TODO: think about security attributes
         // Example: current-user: https://github.com/dotnet/runtime/blob/ed58e5fd2d5bce794c1d5acafa9f268151fefd47/src/libraries/System.IO.Pipes/src/System/IO/Pipes/NamedPipeServerStream.Windows.cs#L102-L123
 
@@ -73,7 +73,6 @@ public static partial class FileExtensions
 
         try
         {
-            // STD OUT and ERR can't use async IO
             FileOptions writeOptions = asyncWrite ? FileOptions.Asynchronous : FileOptions.None;
             write = File.OpenHandle(pipeName, FileMode.Open, FileAccess.Write, FileShare.Read, writeOptions);
         }
