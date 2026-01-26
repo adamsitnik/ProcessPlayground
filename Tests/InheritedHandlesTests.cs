@@ -45,7 +45,7 @@ public class InheritedHandlesTests
         byte[] messageBytes = Encoding.UTF8.GetBytes(testMessage);
 
         // Create a pipe
-        File.CreateAnonymousPipe(out SafeFileHandle pipeReadHandle, out SafeFileHandle pipeWriteHandle);
+        File.CreatePipe(out SafeFileHandle pipeReadHandle, out SafeFileHandle pipeWriteHandle);
 
         using (pipeReadHandle)
         using (pipeWriteHandle)
@@ -94,7 +94,7 @@ public class InheritedHandlesTests
             }
 
             using SafeFileHandle nullInput = File.OpenNullFileHandle();
-            File.CreateAnonymousPipe(out SafeFileHandle outputReadHandle, out SafeFileHandle outputWriteHandle);
+            File.CreatePipe(out SafeFileHandle outputReadHandle, out SafeFileHandle outputWriteHandle);
 
             using (outputReadHandle)
             using (outputWriteHandle)

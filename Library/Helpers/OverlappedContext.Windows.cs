@@ -99,7 +99,7 @@ internal sealed unsafe class OverlappedContext : IDisposable
         if (!Interop.Kernel32.GetOverlappedResult(handle, _overlapped, ref bytesRead, bWait: false))
         {
             int errorCode = Marshal.GetLastPInvokeError();
-            Debug.Assert(errorCode == Interop.Errors.ERROR_OPERATION_ABORTED, $"GetOverlappedResult failed with {errorCode}.");
+            Debug.Assert(errorCode is Interop.Errors.ERROR_OPERATION_ABORTED or Interop.Errors.ERROR_BROKEN_PIPE, $"GetOverlappedResult failed with {errorCode}.");
         }
         Debug.Assert(bytesRead == 0, $"Expected non-zero bytes read after cancellation, got {bytesRead}.");
 

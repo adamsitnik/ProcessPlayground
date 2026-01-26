@@ -29,8 +29,8 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
         try
         {
             using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
-            File.CreateAnonymousPipe(out parentOutputHandle, out childOutputHandle);
-            File.CreateAnonymousPipe(out parentErrorHandle, out childErrorHandle);
+            File.CreatePipe(out parentOutputHandle, out childOutputHandle);
+            File.CreatePipe(out parentErrorHandle, out childErrorHandle);
 
             using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(_options, inputHandle, childOutputHandle, childErrorHandle);
 
