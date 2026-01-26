@@ -27,6 +27,14 @@
     <Compile Remove="**/*.Windows.cs" />
   </ItemGroup>
 
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <Compile Remove="Multiplexing.Unix.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('OSX'))">
+    <Compile Remove="Multiplexing.Darwin.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- Workaround https://github.com/dotnet/project-system/issues/935 -->
     <None Include="Copied/**/*.cs" />

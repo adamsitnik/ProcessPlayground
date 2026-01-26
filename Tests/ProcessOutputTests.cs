@@ -321,10 +321,8 @@ public class ProcessOutputTests
         Assert.Equal(0, result.ExitCode);
     }
 
-#if WINDOWS || LINUX
     [Theory]
     [InlineData(false)]
-#endif
     // [InlineData(true)] // https://github.com/adamsitnik/ProcessPlayground/issues/61
     public async Task ProcessOutput_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {
@@ -368,13 +366,11 @@ public class ProcessOutputTests
             result = ChildProcess.CaptureOutput(options, timeout: TimeSpan.FromSeconds(5));
         }
 
-        started.Stop();
+        // Should complete before the grandchild writes (which happens after 3 seconds)
+        Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(1));
 
         Assert.Equal(0, result.ExitCode);
         Assert.Equal(OperatingSystem.IsWindows() ? "Child output \r\n" : "Child output\n", result.StandardOutput);
         Assert.Empty(result.StandardError);
-
-        // Should complete before the grandchild writes (which happens after 3 seconds)
-        Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(1));
     }
 }

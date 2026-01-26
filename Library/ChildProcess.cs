@@ -155,9 +155,11 @@ public static partial class ChildProcess
         SafeFileHandle readStdOut, writeStdOut, readStdErr, writeStdErr;
         TimeoutHelper timeoutHelper = TimeoutHelper.Start(timeout);
 
-        // We open ASYNC read handles to allow for cancellation for timeout on Windows.
-        File.CreatePipe(out readStdOut, out writeStdOut, asyncRead: OperatingSystem.IsWindows());
-        File.CreatePipe(out readStdErr, out writeStdErr, asyncRead: OperatingSystem.IsWindows());
+        // We open ASYNC read handles:
+        // - On Windows, to allow for cancellation for timeout.
+        // - On MacOS, read can block even after fd notification, we need async read and handle EWOULDBLOCK.
+        File.CreatePipe(out readStdOut, out writeStdOut, asyncRead: OperatingSystem.IsWindows() || OperatingSystem.IsMacOS());
+        File.CreatePipe(out readStdErr, out writeStdErr, asyncRead: OperatingSystem.IsWindows() || OperatingSystem.IsMacOS());
 
         using (readStdOut)
         using (writeStdOut)
