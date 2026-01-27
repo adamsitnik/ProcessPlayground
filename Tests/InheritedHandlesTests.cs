@@ -26,7 +26,7 @@ public class InheritedHandlesTests
     {
         ProcessStartOptions options = new("test_executable");
 
-        using SafeFileHandle testHandle = File.OpenNullFileHandle();
+        using SafeFileHandle testHandle = File.OpenNullHandle();
         options.InheritedHandles.Add(testHandle);
 
         Assert.Single(options.InheritedHandles);
@@ -93,7 +93,7 @@ public class InheritedHandlesTests
                 options.InheritedHandles.Add(pipeReadHandle);
             }
 
-            using SafeFileHandle nullInput = File.OpenNullFileHandle();
+            using SafeFileHandle nullInput = File.OpenNullHandle();
             File.CreatePipe(out SafeFileHandle outputReadHandle, out SafeFileHandle outputWriteHandle);
 
             using (outputReadHandle)
@@ -146,7 +146,7 @@ public class InheritedHandlesTests
         // This test verifies that the implementation doesn't create duplicate handles
         // internally when the same handle is added to InheritedHandles multiple times
 
-        using SafeFileHandle testHandle = File.OpenNullFileHandle();
+        using SafeFileHandle testHandle = File.OpenNullHandle();
 
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd.exe") { Arguments = { "/c", "echo", "test" } }
@@ -156,7 +156,7 @@ public class InheritedHandlesTests
         options.InheritedHandles.Add(testHandle);
         options.InheritedHandles.Add(testHandle);
 
-        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
+        using SafeFileHandle nullHandle = File.OpenNullHandle();
 
         // Start the process - this should not fail due to duplicate handles
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
@@ -175,7 +175,7 @@ public class InheritedHandlesTests
         // This test verifies that inherited handles don't conflict with stdio handles
         // even if the same handle is used for both
 
-        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
+        using SafeFileHandle nullHandle = File.OpenNullHandle();
 
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd.exe") { Arguments = { "/c", "echo", "test" } }

@@ -17,7 +17,7 @@ public static partial class FileExtensions
         /// <para>Null device discards all data written to it and provides no data when read from.</para>
         /// <para>It can be used for discarding process output or starting a process with no standard input.</para>
         /// </remarks>
-        public static SafeFileHandle OpenNullFileHandle() => OpenNullFileHandleCore();
+        public static SafeFileHandle OpenNullHandle() => OpenNullHandleCore();
 
         /// <summary>
         /// Creates a pipe for inter-process communication.

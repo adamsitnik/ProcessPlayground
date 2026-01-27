@@ -59,7 +59,7 @@ public static partial class ChildProcess
         // Design: currently, we don't have a way to discard output in ProcessStartInfo,
         // and users often implement it on their own by redirecting the output, consuming it and ignoring it.
         // It's very expensive! We can provide a native way to do it.
-        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
+        using SafeFileHandle nullHandle = File.OpenNullHandle();
 
         using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
         return procHandle.WaitForExit(timeout);
@@ -74,7 +74,7 @@ public static partial class ChildProcess
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
+        using SafeFileHandle nullHandle = File.OpenNullHandle();
 
         using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
         return await procHandle.WaitForExitAsync(cancellationToken);
@@ -317,7 +317,7 @@ public static partial class ChildProcess
 
         using (read)
         using (write)
-        using (SafeFileHandle inputHandle = input ?? File.OpenNullFileHandle())
+        using (SafeFileHandle inputHandle = input ?? File.OpenNullHandle())
         using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, inputHandle, output: write, error: write))
         {
             int processId = processHandle.ProcessId;
@@ -389,7 +389,7 @@ public static partial class ChildProcess
 
         using (read)
         using (write)
-        using (SafeFileHandle inputHandle = input ?? File.OpenNullFileHandle())
+        using (SafeFileHandle inputHandle = input ?? File.OpenNullHandle())
         using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, inputHandle, output: write, error: write))
         using (Stream outputStream = StreamHelper.CreateReadStream(read, cancellationToken))
         {
@@ -436,17 +436,17 @@ public static partial class ChildProcess
     {
         SafeFileHandle inputHandle = inputFile switch
         {
-            null => File.OpenNullFileHandle(),
+            null => File.OpenNullHandle(),
             _ => File.OpenHandle(inputFile, FileMode.Open, FileAccess.Read, FileShare.ReadWrite),
         };
         SafeFileHandle outputHandle = outputFile switch
         {
-            null => File.OpenNullFileHandle(),
+            null => File.OpenNullHandle(),
             _ => File.OpenHandle(outputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite)
         };
         SafeFileHandle errorHandle = errorFile switch
         {
-            null => File.OpenNullFileHandle(),
+            null => File.OpenNullHandle(),
             // When output and error are the same file, we use the same handle!
             _ when errorFile == outputFile => outputHandle,
             _ => File.OpenHandle(errorFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite),

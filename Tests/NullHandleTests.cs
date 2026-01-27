@@ -9,7 +9,7 @@ public class NullHandleTests
     [Fact]
     public void NullFileHandle_IsValid()
     {
-        using SafeFileHandle handle = File.OpenNullFileHandle();
+        using SafeFileHandle handle = File.OpenNullHandle();
 
         Assert.False(handle.IsInvalid);
         Assert.False(handle.IsClosed);
@@ -18,7 +18,7 @@ public class NullHandleTests
     [Fact]
     public async Task NullFileHandle_ReturnsEOF()
     {
-        using SafeFileHandle handle = File.OpenNullFileHandle();
+        using SafeFileHandle handle = File.OpenNullHandle();
         using FileStream stream = new(handle, FileAccess.Read, bufferSize: 1);
 
         int bytesRead = await stream.ReadAsync(new byte[10], 0, 10);
@@ -31,7 +31,7 @@ public class NullHandleTests
     [Fact]
     public async Task NullFileHandle_DiscardsWrites()
     {
-        using SafeFileHandle handle = File.OpenNullFileHandle();
+        using SafeFileHandle handle = File.OpenNullHandle();
         using FileStream stream = new(handle, FileAccess.Write, bufferSize: 1);
 
         await stream.WriteAsync(new byte[100], 0, 100);

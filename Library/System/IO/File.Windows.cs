@@ -8,7 +8,7 @@ namespace System.IO;
 
 public static partial class FileExtensions
 {
-    private static SafeFileHandle OpenNullFileHandleCore()
+    private static SafeFileHandle OpenNullHandleCore()
     {
         return File.OpenHandle("NUL", FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite, FileOptions.None);
     }

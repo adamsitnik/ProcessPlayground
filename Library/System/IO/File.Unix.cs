@@ -9,7 +9,7 @@ public static partial class FileExtensions
     [LibraryImport("pal_process", SetLastError = true)]
     private static unsafe partial int create_pipe(int* pipefd, int async_read, int async_write);
 
-    private static SafeFileHandle OpenNullFileHandleCore()
+    private static SafeFileHandle OpenNullHandleCore()
     {
         return File.OpenHandle("/dev/null", FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite, FileOptions.None);
     }

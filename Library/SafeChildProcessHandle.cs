@@ -71,7 +71,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
 
         if (input is null || output is null || error is null)
         {
-            nullHandle = File.OpenNullFileHandle();
+            nullHandle = File.OpenNullHandle();
 
             input ??= nullHandle;
             output ??= nullHandle;
