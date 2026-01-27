@@ -78,7 +78,7 @@ public partial class SafeChildProcessHandleTests
         // Start a short-lived process
         ProcessStartOptions options = new("echo") { Arguments = { "test" } };
 
-        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
+        using SafeFileHandle nullHandle = File.OpenNullHandle();
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
             options,
             input: null,
