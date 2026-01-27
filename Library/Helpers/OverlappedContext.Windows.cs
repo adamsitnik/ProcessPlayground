@@ -103,7 +103,7 @@ internal sealed unsafe class OverlappedContext : IDisposable
             int errorCode = Marshal.GetLastPInvokeError();
             Debug.Assert(errorCode is Interop.Errors.ERROR_OPERATION_ABORTED or Interop.Errors.ERROR_BROKEN_PIPE, $"GetOverlappedResult failed with {errorCode}.");
         }
-        Debug.Assert(bytesRead == 0, $"Expected non-zero bytes read after cancellation, got {bytesRead}.");
+        Debug.Assert(bytesRead == 0, $"Expected zero bytes read after cancellation, got {bytesRead}.");
 
         handle.Close();
     }
