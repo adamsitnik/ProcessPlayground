@@ -47,6 +47,26 @@ public static partial class ChildProcess
     }
 
     /// <summary>
+    /// Starts the process with STD IN/OUT/ERR redirected to specified handles. Does not wait for its completion.
+    /// </summary>
+    /// <param name="options">The process start options.</param>
+    /// <param name="input">The handle to use for standard input. When null, no input is provided.</param>
+    /// <param name="output">The handle to use for standard output. When null, all output is discarded.</param>
+    /// <param name="error">The handle to use for standard error. When null, all error is discarded.</param>
+    /// <returns>The ID of the started process.</returns>
+    /// <remarks>
+    /// This method starts a process and immediately returns its process ID without waiting for completion.
+    /// The process handle is disposed immediately, so there is no way to wait for the process or retrieve its exit code later.
+    /// </remarks>
+    public static int FireAndForget(ProcessStartOptions options, SafeFileHandle? input = null, SafeFileHandle? output = null, SafeFileHandle? error = null)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, input, output, error);
+        return procHandle.ProcessId;
+    }
+
+    /// <summary>
     /// Executes the process with STD IN/OUT/ERR discarded. Waits for its completion.
     /// </summary>
     /// <param name="timeout">The maximum time to wait for the process to exit.</param>

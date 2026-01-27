@@ -44,7 +44,6 @@ public class ReadBoth
             Arguments = "--help",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
-            UseShellExecute = false
         };
 
         using Process process = Process.Start(info)!;
