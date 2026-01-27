@@ -440,6 +440,267 @@ Console.WriteLine($"Output: {text}");
 | Timeout | `WaitForExit(int)` + `Kill` | `Inherit(TimeSpan)` or `CancellationToken` |
 | Path resolution | Manual PATH search | `ProcessStartOptions.ResolvePath()` |
 
+## Code Examples: OLD vs NEW API
+
+This section shows side-by-side comparisons of common process execution scenarios using the old `Process` API versus the new `ChildProcess` API.
+
+### Scenario 1: Discard Output
+
+When you need to run a process but don't care about its output:
+
+<table>
+<tbody><tr>
+<th>OLD API</th>
+<th>NEW API</th>
+</tr>
+<tr>
+<td>
+
+```csharp
+using (Process process = new())
+{
+    process.StartInfo.FileName = "dotnet";
+    process.StartInfo.Arguments = "--help";
+    process.StartInfo.RedirectStandardOutput = true;
+    process.StartInfo.RedirectStandardError = true;
+
+    process.OutputDataReceived += (sender, e) => { };
+    process.ErrorDataReceived += (sender, e) => { };
+
+    process.Start();
+
+    process.BeginOutputReadLine();
+    process.BeginErrorReadLine();
+
+    process.WaitForExit();
+
+    return process.ExitCode;
+}
+```
+</td>
+<td>
+
+```csharp
+ProcessStartOptions info = new("dotnet")
+{
+    Arguments = { "--help" },
+};
+
+return ChildProcess.Discard(info);
+```
+</td>
+</tr></tbody></table>
+
+### Scenario 2: Inherit Standard Streams
+
+When you want the child process to use the parent's stdin/stdout/stderr:
+
+<table>
+<tbody><tr>
+<th>OLD API</th>
+<th>NEW API</th>
+</tr>
+<tr>
+<td>
+
+```csharp
+ProcessStartInfo info = new()
+{
+    FileName = "dotnet",
+    Arguments = "--help",
+    UseShellExecute = false
+};
+
+using Process process = Process.Start(info)!;
+process.WaitForExit();
+```
+</td>
+<td>
+
+```csharp
+ProcessStartOptions info = new("dotnet")
+{
+    Arguments = { "--help" },
+};
+
+return ChildProcess.Inherit(info);
+```
+</td>
+</tr></tbody></table>
+
+### Scenario 3: Capture Output
+
+When you need to capture stdout and stderr as separate strings:
+
+<table>
+<tbody><tr>
+<th>OLD API</th>
+<th>NEW API</th>
+</tr>
+<tr>
+<td>
+
+```csharp
+ProcessStartInfo info = new()
+{
+    FileName = "dotnet",
+    Arguments = "--help",
+    RedirectStandardOutput = true,
+    RedirectStandardError = true,
+    UseShellExecute = false
+};
+
+using Process process = Process.Start(info)!;
+
+Task<string> readOutput = process.StandardOutput.ReadToEndAsync();
+Task<string> readError = process.StandardError.ReadToEndAsync();
+
+string output = await readOutput;
+string error = await readError;
+await process.WaitForExitAsync();
+
+int exitCode = process.ExitCode;
+```
+</td>
+<td>
+
+```csharp
+ProcessStartOptions info = new("dotnet")
+{
+    Arguments = { "--help" },
+};
+
+ProcessOutput result = await ChildProcess.CaptureOutputAsync(info);
+
+string output = result.StandardOutput;
+string error = result.StandardError;
+int exitCode = result.ExitCode;
+```
+</td>
+</tr></tbody></table>
+
+### Scenario 4: Redirect to File
+
+When you need to redirect stdout to a file:
+
+<table>
+<tbody><tr>
+<th>OLD API</th>
+<th>NEW API</th>
+</tr>
+<tr>
+<td>
+
+```csharp
+using TextWriter text = new StreamWriter("output.txt");
+using (Process process = new())
+{
+    process.StartInfo.FileName = "dotnet";
+    process.StartInfo.Arguments = "--help";
+    process.StartInfo.RedirectStandardOutput = true;
+
+    process.OutputDataReceived += (sender, e) => text.WriteLine(e.Data);
+
+    process.Start();
+
+    process.BeginOutputReadLine();
+
+    process.WaitForExit();
+}
+```
+</td>
+<td>
+
+```csharp
+ProcessStartOptions info = new("dotnet")
+{
+    Arguments = { "--help" },
+};
+
+ChildProcess.RedirectToFiles(info, 
+    inputFile: null, 
+    outputFile: "output.txt", 
+    errorFile: null);
+```
+</td>
+</tr></tbody></table>
+
+### Scenario 5: Stream Output Lines
+
+When you need to process output line-by-line as it arrives:
+
+<table>
+<tbody><tr>
+<th>OLD API</th>
+<th>NEW API</th>
+</tr>
+<tr>
+<td>
+
+```csharp
+ProcessStartInfo info = new()
+{
+    FileName = "dotnet",
+    Arguments = "--help",
+    RedirectStandardOutput = true,
+    RedirectStandardError = true,
+    UseShellExecute = false
+};
+
+using Process process = Process.Start(info)!;
+
+Task<string?> readOutput = process.StandardOutput.ReadLineAsync();
+Task<string?> readError = process.StandardError.ReadLineAsync();
+
+while (true)
+{
+    Task completedTask = await Task.WhenAny(readOutput, readError);
+    
+    bool isError = completedTask == readError;
+    string? line = await(isError ? readError : readOutput);
+    if (line is null)
+    {
+        // Reached end of stream, consume the other stream fully
+        line = await (isError ? readOutput : readError);
+        while (line is not null)
+        {
+            line = await (isError ? readOutput : readError);
+        }
+        break;
+    }
+    
+    // Process the line
+    _ = line;
+    
+    if (isError)
+        readError = process.StandardError.ReadLineAsync();
+    else
+        readOutput = process.StandardOutput.ReadLineAsync();
+}
+
+return process.ExitCode;
+```
+</td>
+<td>
+
+```csharp
+ProcessStartOptions info = new("dotnet")
+{
+    Arguments = { "--help" },
+};
+
+var lines = ChildProcess.StreamOutputLines(info);
+await foreach (var line in lines)
+{
+    // Process the line
+    _ = line.Content;
+}
+
+return lines.ExitCode;
+```
+</td>
+</tr></tbody></table>
+
 ## Project Structure
 
 - **Library/**: Core implementation of the process APIs
