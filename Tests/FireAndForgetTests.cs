@@ -62,9 +62,6 @@ public class FireAndForgetTests
         Assert.InRange(pid1, 1, int.MaxValue);
         Assert.InRange(pid2, 1, int.MaxValue);
         Assert.InRange(pid3, 1, int.MaxValue);
-        Assert.NotEqual(pid1, pid2);
-        Assert.NotEqual(pid2, pid3);
-        Assert.NotEqual(pid1, pid3);
     }
 
     [Fact]

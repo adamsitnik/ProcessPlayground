@@ -56,7 +56,7 @@ public static partial class ChildProcess
     /// <returns>The ID of the started process.</returns>
     /// <remarks>
     /// This method starts a process and immediately returns its process ID without waiting for completion.
-    /// The process handle is disposed immediately, so there is no way to wait for the process or retrieve its exit code later.
+    /// The process handle is disposed immediately and this API does not support waiting for the process or retrieving its exit code; callers receive only the process ID.
     /// </remarks>
     public static int FireAndForget(ProcessStartOptions options, SafeFileHandle? input = null, SafeFileHandle? output = null, SafeFileHandle? error = null)
     {
