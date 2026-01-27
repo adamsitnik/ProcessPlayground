@@ -2,18 +2,311 @@
 
 A playground for exploring new APIs for running command-line processes in .NET.
 
-## Motivation
+# API Overview
 
-Running external processes and capturing their output is a common task in .NET applications, but the current `System.Diagnostics.Process` API has several pain points:
+## ProcessStartOptions
 
-1. **Verbose and error-prone**: Configuring `ProcessStartInfo` correctly requires setting multiple properties
-2. **Inefficient output capture**: Users often implement inefficient patterns to consume output (e.g., using event handlers that allocate per-line or reading to end then discarding)
-3. **No native file redirection**: Redirecting output to files requires reading the output stream and writing to files manually, which is expensive
-4. **Timeout and cancellation handling**: Users frequently need to implement their own Ctrl+C handling and timeout logic
+An option bag class for configuring process creation. Similar to `ProcessStartInfo`, but simpler, focusing on cross-platform scenarios:
 
-This playground explores a new design that addresses these issues with a layered API approach: low-level primitives for advanced scenarios, and high-level convenience methods for common use cases.
+```csharp
+namespace System.TBA;
 
-## API Overview
+public sealed class ProcessStartOptions
+{
+    public string FileName { get; }
+    public IList<string> Arguments { get; }
+    public IDictionary<string, string?> Environment { get; }
+    public DirectoryInfo? WorkingDirectory { get; set; }
+    public IList<SafeHandle> InheritedHandles { get; } // NEW (https://github.com/dotnet/runtime/issues/13943)
+    public bool KillOnParentDeath { get; set; } // NEW (https://github.com/dotnet/runtime/issues/101985)
+
+    public ProcessStartOptions(string fileName);
+    
+    public static ProcessStartOptions ResolvePath(string fileName);
+}
+```
+
+## High-Level APIs
+
+The high-level APIs provide convenient methods for common process execution scenarios.
+
+### Capturing Output
+
+Capturing process output as separate standard output and error strings is tricky with `System.Diagnostics.Process`, as it's very easy to run into deadlocks (the user needs to drain both at the same time). The new `ChildProcess.CaptureOutput` and `CaptureOutputAsync` methods make this easy, deadlock-free and performant.
+
+#### ChildProcess.CaptureOutput
+
+<table>
+<tbody><tr>
+<th>Old</th>
+<th>New</th>
+</tr>
+<tr>
+<td>
+
+```csharp
+StringBuilder outputBuilder = new();
+StringBuilder errorBuilder = new();
+using (Process process = new())
+{
+    process.StartInfo.FileName = "dotnet";
+    process.StartInfo.Arguments = "--help";
+    process.StartInfo.RedirectStandardOutput = true;
+    process.StartInfo.RedirectStandardError = true;
+
+    process.OutputDataReceived += (_, e) => outputBuilder.AppendLine(e.Data);
+    process.ErrorDataReceived += (_, e) => errorBuilder.AppendLine(e.Data);
+
+    process.Start();
+
+    process.BeginOutputReadLine();
+    process.BeginErrorReadLine();
+
+    process.WaitForExit();
+
+    string output = outputBuilder.ToString();
+    string error = errorBuilder.ToString();
+    int exitCode = process.ExitCode;
+}
+```
+</td>
+<td>
+
+```csharp
+ProcessStartOptions info = new("dotnet")
+{
+    Arguments = { "--help" },
+};
+
+ProcessOutput result = ChildProcess.CaptureOutput(info);
+
+string output = result.StandardOutput;
+string error = result.StandardError;
+int exitCode = result.ExitCode;
+```
+</td>
+</tr></tbody></table>
+
+The new API is also significantly more efficient, as it uses single thread to perform all the work (see [#81896](https://github.com/dotnet/runtime/issues/81896)):
+
+| Method        | Mean     | Ratio        | Completed Work Items | Allocated | Alloc Ratio |
+|-------------- |---------:|-------------:|---------------------:|----------:|------------:|
+| OldSyncEvents | 216.5 ms |     baseline |               8.0000 | 126.97 KB |             |
+| NewSync       | 209.6 ms | 1.03x faster |                    - |   7.87 KB | 16.14x less |
+
+#### ChildProcess.CaptureOutputAsync
+
+`CaptureOutputAsync` is 100% async supports cancellation on every platform:
+
+<table>
+<tbody><tr>
+<th>Old</th>
+<th>New</th>
+</tr>
+<tr>
+<td>
+
+```csharp
+ProcessStartInfo info = new()
+{
+    FileName = "dotnet",
+    Arguments = "--help",
+    RedirectStandardOutput = true,
+    RedirectStandardError = true,
+};
+
+using Process process = Process.Start(info)!;
+
+Task<string> readOutput = process.StandardOutput.ReadToEndAsync();
+Task<string> readError = process.StandardError.ReadToEndAsync();
+
+string output = await readOutput;
+string error = await readError;
+
+await process.WaitForExitAsync();
+
+int exitCode = process.ExitCode;
+```
+</td>
+<td>
+
+```csharp
+ProcessStartOptions info = new("dotnet")
+{
+    Arguments = { "--help" },
+};
+
+ProcessOutput result = await ChildProcess.CaptureOutputAsync(info);
+
+string output = result.StandardOutput;
+string error = result.StandardError;
+int exitCode = result.ExitCode;
+```
+</td>
+</tr></tbody></table>
+
+### Streaming Output
+
+Another important scenario is streaming output line-by-line as it is produced by the process. The new `ChildProcess.StreamOutputLines` method returns the `ProcessOutputLines` class that supports both synchronous and asynchronous consumption. It also provides the process ID and exit code.
+
+#### Streaming Output Synchronously
+
+`ProcessOutputLines` implements `IEnumerable<ProcessOutputLine>`, so it can be consumed synchronously:
+
+<table>
+<tbody><tr>
+<th>Old</th>
+<th>New</th>
+</tr>
+<tr>
+<td>
+
+```csharp
+using (Process process = new())
+{
+    process.StartInfo.FileName = "dotnet";
+    process.StartInfo.Arguments = "--help";
+    process.StartInfo.RedirectStandardOutput = true;
+    process.StartInfo.RedirectStandardError = true;
+
+    process.OutputDataReceived += (_, e) => Consume(e.Data, isError: false);
+    process.ErrorDataReceived += (_, e) => Consume(e.Data, isError: true);
+
+    process.Start();
+
+    process.BeginOutputReadLine();
+    process.BeginErrorReadLine();
+
+    process.WaitForExit();
+
+    int exitCode = process.ExitCode;
+}
+```
+</td>
+<td>
+
+```csharp
+ProcessStartOptions info = new("dotnet")
+{
+    Arguments = { "--help" },
+};
+
+var lines = ChildProcess.StreamOutputLines(info);
+foreach (var line in lines)
+{
+    Consume(line.Content, line.StandardError);
+}
+int exitCode = lines.ExitCode;
+```
+</td>
+</tr></tbody></table>
+
+#### Streaming Output Asynchronously
+
+`ProcessOutputLines` implements `IAsyncEnumerable<ProcessOutputLine>`, so it can be consumed asynchronously:
+
+<table>
+<tbody><tr>
+<th>Old</th>
+<th>New</th>
+</tr>
+<tr>
+<td>
+
+```csharp
+ProcessStartInfo info = new()
+{
+    FileName = "dotnet",
+    Arguments = "--help",
+    RedirectStandardOutput = true,
+    RedirectStandardError = true,
+};
+
+using Process process = Process.Start(info)!;
+
+Task<string?> readOutput = process.StandardOutput.ReadLineAsync();
+Task<string?> readError = process.StandardError.ReadLineAsync();
+
+while (true)
+{
+    Task completedTask = await Task.WhenAny(readOutput, readError);
+
+    bool isError = completedTask == readError;
+    string? line = await(isError ? readError : readOutput);
+    if (line is null)
+    {
+        // Reached end of stream, let's consume the other stream fully
+        line = await (isError ? readOutput : readError);
+        while (line is not null)
+        {
+            Consume(line = await (isError ? readOutput : readError), isError);
+        }
+        break;
+    }
+
+    Consume(line, isError);
+
+    if (isError)
+        readError = process.StandardError.ReadLineAsync();
+    else
+        readOutput = process.StandardOutput.ReadLineAsync();
+}
+
+int exitCode = process.ExitCode;
+```
+</td>
+<td>
+
+```csharp
+ProcessStartOptions info = new("dotnet")
+{
+    Arguments = { "--help" },
+};
+
+var lines = ChildProcess.StreamOutputLines(info);
+await foreach (var line in lines)
+{
+    Consume(line.Content, line.StandardError);
+}
+int exitCode = lines.ExitCode;
+```
+</td>
+</tr></tbody></table>
+
+### Interacting with Input
+
+### Fire and Forget
+
+### Discarding Output
+
+### Redirecting to Files
+
+## Low-Level APIs
+
+The foundation of the new process APIs is a low-level API that represents `SafeHandle` for child processes. It allow users to start processes with fine-grained control over STD input/output/error, environment, working directory, and other parameters that can be implemented on **every platform** supported by .NET.
+
+```csharp
+namespace Microsoft.Win32.SafeHandles; // should we still follow that convention?
+
+public class SafeChildProcessHandle : SafeHandle
+{
+    public int ProcessId { get; }
+
+    public SafeChildProcessHandle(IntPtr existingHandle, bool ownsHandle);
+
+    public static SafeChildProcessHandle Start(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error); // NEW (https://github.com/dotnet/runtime/issues/28838)
+    public static SafeChildProcessHandle StartSuspended(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error); // NEW (https://github.com/dotnet/runtime/issues/94127)
+
+    public void Kill();
+    public void Resume(); // NEW (https://github.com/dotnet/runtime/issues/94127)
+
+    [UnsupportedOSPlatform("windows")]
+    public void SendSignal(PosixSignal signal);  // NEW (https://github.com/dotnet/runtime/issues/59746)
+
+    public int WaitForExit(TimeSpan? timeout = default);
+    public Task<int> WaitForExitAsync(CancellationToken cancellationToken = default);
+}
+```
 
 ### Low-Level APIs: Console Handle Access
 
@@ -41,48 +334,16 @@ namespace System.IO;
     
 public static class File
 {
-    public static SafeFileHandle OpenNullFileHandle();
+    public static SafeFileHandle OpenNullHandle();
     public static void CreateAnonymousPipe(out SafeFileHandle read, out SafeFileHandle write);
     public static void CreateNamedPipe(out SafeFileHandle read, out SafeFileHandle write, string? name = null);
 }
 ```
 
-- **`OpenNullFileHandle()`**: Opens a handle to the null device (`NUL` on Windows, `/dev/null` on Unix). Useful for discarding process output or providing empty input.
+- **`OpenNullHandle()`**: Opens a handle to the null device (`NUL` on Windows, `/dev/null` on Unix). Useful for discarding process output or providing empty input.
 - **`CreateAnonymousPipe()`**: Creates an anonymous pipe for inter-process communication. The read end can be used to read data written to the write end.
 - **`CreateNamedPipe()`**: Creates a named pipe for inter-process communication. The read end is async and the write end is sync. Primarily used internally for timeout scenarios on Windows.
 
-### ProcessStartOptions
-
-An option bag class for configuring process creation. Similar to `ProcessStartInfo`, but simpler:
-
-```csharp
-namespace System.TBA;
-
-public sealed class ProcessStartOptions
-{
-    public string FileName { get; }
-    public IList<string> Arguments { get; }
-    public IDictionary<string, string?> Environment { get; }
-    public DirectoryInfo? WorkingDirectory { get; set; }
-    public bool CreateNoWindow { get; set; }
-    public bool KillOnParentDeath { get; set; }
-
-    public ProcessStartOptions(string fileName);
-    
-    public static ProcessStartOptions ResolvePath(string fileName);
-}
-```
-
-**Properties:**
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `FileName` | `string` | The name of the executable to run (required) |
-| `Arguments` | `IList<string>` | Command-line arguments to pass to the process |
-| `Environment` | `IDictionary<string, string?>` | Environment variables for the child process |
-| `WorkingDirectory` | `DirectoryInfo?` | Working directory for the child process |
-| `CreateNoWindow` | `bool` | Whether to create a console window |
-| `KillOnParentDeath` | `bool` | Whether to kill the process when the parent process exits |
 
 **Static Methods:**
 
