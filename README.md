@@ -669,7 +669,7 @@ while (true)
         break;
     }
     
-    // Process the line
+    // Process the line here (placeholder)
     _ = line;
     
     if (isError)
@@ -692,7 +692,7 @@ ProcessStartOptions info = new("dotnet")
 var lines = ChildProcess.StreamOutputLines(info);
 await foreach (var line in lines)
 {
-    // Process the line
+    // Process the line here (placeholder)
     _ = line.Content;
 }
 
