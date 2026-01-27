@@ -8,8 +8,6 @@ namespace System.TBA;
 
 internal static class Multiplexing
 {
-    private const int NonBlockingTimeout = 0; // Zero timeout for non-blocking kevent wait
-
     internal static void GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout,
         ref int outputBytesRead, ref int errorBytesRead, ref byte[] outputBuffer, ref byte[] errorBuffer)
     {
@@ -25,18 +23,16 @@ internal static class Multiplexing
         try
         {
             // Register three events: stdout read, stderr read, and process exit
-            bool processExited = RegisterKqueueEvents(kq, outputFd, errorFd, processHandle.ProcessId);
-
+            bool processExited = !RegisterKqueueEvents(kq, outputFd, errorFd, processHandle.ProcessId);
             bool outputClosed = false;
             bool errorClosed = false;
 
-            while (!outputClosed || !errorClosed)
+            while (!processExited && (!outputClosed || !errorClosed))
             {
 #pragma warning disable CA2014
-                Span<KEvent> events = stackalloc KEvent[processExited ? 2 : 3];
+                Span<KEvent> events = stackalloc KEvent[3];
 #pragma warning restore CA2014
-                // If the process has already exited, we only need to wait on the two fds.
-                int timeoutMs = processExited ? NonBlockingTimeout : timeout.GetRemainingMillisecondsOrThrow();
+                int timeoutMs = timeout.GetRemainingMillisecondsOrThrow();
                 int numEvents = WaitForEvents(kq, events, timeoutMs);
 
                 for (int i = 0; i < numEvents; i++)
@@ -61,32 +57,25 @@ internal static class Multiplexing
                         processExited = true;
                     }
                 }
+            }
 
-                // If process exited, drain any remaining buffered data from pipes
-                if (processExited)
+            // If process exited, drain any remaining buffered data from pipes
+            if (!outputClosed || !errorClosed)
+            {
+                // Small delay to allow data to arrive.
+                // We have tried other solutions:
+                // - Repeated non-blocking reads until EAGAIN: doesn't work, data may not have arrived yet.
+                // - Waiting on kqueue with zero timeout: doesn't work, kqueue doesn't always signal again.
+                Thread.Sleep(TimeSpan.FromMilliseconds(1));
+
+                if (!outputClosed)
                 {
-                    if (!outputClosed || !errorClosed)
-                    {
-                        // Small delay to allow data to arrive.
-                        // We have tried other solutions:
-                        // - Repeated non-blocking reads until EAGAIN: doesn't work, data may not have arrived yet.
-                        // - Waiting on kqueue with zero timeout: doesn't work, kqueue doesn't always signal again.
-                        Thread.Sleep(TimeSpan.FromMilliseconds(1));
-                    }
+                    ReadNonBlocking(outputFd, ref outputBuffer, ref outputBytesRead);
+                }
 
-                    if (!outputClosed)
-                    {
-                        ReadNonBlocking(outputFd, ref outputBuffer, ref outputBytesRead);
-                        outputClosed = true;
-                    }
-
-                    if (!errorClosed)
-                    {
-                        ReadNonBlocking(errorFd, ref errorBuffer, ref errorBytesRead);
-                        errorClosed = true;
-                    }
-
-                    return;
+                if (!errorClosed)
+                {
+                    ReadNonBlocking(errorFd, ref errorBuffer, ref errorBytesRead);
                 }
             }
         }
@@ -138,26 +127,20 @@ internal static class Multiplexing
         {
             fixed (KEvent* pChanges = changes)
             {
-                if (kevent(kq, pChanges, 3, null, 0, null) == -1)
+                if (kevent(kq, pChanges, 3, null, 0, null) != -1)
                 {
-                    int errno = Marshal.GetLastPInvokeError();
-                    if (errno == ESRCH) // Process does not exist
-                    {
-                        // Process already exited, register only the fd events
-                        if (kevent(kq, pChanges, 2, null, 0, null) == -1)
-                        {
-                            ThrowForLastError("kevent() registration");
-                        }
-
-                        return true; // Process already exited
-                    }
-
-                    ThrowForLastError("kevent() registration");
+                    return true;
                 }
-
-                return false;
             }
         }
+
+        int errno = Marshal.GetLastPInvokeError();
+        if (errno != ESRCH) // Process does not exist
+        {
+            ThrowForLastError("kevent() registration");
+        }
+
+        return false; // Process already exited
     }
 
     private static int WaitForEvents(int kq, Span<KEvent> events, int timeoutMs)
@@ -193,7 +176,7 @@ internal static class Multiplexing
                 ThrowForLastError(nameof(kevent));
             }
 
-            if (numEvents == 0 && timeoutMs != NonBlockingTimeout)
+            if (numEvents == 0)
             {
                 throw new TimeoutException("Timed out waiting for process OUT and ERR.");
             }
