@@ -235,7 +235,7 @@ public partial class SafeChildProcessHandleTests
             // Remove the variable from the environment
             options.Environment.Remove(testVarName);
 
-            using SafeFileHandle nullHandle = File.OpenNullFileHandle();
+            using SafeFileHandle nullHandle = File.OpenNullHandle();
 
             using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
                 options,
@@ -407,7 +407,7 @@ public partial class SafeChildProcessHandleTests
 
         Assert.True(options.KillOnParentDeath);
 
-        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
+        using SafeFileHandle nullHandle = File.OpenNullHandle();
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
             options,
             input: null,
