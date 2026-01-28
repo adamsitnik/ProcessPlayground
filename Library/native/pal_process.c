@@ -737,8 +737,20 @@ int try_get_exit_code(int pidfd, int pid, int* out_exitCode, int* out_signal) {
     while ((ret = waitid(P_PIDFD, pidfd, &info, WEXITED | WNOHANG)) < 0 && errno == EINTR);
 
     if (ret == 0 && info.si_pid != 0) {
-        *out_exitCode = info.si_status;
-        return 0;
+        switch (info.si_code)
+        {
+            case CLD_KILLED: // WIFSIGNALED
+            case CLD_DUMPED: // WIFSIGNALED
+                *out_exitCode = 128 + info.si_status;
+                *out_signal = map_native_signal_to_managed(info.si_status);
+                return 0;
+            case CLD_EXITED: // WIFEXITED
+                *out_exitCode = info.si_status;
+                *out_signal = 0;
+                return 0;
+            default:
+                return -1; // Unknown state
+        }
     }
 #else
     (void)pidfd;
