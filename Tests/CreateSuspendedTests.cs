@@ -87,8 +87,8 @@ public class CreateSuspendedTests
         processHandle.Resume();
 
         // Wait async
-        int exitCode = await processHandle.WaitForExitAsync();
-        Assert.Equal(0, exitCode);
+        var exitStatus = await processHandle.WaitForExitAsync();
+        Assert.Equal(0, exitStatus.ExitCode);
     }
 
     [Fact]

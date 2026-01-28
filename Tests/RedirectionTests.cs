@@ -37,8 +37,8 @@ public class RedirectionTests
 
         using StreamReader reader = new(new FileStream(read, FileAccess.Read, bufferSize: 1, isAsync: isAsync), Encoding.UTF8);
         string allOutput = await reader.ReadToEndAsync();
-        int exitCode = await processHandle.WaitForExitAsync();
+        var exitStatus = await processHandle.WaitForExitAsync();
         Assert.NotEmpty(allOutput);
-        Assert.NotEqual(0, exitCode);
+        Assert.NotEqual(0, exitStatus.ExitCode);
     }
 }

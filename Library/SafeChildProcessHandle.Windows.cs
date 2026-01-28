@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -363,13 +364,14 @@ public partial class SafeChildProcessHandle
         return new(GetExitCode(), wasKilledOnTimeout);
     }
 
-    private async Task<int> WaitForExitAsyncCore(CancellationToken cancellationToken)
+    private async Task<ProcessExitStatus> WaitForExitAsyncCore(CancellationToken cancellationToken)
     {
         using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(this);
 
         TaskCompletionSource<bool> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         RegisteredWaitHandle? registeredWaitHandle = null;
         CancellationTokenRegistration ctr = default;
+        StrongBox<bool> wasKilledBox = new(false);
 
         try
         {
@@ -384,13 +386,13 @@ public partial class SafeChildProcessHandle
             if (cancellationToken.CanBeCanceled)
             {
                 ctr = cancellationToken.Register(
-                    state =>
+                    static state =>
                     {
-                        var (handle, taskSource) = ((SafeChildProcessHandle, TaskCompletionSource<bool>))state!;
-                        handle.KillCore(throwOnError: false);
-                        taskSource.TrySetCanceled();
+                        var (handle, taskSource, wasCancelled) = ((SafeChildProcessHandle, TaskCompletionSource<bool>, StrongBox<bool>))state!;
+                        wasCancelled.Value = handle.KillCore(throwOnError: false);
+                        taskSource.TrySetResult(true); // Complete the task instead of canceling
                     },
-                    (this, tcs));
+                    (this, tcs, wasKilledBox));
             }
 
             await tcs.Task.ConfigureAwait(false);
@@ -401,7 +403,7 @@ public partial class SafeChildProcessHandle
             registeredWaitHandle?.Unregister(null);
         }
 
-        return GetExitCode();
+        return new(GetExitCode(), wasKilledBox.Value);
     }
 
     /// <summary>

@@ -43,7 +43,7 @@ public static partial class ChildProcess
         using SafeFileHandle errorHandle = Console.OpenStandardErrorHandle();
 
         using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return await procHandle.WaitForExitAsync(cancellationToken);
+        return (await procHandle.WaitForExitAsync(cancellationToken)).ExitCode;
     }
 
     /// <summary>
@@ -97,7 +97,7 @@ public static partial class ChildProcess
         using SafeFileHandle nullHandle = File.OpenNullFileHandle();
 
         using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
-        return await procHandle.WaitForExitAsync(cancellationToken);
+        return (await procHandle.WaitForExitAsync(cancellationToken)).ExitCode;
     }
 
     /// <summary>
@@ -142,7 +142,7 @@ public static partial class ChildProcess
         using SafeFileHandle inputHandle = handles.input, outputHandle = handles.output, errorHandle = handles.error;
 
         using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return await procHandle.WaitForExitAsync(cancellationToken);
+        return (await procHandle.WaitForExitAsync(cancellationToken)).ExitCode;
     }
 
     /// <summary>
@@ -297,7 +297,7 @@ public static partial class ChildProcess
 
                 if (!processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
                 {
-                    exitCode = await processHandle.WaitForExitAsync(cancellationToken);
+                    exitCode = (await processHandle.WaitForExitAsync(cancellationToken)).ExitCode;
                 }
 
                 // Instead of decoding on the fly, we decode once at the end.
@@ -440,7 +440,7 @@ public static partial class ChildProcess
                 // We optimize for hot path: process already exited and exit code is available.
                 if (!processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
                 {
-                    exitCode = await processHandle.WaitForExitAsync(cancellationToken);
+                    exitCode = (await processHandle.WaitForExitAsync(cancellationToken)).ExitCode;
                 }
 
                 return new(exitCode, resultBuffer, processId);
