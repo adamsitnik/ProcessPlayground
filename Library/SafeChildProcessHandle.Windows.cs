@@ -401,8 +401,10 @@ public partial class SafeChildProcessHandle
             registeredWaitHandle?.Unregister(null);
         }
 
-        bool wasCancelled = cancellationToken.IsCancellationRequested;
-        return new(GetExitCode(), wasCancelled);
+        // Note: Cancelled is set to false because WaitForExitAsync doesn't have a timeout parameter.
+        // The Cancelled flag is specifically for timeout-based cancellation in WaitForExit(TimeSpan).
+        // If a CancellationToken is cancelled, an OperationCanceledException will be thrown instead.
+        return new(GetExitCode(), cancelled: false);
     }
 
     /// <summary>

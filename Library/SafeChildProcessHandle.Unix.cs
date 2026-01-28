@@ -189,7 +189,11 @@ public partial class SafeChildProcessHandle
         }
 
         // The process has exited, now retrieve the exit status
-        return WaitForExitCore(milliseconds: Timeout.Infinite);
+        // Note: Cancelled is set to false because WaitForExitAsync doesn't have a timeout parameter.
+        // The Cancelled flag is specifically for timeout-based cancellation in WaitForExit(TimeSpan).
+        // If a CancellationToken is cancelled, an OperationCanceledException will be thrown instead.
+        ProcessExitStatus status = WaitForExitCore(milliseconds: Timeout.Infinite);
+        return new(status.ExitCode, cancelled: false, status.Signal);
     }
 
     private void KillCore(bool throwOnError)
