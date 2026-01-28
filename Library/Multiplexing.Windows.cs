@@ -156,7 +156,7 @@ internal static class Multiplexing
                 }
             }
 
-            if (!processHandle.TryGetExitStatus(cancelled: false, out ProcessExitStatus exitStatus))
+            if (!processHandle.TryGetExitStatus(canceled: false, out ProcessExitStatus exitStatus))
             {
                 exitStatus = processHandle.WaitForExit(timeout.GetRemaining());
             }

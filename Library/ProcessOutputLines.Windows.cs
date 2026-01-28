@@ -53,11 +53,14 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 
             while (!parentOutputHandle.IsClosed || !parentErrorHandle.IsClosed)
             {
-                int waitResult = WaitHandle.WaitAny(waitHandles, timeoutHelper.GetRemainingMillisecondsOrThrow());
+                int waitResult = timeoutHelper.TryGetRemainingMilliseconds(out int remainingMilliseconds)
+                    ? WaitHandle.WaitAny(waitHandles, remainingMilliseconds)
+                    : WaitHandle.WaitTimeout;
 
                 if (waitResult == WaitHandle.WaitTimeout)
                 {
-                    throw new TimeoutException("Timed out waiting for process OUT and ERR.");
+                    // Kill the process on timeout
+                    processHandle.Kill();
                 }
                 else if (waitResult is 0 or 1)
                 {
@@ -178,11 +181,12 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 
             // It's possible for the process to close STD OUT and ERR keep running.
             // We optimize for hot path: process already exited and exit code is available.
-            if (!processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
+            ProcessExitStatus exitStatus;
+            if (!processHandle.TryGetExitStatus(canceled: false, out exitStatus))
             {
-                exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow()).ExitCode;
+                exitStatus = processHandle.WaitForExit(timeoutHelper.GetRemaining());
             }
-            _exitCode = exitCode;
+            _exitStatus = exitStatus;
 
             yield break;
         }

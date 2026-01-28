@@ -120,7 +120,7 @@ public class RedirectToPipe
             // We don't re-print, so the benchmark focuses on reading only.
             _ = line.Content;
         }
-        return lines.ExitCode;
+        return lines.ExitStatus.ExitCode;
     }
 
     [Benchmark]
@@ -132,7 +132,7 @@ public class RedirectToPipe
         };
 
         CombinedOutput output = ChildProcess.CaptureCombined(info);
-        return output.ExitCode;
+        return output.ExitStatus.ExitCode;
     }
 
     [Benchmark]
@@ -144,7 +144,7 @@ public class RedirectToPipe
         };
 
         CombinedOutput output = ChildProcess.CaptureCombined(info, timeout: TimeSpan.FromSeconds(3));
-        return output.ExitCode;
+        return output.ExitStatus.ExitCode;
     }
 
     [Benchmark]
@@ -156,7 +156,7 @@ public class RedirectToPipe
         };
 
         CombinedOutput output = await ChildProcess.CaptureCombinedAsync(info);
-        return output.ExitCode;
+        return output.ExitStatus.ExitCode;
     }
 
     [Benchmark]
@@ -173,6 +173,6 @@ public class RedirectToPipe
             // We don't re-print, so the benchmark focuses on reading only.
             _ = line.Content;
         }
-        return lines.ExitCode;
+        return lines.ExitStatus.ExitCode;
     }
 }
