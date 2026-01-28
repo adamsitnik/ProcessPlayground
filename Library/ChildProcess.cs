@@ -202,6 +202,11 @@ public static partial class ChildProcess
 
                 if (!processHandle.TryGetExitStatus(wasCancelled, out ProcessExitStatus exitStatus))
                 {
+                    if (wasCancelled)
+                    {
+                        throw new Exception("BUG!");
+                    }
+
                     exitStatus = processHandle.WaitForExit(TimeSpan.FromMilliseconds(remainingMs));
                 }
 
