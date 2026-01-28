@@ -18,7 +18,7 @@ public partial class SafeChildProcessHandleTests
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
         // Send SIGTERM signal
-        processHandle.SendSignal(PosixSignal.SIGTERM);
+        processHandle.SendSignal(ProcessSignal.SIGTERM);
 
         // Process should exit after receiving SIGTERM
         int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
@@ -41,7 +41,7 @@ public partial class SafeChildProcessHandleTests
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
         // Send SIGINT signal
-        processHandle.SendSignal(PosixSignal.SIGINT);
+        processHandle.SendSignal(ProcessSignal.SIGINT);
 
         // Process should exit after receiving SIGINT
         int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
@@ -63,8 +63,8 @@ public partial class SafeChildProcessHandleTests
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
-        // Try to send an invalid signal value (outside the -10 to -1 range)
-        PosixSignal invalidSignal = (PosixSignal)100;
+        // Try to send an invalid signal value
+        ProcessSignal invalidSignal = (ProcessSignal)100;
         
         Assert.Throws<ArgumentOutOfRangeException>(() => processHandle.SendSignal(invalidSignal));
         
@@ -90,7 +90,7 @@ public partial class SafeChildProcessHandleTests
         
         // Try to send a signal to the exited process
         // This should throw a Win32Exception with ESRCH (no such process)
-        var exception = Assert.Throws<Win32Exception>(() => processHandle.SendSignal(PosixSignal.SIGTERM));
+        var exception = Assert.Throws<Win32Exception>(() => processHandle.SendSignal(ProcessSignal.SIGTERM));
         
         // ESRCH error code is 3 on Unix systems
         Assert.Equal(3, exception.NativeErrorCode);

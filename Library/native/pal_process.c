@@ -646,25 +646,26 @@ int spawn_process(
 #endif
 }
 
-// Map managed PosixSignal enum values to native signal numbers
-// The managed enum uses negative values: SIGHUP=-1, SIGINT=-2, etc.
-// Special case: SIGKILL=9 is passed as a positive value
-// This function converts them to the actual platform-specific signal numbers
+// Map managed ProcessSignal enum values to native signal numbers
+// This function converts ProcessSignal enum values to the actual platform-specific signal numbers
 static int map_managed_signal_to_native(int managed_signal) {
-    // Otherwise, map from managed enum values
+    // Map from ProcessSignal enum values (defined in ProcessSignal.cs)
     switch (managed_signal) {
+        case 1: return SIGHUP;    // SIGHUP
+        case 2: return SIGINT;    // SIGINT
+        case 3: return SIGQUIT;   // SIGQUIT
+        case 6: return SIGABRT;   // SIGABRT
         case 9: return SIGKILL;   // SIGKILL
-        case -1: return SIGHUP;    // SIGHUP
-        case -2: return SIGINT;    // SIGINT
-        case -3: return SIGQUIT;   // SIGQUIT
-        case -4: return SIGTERM;   // SIGTERM
-        case -5: return SIGCHLD;   // SIGCHLD
-        case -6: return SIGCONT;   // SIGCONT
-        case -7: return SIGWINCH;  // SIGWINCH
-        case -8: return SIGTTIN;   // SIGTTIN
-        case -9: return SIGTTOU;   // SIGTTOU
-        case -10: return SIGTSTP;  // SIGTSTP
-        default: return -1;        // Invalid signal
+        case 10: return SIGUSR1;  // SIGUSR1
+        case 12: return SIGUSR2;  // SIGUSR2
+        case 13: return SIGPIPE;  // SIGPIPE
+        case 14: return SIGALRM;  // SIGALRM
+        case 15: return SIGTERM;  // SIGTERM
+        case 17: return SIGCHLD;  // SIGCHLD
+        case 18: return SIGCONT;  // SIGCONT
+        case 19: return SIGSTOP;  // SIGSTOP
+        case 20: return SIGTSTP;  // SIGTSTP
+        default: return -1;       // Invalid signal
     }
 }
 
