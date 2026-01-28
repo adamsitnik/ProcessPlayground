@@ -386,7 +386,7 @@ public partial class SafeChildProcessHandle
             if (cancellationToken.CanBeCanceled)
             {
                 ctr = cancellationToken.Register(
-                    state =>
+                    static state =>
                     {
                         var (handle, taskSource, wasCancelled) = ((SafeChildProcessHandle, TaskCompletionSource<bool>, StrongBox<bool>))state!;
                         wasCancelled.Value = handle.KillCore(throwOnError: false);

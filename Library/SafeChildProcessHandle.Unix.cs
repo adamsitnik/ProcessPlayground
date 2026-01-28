@@ -169,7 +169,7 @@ public partial class SafeChildProcessHandle
         StrongBox<bool> wasKilledBox = new(false);
         
         // Register cancellation to kill the process
-        using CancellationTokenRegistration registration = !cancellationToken.CanBeCanceled ? default : cancellationToken.Register(state =>
+        using CancellationTokenRegistration registration = !cancellationToken.CanBeCanceled ? default : cancellationToken.Register(static state =>
         {
             var (handle, wasCancelled) = ((SafeChildProcessHandle, StrongBox<bool>))state!;
             wasCancelled.Value = handle.KillCore(throwOnError: false);
