@@ -182,8 +182,7 @@ public partial class SafeChildProcessHandle
 
     private void KillCore(bool throwOnError)
     {
-        const PosixSignal SIGKILL = (PosixSignal)9;
-        int result = send_signal(this, ProcessId, SIGKILL);
+        int result = send_signal(this, ProcessId, ProcessSignal.SIGKILL);
         if (result == 0 || !throwOnError)
         {
             return;
@@ -204,7 +203,7 @@ public partial class SafeChildProcessHandle
         throw new Win32Exception(errno, $"Failed to terminate process (errno={errno})");
     }
 
-    private void SendSignalCore(PosixSignal signal)
+    private void SendSignalCore(ProcessSignal signal)
     {
         int result = send_signal(this, ProcessId, signal);
         if (result == 0)
@@ -220,8 +219,7 @@ public partial class SafeChildProcessHandle
     private void ResumeCore()
     {
         // Resume a suspended process by sending SIGCONT
-        const PosixSignal SIGCONT = (PosixSignal)(-6);
-        int result = send_signal(this, ProcessId, SIGCONT);
+        int result = send_signal(this, ProcessId, ProcessSignal.SIGCONT);
         if (result == 0)
         {
             return;
@@ -254,7 +252,7 @@ public partial class SafeChildProcessHandle
         int inherited_handles_count);
 
     [LibraryImport("pal_process", SetLastError = true)]
-    private static partial int send_signal(SafeChildProcessHandle pidfd, int pid, PosixSignal managed_signal);
+    private static partial int send_signal(SafeChildProcessHandle pidfd, int pid, ProcessSignal managed_signal);
 
     [LibraryImport("pal_process", SetLastError = true)]
     private static partial int wait_for_exit(SafeChildProcessHandle pidfd, int pid, int exitPipeFd, int timeout_ms, out int exitCode);

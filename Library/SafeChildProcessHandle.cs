@@ -146,9 +146,8 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
         ResumeCore();
     }
 
-#if NET
     /// <summary>
-    /// Sends a POSIX signal to the process.
+    /// Sends a signal to the process.
     /// </summary>
     /// <param name="signal">The signal to send.</param>
     /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
@@ -156,16 +155,17 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the signal value is not supported.</exception>
     /// <exception cref="Win32Exception">Thrown when the signal operation fails.</exception>
     [UnsupportedOSPlatform("windows")]
-    public void SendSignal(PosixSignal signal)
+    public void SendSignal(ProcessSignal signal)
     {
-        ArgumentOutOfRangeException.ThrowIfLessThan((int)signal, (int)PosixSignal.SIGTSTP, nameof(signal));
-        ArgumentOutOfRangeException.ThrowIfGreaterThan((int)signal, (int)PosixSignal.SIGHUP, nameof(signal));
+        if (!Enum.IsDefined(signal))
+        {
+            throw new ArgumentOutOfRangeException(nameof(signal));
+        }
 
         Validate();
 
         SendSignalCore(signal);
     }
-#endif
     
     /// <summary>
     /// This is an INTERNAL method that can be used as PERF optimization
