@@ -1,18 +1,14 @@
 ﻿using System.Diagnostics.CodeAnalysis;
-using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
 
 namespace System.TBA;
 
 public readonly struct ProcessExitStatus : IEquatable<ProcessExitStatus>
 {
-    private readonly PosixSignal? _signal;
-
-    internal ProcessExitStatus(int exitCode, bool cancelled, PosixSignal? signal)
+    internal ProcessExitStatus(int exitCode, bool cancelled, ProcessSignal? signal = null)
     {
         ExitCode = exitCode;
+        Signal = signal;
         Cancelled = cancelled;
-        _signal = signal;
     }
 
     /// <summary>
@@ -32,8 +28,7 @@ public readonly struct ProcessExitStatus : IEquatable<ProcessExitStatus>
     /// <remarks>
     /// This property is always null on Windows.
     /// </remarks>
-    [UnsupportedOSPlatform("windows")]
-    public PosixSignal? Signal => _signal;
+    public ProcessSignal? Signal { get; }
 
     /// <summary>
     /// Gets a value indicating whether the process exited successfully (exit code 0).
@@ -48,9 +43,9 @@ public readonly struct ProcessExitStatus : IEquatable<ProcessExitStatus>
     /// <summary>
     /// Gets a value indicating whether the process was terminated by a signal.
     /// </summary>
-    public bool Signaled => _signal.HasValue;
+    public bool Signaled => Signal.HasValue;
 
-    public bool Equals(ProcessExitStatus other) => ExitCode == other.ExitCode && Cancelled == other.Cancelled && _signal == other._signal;
+    public bool Equals(ProcessExitStatus other) => ExitCode == other.ExitCode && Cancelled == other.Cancelled && Signal == other.Signal;
 
     public override bool Equals([NotNullWhen(true)] object? obj) => obj is ProcessExitStatus other && Equals(other);
 
@@ -58,5 +53,5 @@ public readonly struct ProcessExitStatus : IEquatable<ProcessExitStatus>
 
     public static bool operator !=(ProcessExitStatus left, ProcessExitStatus right) => !left.Equals(right);
 
-    public override int GetHashCode() => HashCode.Combine(ExitCode, Cancelled, _signal);
+    public override int GetHashCode() => HashCode.Combine(ExitCode, Cancelled, Signal);
 }
