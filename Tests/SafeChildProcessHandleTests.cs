@@ -322,14 +322,14 @@ public partial class SafeChildProcessHandleTests
         processHandle.Kill();
         
         // Wait for the process to actually exit
-        var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+        _ = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
         
         // Second should not throw
         processHandle.Kill();
     }
 
     [Fact]
-    public void WaitForExit_Called_After_Kill_ReturnsExitCodeImmidately()
+    public void WaitForExit_Called_After_Kill_ReturnsExitCodeImmediately()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("timeout") { Arguments = { "/t", "60", "/nobreak" } }

@@ -409,7 +409,7 @@ public partial class SafeChildProcessHandle
     /// </summary>
     private bool KillCore(bool throwOnError)
     {
-        if (Interop.Kernel32.TerminateProcess(this, exitCode: -1) && throwOnError)
+        if (Interop.Kernel32.TerminateProcess(this, exitCode: -1))
         {
             return true;
         }
@@ -418,7 +418,8 @@ public partial class SafeChildProcessHandle
         return error switch
         {
             Interop.Errors.ERROR_SUCCESS => true,
-            Interop.Errors.ERROR_ACCESS_DENIED => false,// Process has already exited.
+            Interop.Errors.ERROR_ACCESS_DENIED => false, // Process has already exited
+            _ when !throwOnError => false, // TODO
             _ => throw new Win32Exception(error, "Failed to terminate process"),
         };
     }
