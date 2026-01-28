@@ -127,7 +127,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 
             if (!procHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
             {
-                exitCode = await procHandle.WaitForExitAsync(cancellationToken);
+                exitCode = (await procHandle.WaitForExitAsync(cancellationToken)).ExitCode;
             }
             _exitCode = exitCode;
         }

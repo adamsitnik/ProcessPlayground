@@ -406,7 +406,7 @@ public partial class SafeChildProcessHandleTests
         // WaitForExitAsync should return quickly because the child exits immediately
         // (even though the grandchild is still running for 5 seconds)
         int exitCode = useAsync
-            ? await processHandle.WaitForExitAsync(cts.Token)
+            ? (await processHandle.WaitForExitAsync(cts.Token)).ExitCode
             : processHandle.WaitForExit(timeout).ExitCode;
 
         // The child should have exited successfully (exit code 0)

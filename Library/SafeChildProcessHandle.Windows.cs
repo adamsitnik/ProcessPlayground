@@ -363,7 +363,7 @@ public partial class SafeChildProcessHandle
         return new(GetExitCode(), wasKilledOnTimeout);
     }
 
-    private async Task<int> WaitForExitAsyncCore(CancellationToken cancellationToken)
+    private async Task<ProcessExitStatus> WaitForExitAsyncCore(CancellationToken cancellationToken)
     {
         using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(this);
 
@@ -401,7 +401,8 @@ public partial class SafeChildProcessHandle
             registeredWaitHandle?.Unregister(null);
         }
 
-        return GetExitCode();
+        bool wasCancelled = cancellationToken.IsCancellationRequested;
+        return new(GetExitCode(), wasCancelled);
     }
 
     /// <summary>

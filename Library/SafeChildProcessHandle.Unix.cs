@@ -163,7 +163,7 @@ public partial class SafeChildProcessHandle
         throw new Win32Exception(errno, $"wait_for_exit() failed with (errno={errno})");
     }
 
-    private async Task<int> WaitForExitAsyncCore(CancellationToken cancellationToken)
+    private async Task<ProcessExitStatus> WaitForExitAsyncCore(CancellationToken cancellationToken)
     {
         // Register cancellation to kill the process
         using CancellationTokenRegistration registration = !cancellationToken.CanBeCanceled ? default : cancellationToken.Register(() =>
@@ -188,8 +188,8 @@ public partial class SafeChildProcessHandle
             throw new InvalidOperationException($"Unexpected data read from exit pipe: {bytesRead} byte(s). Expected 0 bytes (pipe closure).");
         }
 
-        // The process has exited, now retrieve the exit code
-        return WaitForExitCore(milliseconds: Timeout.Infinite).ExitCode;
+        // The process has exited, now retrieve the exit status
+        return WaitForExitCore(milliseconds: Timeout.Infinite);
     }
 
     private void KillCore(bool throwOnError)

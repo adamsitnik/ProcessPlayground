@@ -115,7 +115,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
         return WaitForExitCore(GetTimeoutInMilliseconds(timeout));
     }
 
-    public Task<int> WaitForExitAsync(CancellationToken cancellationToken = default)
+    public Task<ProcessExitStatus> WaitForExitAsync(CancellationToken cancellationToken = default)
     {
         Validate();
 
