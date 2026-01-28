@@ -68,17 +68,17 @@ public class Discard
             Arguments = { "--help" },
         };
 
-        return ChildProcess.Discard(info);
+        return ChildProcess.Discard(info).ExitCode;
     }
 
     [Benchmark]
-    public Task<int> NewAsync()
+    public async Task<int> NewAsync()
     {
         ProcessStartOptions info = new("dotnet")
         {
             Arguments = { "--help" },
         };
 
-        return ChildProcess.DiscardAsync(info);
+        return (await ChildProcess.DiscardAsync(info)).ExitCode;
     }
 }

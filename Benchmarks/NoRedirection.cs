@@ -49,18 +49,18 @@ public class NoRedirection
             Arguments = { "--help" },
         };
 
-        return ChildProcess.Inherit(info);
+        return ChildProcess.Inherit(info).ExitCode;
     }
 
     [Benchmark]
-    public Task<int> NewAsync()
+    public async Task<int> NewAsync()
     {
         ProcessStartOptions info = new("dotnet")
         {
             Arguments = { "--help" },
         };
 
-        return ChildProcess.InheritAsync(info);
+        return (await ChildProcess.InheritAsync(info)).ExitCode;
     }
 
     [GlobalSetup(Targets = new string[2] { nameof(New_Resolved), nameof(NewAsync_Resolved) })]
@@ -71,8 +71,8 @@ public class NoRedirection
     }
 
     [Benchmark]
-    public int New_Resolved() => ChildProcess.Inherit(_resolved);
+    public int New_Resolved() => ChildProcess.Inherit(_resolved).ExitCode;
 
     [Benchmark]
-    public Task<int> NewAsync_Resolved() => ChildProcess.InheritAsync(_resolved);
+    public async Task<int> NewAsync_Resolved() => (await ChildProcess.InheritAsync(_resolved)).ExitCode;
 }

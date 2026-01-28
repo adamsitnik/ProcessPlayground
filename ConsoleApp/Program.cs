@@ -6,7 +6,7 @@ using System.Diagnostics;
 
 ProcessStartOptions info = new("pwd");
 
-int exitCode = await ChildProcess.InheritAsync(info);
+int exitCode = (await ChildProcess.InheritAsync(info)).ExitCode;
 Console.WriteLine(exitCode);
 
 static void LongRunningWithTimeout()
@@ -17,7 +17,7 @@ static void LongRunningWithTimeout()
         KillOnParentDeath = true,
     };
 
-    int exitCode = ChildProcess.Inherit(info, TimeSpan.FromSeconds(3));
+    int exitCode = ChildProcess.Inherit(info, TimeSpan.FromSeconds(3)).ExitCode;
     Console.WriteLine($"Process exited with: {exitCode}");
 }
 
@@ -30,7 +30,7 @@ static async Task LongRunningWithTimeoutAsync()
     };
 
     using CancellationTokenSource cts = new(TimeSpan.FromSeconds(3));
-    int exitCode = await ChildProcess.InheritAsync(info, cts.Token);
+    int exitCode = (await ChildProcess.InheritAsync(info, cts.Token)).ExitCode;
     Console.WriteLine($"Process exited with: {exitCode}");
 }
 
@@ -42,7 +42,7 @@ static void LongRunningWithCtrlC()
         KillOnParentDeath = true,
     };
 
-    int exitCode = ChildProcess.Inherit(info);
+    int exitCode = ChildProcess.Inherit(info).ExitCode;
     Console.WriteLine($"Process exited with: {exitCode}");
 }
 
@@ -67,7 +67,7 @@ static void Execute()
         Arguments = { "--help" },
     };
 
-    int exitCode = ChildProcess.Inherit(info);
+    int exitCode = ChildProcess.Inherit(info).ExitCode;
     Console.WriteLine($"Process exited with: {exitCode}");
 }
 
@@ -79,7 +79,7 @@ static async Task ExecuteAsync()
         Arguments = { "--help" },
     };
 
-    int exitCode = await ChildProcess.InheritAsync(info);
+    int exitCode = (await ChildProcess.InheritAsync(info)).ExitCode;
     Console.WriteLine($"Process exited with: {exitCode}");
 }
 
