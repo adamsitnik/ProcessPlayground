@@ -125,7 +125,7 @@ static async Task StreamAsync()
             Console.WriteLine($"OUT: {line.Content}");
         }
     }
-    Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
+    Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitStatus.ExitCode}");
 }
 
 static void OldReprint()
@@ -169,7 +169,7 @@ static void StreamSync()
             Console.WriteLine($"OUT: {line.Content}");
         }
     }
-    Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitCode}");
+    Console.WriteLine($"Process {output.ProcessId} exited with: {output.ExitStatus.ExitCode}");
 }
 
 static async Task StreamLongRunningWithTimeoutAsync()

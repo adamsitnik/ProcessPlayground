@@ -263,7 +263,7 @@ public partial class SafeChildProcessHandleTests
         ProcessOutputLines output = ChildProcess.StreamOutputLines(options);
         ProcessOutputLine singleLine = Assert.Single((IEnumerable<ProcessOutputLine>)output);
         Assert.False(singleLine.StandardError, "Expected standard output line");
-        Assert.Equal(0, output.ExitCode);
+        Assert.Equal(0, output.ExitStatus.ExitCode);
         return singleLine.Content;
     }
 

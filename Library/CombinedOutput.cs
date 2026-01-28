@@ -5,9 +5,9 @@ namespace System.TBA;
 public readonly struct CombinedOutput
 {
     /// <summary>
-    /// Gets the exit code returned by the process after it has terminated.
+    /// Gets the exit status of the process after it has terminated.
     /// </summary>
-    public int ExitCode { get; }
+    public ProcessExitStatus ExitStatus { get; }
 
     /// <summary>
     /// Gets the underlying sequence of bytes representing standard output and error.
@@ -20,9 +20,9 @@ public readonly struct CombinedOutput
     /// <remarks>This information can be useful to process any diagnostics/tracing data post run.</remarks>
     public int ProcessId { get; }
 
-    public CombinedOutput(int exitCode, ReadOnlyMemory<byte> bytes, int processId) : this()
+    public CombinedOutput(ProcessExitStatus exitStatus, ReadOnlyMemory<byte> bytes, int processId) : this()
     {
-        ExitCode = exitCode;
+        ExitStatus = exitStatus;
         Bytes = bytes;
         ProcessId = processId;
     }

@@ -65,7 +65,12 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                     numFds++;
                 }
 
-                int timeoutMs = timeoutHelper.GetRemainingMillisecondsOrThrow();
+                int timeoutMs;
+                if (!timeoutHelper.TryGetRemainingMilliseconds(out timeoutMs))
+                {
+                    timeoutMs = 0; // Timeout expired, use 0 to not block
+                }
+                
                 int pollResult;
                 unsafe
                 {
@@ -86,7 +91,9 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                 }
                 else if (pollResult == 0)
                 {
-                    throw new TimeoutException("Timed out waiting for process OUT and ERR.");
+                    // Timeout occurred, kill the process
+                    processHandle.Kill();
+                    break;
                 }
 
                 // Check which file descriptors have data available
@@ -216,11 +223,12 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             }
 
             // Both streams are closed, wait for process to exit
-            if (timeoutHelper.HasExpired || !processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
+            ProcessExitStatus exitStatus;
+            if (timeoutHelper.HasExpired || !processHandle.TryGetExitStatus(canceled: false, out exitStatus))
             {
-                exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow()).ExitCode;
+                exitStatus = processHandle.WaitForExit(timeoutHelper.GetRemaining());
             }
-            _exitCode = exitCode;
+            _exitStatus = exitStatus;
 
             yield break;
         }
