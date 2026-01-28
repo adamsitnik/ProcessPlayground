@@ -5,7 +5,6 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Tests;
 
-#if NET
 public partial class SafeChildProcessHandleTests
 {
     [Fact]
@@ -19,7 +18,7 @@ public partial class SafeChildProcessHandleTests
         try
         {
             // Try to send a signal on Windows
-            Assert.Throws<PlatformNotSupportedException>(() => processHandle.SendSignal(PosixSignal.SIGTERM));
+            Assert.Throws<PlatformNotSupportedException>(() => processHandle.SendSignal(ProcessSignal.SIGTERM));
         }
         finally
         {
@@ -29,4 +28,3 @@ public partial class SafeChildProcessHandleTests
         }
     }
 }
-#endif
