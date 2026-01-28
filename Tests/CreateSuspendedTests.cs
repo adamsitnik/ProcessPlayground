@@ -115,7 +115,6 @@ public class CreateSuspendedTests
         // Wait for it to be killed
         var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
 
-        Assert.False(exitStatus.Success);
         Assert.False(exitStatus.Cancelled);
 
         // On Windows, TerminateProcess sets exit code to -1
@@ -137,7 +136,6 @@ public class CreateSuspendedTests
     {
         var exitStatus = processHandle.WaitForExit(timeout);
 
-        Assert.True(exitStatus.Success);
         Assert.Equal(0, exitStatus.ExitCode);
         Assert.False(exitStatus.Cancelled);
         Assert.Null(exitStatus.Signal);

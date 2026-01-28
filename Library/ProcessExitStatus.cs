@@ -2,6 +2,8 @@
 
 namespace System.TBA;
 
+// design: this type does not provide Success property because success criteria may vary between applications
+// example: an app may fail with exit code 0 but produce invalid output
 public readonly struct ProcessExitStatus : IEquatable<ProcessExitStatus>
 {
     internal ProcessExitStatus(int exitCode, bool cancelled, ProcessSignal? signal = null)
@@ -29,11 +31,6 @@ public readonly struct ProcessExitStatus : IEquatable<ProcessExitStatus>
     /// This property is always null on Windows.
     /// </remarks>
     public ProcessSignal? Signal { get; }
-
-    /// <summary>
-    /// Gets a value indicating whether the process exited successfully (exit code 0).
-    /// </summary>
-    public bool Success => ExitCode == 0;
 
     /// <summary>
     /// Gets a value indicating whether the process has been terminated due to timeout or cancellation.

@@ -165,7 +165,8 @@ public class InheritedHandlesTests
             output: nullHandle,
             error: nullHandle);
 
-        Assert.True(processHandle.WaitForExit().Success);
+        var exitStatus = processHandle.WaitForExit();
+        Assert.Equal(0, exitStatus.ExitCode);
     }
 
     [Fact]
