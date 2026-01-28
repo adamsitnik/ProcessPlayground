@@ -134,7 +134,7 @@ internal static class Multiplexing
                     int errorCode = fileHandle.GetLastWin32ErrorAndDisposeHandleIfInvalid();
                     if (errorCode == Interop.Errors.ERROR_IO_PENDING)
                     {
-                        if (timeout.HasExpired || !overlappedContext.WaitHandle.WaitOne(timeout.GetRemainingMillisecondsOrThrow()))
+                        if (!timeout.TryGetRemainingMilliseconds(out int remainingMilliseconds) || !overlappedContext.WaitHandle.WaitOne(remainingMilliseconds))
                         {
                             HandleTimeout(processHandle, fileHandle, overlappedContext.GetOverlapped());
                         }
@@ -156,12 +156,12 @@ internal static class Multiplexing
                 }
             }
 
-            if (!processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
+            if (!processHandle.TryGetExitStatus(cancelled: false, out ProcessExitStatus exitStatus))
             {
-                exitCode = processHandle.WaitForExit(timeout.GetRemainingOrThrow()).ExitCode;
+                exitStatus = processHandle.WaitForExit(timeout.GetRemaining());
             }
 
-            return new(exitCode, BufferHelper.CreateCopy(array, totalBytesRead), processId);
+            return new(exitStatus, BufferHelper.CreateCopy(array, totalBytesRead), processId);
         }
         finally
         {
@@ -178,8 +178,6 @@ internal static class Multiplexing
         }
         catch (ObjectDisposedException) { } // in case the SafeHandle is (erroneously) closed concurrently
 
-        Interop.Kernel32.TerminateProcess(processHandle, exitCode: -1);
-
-        throw new TimeoutException("The operation has timed out.");
+        processHandle.Kill();
     }
 }
