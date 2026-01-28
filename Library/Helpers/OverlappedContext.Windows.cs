@@ -95,13 +95,15 @@ internal sealed unsafe class OverlappedContext : IDisposable
         }
 
         // We must observe completion before freeing the OVERLAPPED in all the above scenarios.
+        // Use bWait: true to ensure the I/O operation completes before we free the OVERLAPPED structure.
+        // Per MSDN: "Do not reuse or free the OVERLAPPED structure until GetOverlappedResult returns."
         int bytesRead = 0;
-        if (!Interop.Kernel32.GetOverlappedResult(handle, _overlapped, ref bytesRead, bWait: false))
+        if (!Interop.Kernel32.GetOverlappedResult(handle, _overlapped, ref bytesRead, bWait: true))
         {
             int errorCode = Marshal.GetLastPInvokeError();
             Debug.Assert(errorCode is Interop.Errors.ERROR_OPERATION_ABORTED or Interop.Errors.ERROR_BROKEN_PIPE, $"GetOverlappedResult failed with {errorCode}.");
         }
-        Debug.Assert(bytesRead == 0, $"Expected non-zero bytes read after cancellation, got {bytesRead}.");
+        Debug.Assert(bytesRead == 0, $"Expected zero bytes read after cancellation, got {bytesRead}.");
 
         handle.Close();
     }
