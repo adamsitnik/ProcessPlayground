@@ -42,7 +42,7 @@ public class NoRedirection
 #endif
 
     [Benchmark]
-    public int New()
+    public ProcessExitStatus New()
     {
         ProcessStartOptions info = new("dotnet")
         {
@@ -53,7 +53,7 @@ public class NoRedirection
     }
 
     [Benchmark]
-    public Task<int> NewAsync()
+    public Task<ProcessExitStatus> NewAsync()
     {
         ProcessStartOptions info = new("dotnet")
         {
@@ -71,8 +71,8 @@ public class NoRedirection
     }
 
     [Benchmark]
-    public int New_Resolved() => ChildProcess.Inherit(_resolved);
+    public ProcessExitStatus New_Resolved() => ChildProcess.Inherit(_resolved);
 
     [Benchmark]
-    public Task<int> NewAsync_Resolved() => ChildProcess.InheritAsync(_resolved);
+    public Task<ProcessExitStatus> NewAsync_Resolved() => ChildProcess.InheritAsync(_resolved);
 }

@@ -13,9 +13,9 @@ public static partial class ChildProcess
     /// Executes the process with STD IN/OUT/ERR redirected to current process. Waits for its completion.
     /// </summary>
     /// <param name="timeout">The maximum time to wait for the process to exit.</param>
-    /// <returns>The exit code of the process.</returns>
+    /// <returns>The exit status of the process.</returns>
     /// <remarks>When <paramref name="timeout"/> is not specified, the default is to wait indefinitely.</remarks>
-    public static int Inherit(ProcessStartOptions options, TimeSpan? timeout = default)
+    public static ProcessExitStatus Inherit(ProcessStartOptions options, TimeSpan? timeout = default)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -26,15 +26,15 @@ public static partial class ChildProcess
         using SafeFileHandle errorHandle = Console.OpenStandardErrorHandle();
 
         using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return procHandle.WaitForExit(timeout).ExitCode;
+        return procHandle.WaitForExit(timeout);
     }
 
     /// <summary>
     /// Executes the process with STD IN/OUT/ERR redirected to current process. Awaits for its completion.
     /// </summary>
     /// <param name="cancellationToken">The cancellation token to cancel the operation.</param>
-    /// <returns>The exit code of the process.</returns>
-    public static async Task<int> InheritAsync(ProcessStartOptions options, CancellationToken cancellationToken = default)
+    /// <returns>The exit status of the process.</returns>
+    public static async Task<ProcessExitStatus> InheritAsync(ProcessStartOptions options, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -43,7 +43,7 @@ public static partial class ChildProcess
         using SafeFileHandle errorHandle = Console.OpenStandardErrorHandle();
 
         using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return (await procHandle.WaitForExitAsync(cancellationToken)).ExitCode;
+        return await procHandle.WaitForExitAsync(cancellationToken);
     }
 
     /// <summary>
@@ -70,9 +70,9 @@ public static partial class ChildProcess
     /// Executes the process with STD IN/OUT/ERR discarded. Waits for its completion.
     /// </summary>
     /// <param name="timeout">The maximum time to wait for the process to exit.</param>
-    /// <returns>The exit code of the process.</returns>
+    /// <returns>The exit status of the process.</returns>
     /// <remarks>When <paramref name="timeout"/> is not specified, the default is to wait indefinitely.</remarks>
-    public static int Discard(ProcessStartOptions options, TimeSpan? timeout = default)
+    public static ProcessExitStatus Discard(ProcessStartOptions options, TimeSpan? timeout = default)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -82,22 +82,22 @@ public static partial class ChildProcess
         using SafeFileHandle nullHandle = File.OpenNullFileHandle();
 
         using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
-        return procHandle.WaitForExit(timeout).ExitCode;
+        return procHandle.WaitForExit(timeout);
     }
 
     /// <summary>
     /// Executes the process with STD IN/OUT/ERR discarded. Awaits for its completion.
     /// </summary>
     /// <param name="cancellationToken">The cancellation token to cancel the operation.</param>
-    /// <returns>The exit code of the process.</returns>
-    public static async Task<int> DiscardAsync(ProcessStartOptions options, CancellationToken cancellationToken = default)
+    /// <returns>The exit status of the process.</returns>
+    public static async Task<ProcessExitStatus> DiscardAsync(ProcessStartOptions options, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
 
         using SafeFileHandle nullHandle = File.OpenNullFileHandle();
 
         using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
-        return (await procHandle.WaitForExitAsync(cancellationToken)).ExitCode;
+        return await procHandle.WaitForExitAsync(cancellationToken);
     }
 
     /// <summary>
@@ -107,9 +107,9 @@ public static partial class ChildProcess
     /// <param name="outputFile">The file to use as standard output. If null, it redirects to NUL (device that discards all data).</param>
     /// <param name="errorFile">The file to use as standard error. If null, it redirects to NUL (device that discards all data).</param>
     /// <param name="timeout">The maximum time to wait for the process to exit.</param>
-    /// <returns>The exit code of the process.</returns>
+    /// <returns>The exit status of the process.</returns>
     /// <remarks>When <paramref name="timeout"/> is not specified, the default is to wait indefinitely.</remarks>
-    public static int RedirectToFiles(ProcessStartOptions options, string? inputFile, string? outputFile, string? errorFile, TimeSpan? timeout = default)
+    public static ProcessExitStatus RedirectToFiles(ProcessStartOptions options, string? inputFile, string? outputFile, string? errorFile, TimeSpan? timeout = default)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -123,7 +123,7 @@ public static partial class ChildProcess
         using SafeFileHandle inputHandle = handles.input, outputHandle = handles.output, errorHandle = handles.error;
 
         using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return procHandle.WaitForExit(timeout).ExitCode;
+        return procHandle.WaitForExit(timeout);
     }
 
     /// <summary>
@@ -133,8 +133,8 @@ public static partial class ChildProcess
     /// <param name="outputFile">The file to use as standard output. If null, it redirects to NUL (device that discards all data).</param>
     /// <param name="errorFile">The file to use as standard error. If null, it redirects to NUL (device that discards all data).</param>
     /// <param name="cancellationToken">The cancellation token to cancel the operation.</param>
-    /// <returns>The exit code of the process.</returns>
-    public static async Task<int> RedirectToFilesAsync(ProcessStartOptions options, string? inputFile, string? outputFile, string? errorFile, CancellationToken cancellationToken = default)
+    /// <returns>The exit status of the process.</returns>
+    public static async Task<ProcessExitStatus> RedirectToFilesAsync(ProcessStartOptions options, string? inputFile, string? outputFile, string? errorFile, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -142,7 +142,7 @@ public static partial class ChildProcess
         using SafeFileHandle inputHandle = handles.input, outputHandle = handles.output, errorHandle = handles.error;
 
         using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return (await procHandle.WaitForExitAsync(cancellationToken)).ExitCode;
+        return await procHandle.WaitForExitAsync(cancellationToken);
     }
 
     /// <summary>

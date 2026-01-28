@@ -61,7 +61,7 @@ public class Discard
 #endif
 
     [Benchmark]
-    public int New()
+    public ProcessExitStatus New()
     {
         ProcessStartOptions info = new("dotnet")
         {
@@ -72,7 +72,7 @@ public class Discard
     }
 
     [Benchmark]
-    public Task<int> NewAsync()
+    public Task<ProcessExitStatus> NewAsync()
     {
         ProcessStartOptions info = new("dotnet")
         {
