@@ -175,7 +175,7 @@ public class ProcessOutputTests
     }
 
     [Fact]
-    public void ProcessOutput_WithTimeout_ThrowsOnTimeout()
+    public void ProcessOutput_WithTimeout_KillsOnTimeout()
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
@@ -185,14 +185,15 @@ public class ProcessOutputTests
         }
 
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd") { Arguments = { "/c", "timeout /t 10 /nobreak" } }
+            ? new("timeout") { Arguments = { "/t", "10", "/nobreak" } }
             : new("sh") { Arguments = { "-c", "sleep 10" } };
 
         using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
 
         Stopwatch started = Stopwatch.StartNew();
-        Assert.Throws<TimeoutException>(() =>
-            ChildProcess.CaptureOutput(options, input: inputHandle, timeout: TimeSpan.FromMilliseconds(500)));
+        ProcessOutput processOutput = ChildProcess.CaptureOutput(options, input: inputHandle, timeout: TimeSpan.FromMilliseconds(500));
+        Assert.True(processOutput.ExitStatus.Cancelled);
+        Assert.Empty(processOutput.StandardError);
         Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1));
     }
 

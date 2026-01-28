@@ -32,8 +32,15 @@ internal static class Multiplexing
 #pragma warning disable CA2014
                 Span<KEvent> events = stackalloc KEvent[3];
 #pragma warning restore CA2014
-                int timeoutMs = timeout.GetRemainingMillisecondsOrThrow();
+                if (!timeout.TryGetRemainingMilliseconds(out int timeoutMs))
+                {
+                    return;
+                }
                 int numEvents = WaitForEvents(kq, events, timeoutMs);
+                if (numEvents == 0)
+                {
+                    return; // Timeout
+                }
 
                 for (int i = 0; i < numEvents; i++)
                 {
@@ -174,11 +181,6 @@ internal static class Multiplexing
                     return 0; // Interrupted, caller will retry
                 }
                 ThrowForLastError(nameof(kevent));
-            }
-
-            if (numEvents == 0)
-            {
-                throw new TimeoutException("Timed out waiting for process OUT and ERR.");
             }
 
             return numEvents;

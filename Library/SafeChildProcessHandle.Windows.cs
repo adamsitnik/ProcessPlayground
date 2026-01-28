@@ -409,7 +409,7 @@ public partial class SafeChildProcessHandle
     /// <summary>
     /// Returns true when process was killed, false when it was already exited.
     /// </summary>
-    private bool KillCore(bool throwOnError)
+    internal bool KillCore(bool throwOnError)
     {
         if (Interop.Kernel32.TerminateProcess(this, exitCode: -1))
         {
