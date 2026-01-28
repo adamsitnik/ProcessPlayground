@@ -710,7 +710,7 @@ int send_signal(int pidfd, int pid, int managed_signal) {
 }
 
 #ifndef HAVE_PIDFD
-int map_status(int status, int* out_exitCode, int* out_signal) {
+static int map_status(int status, int* out_exitCode, int* out_signal) {
     if (WIFEXITED(status)) {
         *out_exitCode = WEXITSTATUS(status);
         *out_signal = 0;
@@ -725,7 +725,7 @@ int map_status(int status, int* out_exitCode, int* out_signal) {
     return -1; // Still running or unknown status
 }
 #else
-int map_status(siginfo_t info, int* out_exitCode, int* out_signal) {
+static int map_status(siginfo_t info, int* out_exitCode, int* out_signal) {
     switch (info.si_code)
     {
         case CLD_KILLED: // WIFSIGNALED
