@@ -197,18 +197,7 @@ public static partial class ChildProcess
                 Multiplexing.GetProcessOutputCore(processHandle, readStdOut, readStdErr, timeoutHelper,
                     ref outputBytesRead, ref errorBytesRead, ref outputBuffer, ref errorBuffer);
 
-                bool wasCancelled = !timeoutHelper.TryGetRemainingMilliseconds(out int remainingMs)
-                    && processHandle.KillCore(throwOnError: true);
-
-                if (!processHandle.TryGetExitStatus(wasCancelled, out ProcessExitStatus exitStatus))
-                {
-                    if (wasCancelled)
-                    {
-                        throw new Exception("BUG!");
-                    }
-
-                    exitStatus = processHandle.WaitForExit(TimeSpan.FromMilliseconds(remainingMs));
-                }
+                var exitStatus = processHandle.WaitForExit(timeoutHelper.GetRemaining());
 
                 // Instead of decoding on the fly, we decode once at the end.
                 encoding ??= Encoding.UTF8;
