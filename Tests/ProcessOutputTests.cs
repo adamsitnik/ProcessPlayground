@@ -192,9 +192,10 @@ public class ProcessOutputTests
 
         Stopwatch started = Stopwatch.StartNew();
         ProcessOutput processOutput = ChildProcess.CaptureOutput(options, input: inputHandle, timeout: TimeSpan.FromMilliseconds(500));
+        Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1));
+        Assert.Equal(OperatingSystem.IsWindows() ? null : ProcessSignal.SIGKILL, processOutput.ExitStatus.Signal);
         Assert.True(processOutput.ExitStatus.Cancelled);
         Assert.Empty(processOutput.StandardError);
-        Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1));
     }
 
     [Fact]
