@@ -181,6 +181,18 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
         return TryGetExitCodeCore(out exitCode, out signal);
     }
 
+    internal bool TryGetExitStatus(bool canceled, out ProcessExitStatus exitStatus)
+    {
+        if (TryGetExitCodeCore(out int exitCode, out ProcessSignal? signal))
+        {
+            exitStatus = new ProcessExitStatus(exitCode, canceled, signal);
+            return true;
+        }
+
+        exitStatus = default;
+        return false;
+    }
+
     private void Validate()
     {
         if (IsInvalid)

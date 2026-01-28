@@ -35,7 +35,9 @@ internal static class Multiplexing
 
             while (!readStdOut.IsClosed || !readStdErr.IsClosed)
             {
-                int waitResult = WaitHandle.WaitAny(waitHandles, timeout.GetRemainingMillisecondsOrThrow());
+                int waitResult = timeout.TryGetRemainingMilliseconds(out int remainingMilliseconds)
+                    ? WaitHandle.WaitAny(waitHandles, remainingMilliseconds)
+                    : WaitHandle.WaitTimeout;
 
                 if (waitResult is 1 or 2)
                 {
@@ -98,7 +100,7 @@ internal static class Multiplexing
 
                     if (waitResult == WaitHandle.WaitTimeout)
                     {
-                        throw new TimeoutException("Timed out waiting for process OUT and ERR.");
+                        return;
                     }
                 }
                 else

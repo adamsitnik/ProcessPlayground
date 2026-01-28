@@ -84,7 +84,7 @@ internal static class Multiplexing
             }
             else if (pollResult == 0)
             {
-                throw new TimeoutException("Timed out waiting for process OUT and ERR.");
+                return; // Timeout occurred
             }
 
             // Check which file descriptors have data available

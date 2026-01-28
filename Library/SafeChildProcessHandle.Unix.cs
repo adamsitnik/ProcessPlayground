@@ -205,7 +205,7 @@ public partial class SafeChildProcessHandle
         return new(status.ExitCode, wasKilledBox.Value, status.Signal);
     }
 
-    private bool KillCore(bool throwOnError)
+    internal bool KillCore(bool throwOnError)
     {
         int result = send_signal(this, ProcessId, ProcessSignal.SIGKILL);
         if (result == 0)

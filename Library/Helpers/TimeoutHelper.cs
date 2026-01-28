@@ -39,5 +39,29 @@ internal readonly struct TimeoutHelper
         return (int)remainedMilliseconds;
     }
 
+    internal TimeSpan GetRemaining()
+    {
+        if (_stopwatch is null)
+        {
+            return Timeout.InfiniteTimeSpan;
+        }
+
+        long remainedMilliseconds = _timeoutMilliseconds - _stopwatch.ElapsedMilliseconds;
+        return TimeSpan.FromMilliseconds(Math.Max((int)remainedMilliseconds, 0));
+    }
+
+    internal bool TryGetRemainingMilliseconds(out int remainingMilliseconds)
+    {
+        if (_stopwatch is null)
+        {
+            remainingMilliseconds = Timeout.Infinite;
+            return true;
+        }
+
+        long remainedMilliseconds = _timeoutMilliseconds - _stopwatch.ElapsedMilliseconds;
+        remainingMilliseconds = (int)remainedMilliseconds;
+        return remainedMilliseconds >= 0;
+    }
+
     internal TimeSpan GetRemainingOrThrow() => TimeSpan.FromMilliseconds(GetRemainingMillisecondsOrThrow());
 }
