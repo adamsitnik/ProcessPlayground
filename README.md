@@ -239,7 +239,7 @@ namespace System.TBA;
 
 public readonly struct ProcessOutput
 {
-    public int ExitCode { get; }           // The exit code of the process
+    public ProcessExitStatus ExitStatus { get; }  // The exit status of the process
     public string StandardOutput { get; }  // The decoded string content from stdout
     public string StandardError { get; }   // The decoded string content from stderr
     public int ProcessId { get; }          // The process ID
@@ -394,12 +394,13 @@ ProcessStartOptions options = new("dotnet")
 ProcessOutput output = ChildProcess.CaptureOutput(options);
 Console.WriteLine($"Standard Output: {output.StandardOutput}");
 Console.WriteLine($"Standard Error: {output.StandardError}");
-Console.WriteLine($"Exit code: {output.ExitCode}");
+Console.WriteLine($"Exit code: {output.ExitStatus.ExitCode}");
 
 // Async version
 ProcessOutput output = await ChildProcess.CaptureOutputAsync(options);
 Console.WriteLine($"Standard Output: {output.StandardOutput}");
 Console.WriteLine($"Standard Error: {output.StandardError}");
+Console.WriteLine($"Exit code: {output.ExitStatus.ExitCode}");
 ```
 
 ### Get Combined Output

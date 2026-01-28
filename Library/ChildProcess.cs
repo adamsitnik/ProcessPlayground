@@ -197,9 +197,14 @@ public static partial class ChildProcess
                 Multiplexing.GetProcessOutputCore(processHandle, readStdOut, readStdErr, timeoutHelper,
                     ref outputBytesRead, ref errorBytesRead, ref outputBuffer, ref errorBuffer);
 
+                ProcessExitStatus exitStatus;
                 if (!processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
                 {
-                    exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow()).ExitCode;
+                    exitStatus = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow());
+                }
+                else
+                {
+                    exitStatus = new ProcessExitStatus(exitCode, cancelled: false, signal);
                 }
 
                 // Instead of decoding on the fly, we decode once at the end.
@@ -207,7 +212,7 @@ public static partial class ChildProcess
                 string output = encoding.GetString(outputBuffer, 0, outputBytesRead);
                 string error = encoding.GetString(errorBuffer, 0, errorBytesRead);
 
-                return new(exitCode, output, error, processHandle.ProcessId);
+                return new(exitStatus, output, error, processHandle.ProcessId);
             }
             finally
             {
@@ -295,16 +300,21 @@ public static partial class ChildProcess
                     }
                 }
 
+                ProcessExitStatus exitStatus;
                 if (!processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
                 {
-                    exitCode = (await processHandle.WaitForExitAsync(cancellationToken)).ExitCode;
+                    exitStatus = await processHandle.WaitForExitAsync(cancellationToken);
+                }
+                else
+                {
+                    exitStatus = new ProcessExitStatus(exitCode, cancelled: false, signal);
                 }
 
                 // Instead of decoding on the fly, we decode once at the end.
                 string output = (encoding ?? Encoding.UTF8).GetString(outputBuffer, 0, outputStartIndex);
                 string error = (encoding ?? Encoding.UTF8).GetString(errorBuffer, 0, errorStartIndex);
 
-                return new(exitCode, output, error, processHandle.ProcessId);
+                return new(exitStatus, output, error, processHandle.ProcessId);
             }
             finally
             {
