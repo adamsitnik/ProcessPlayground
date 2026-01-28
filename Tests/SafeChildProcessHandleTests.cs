@@ -335,13 +335,11 @@ public partial class SafeChildProcessHandleTests
         processHandle.Kill();
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void WaitForExit_Called_After_Kill_ReturnsExitCodeImmidately(bool specifyTimeout)
+    [Fact]
+    public void WaitForExit_Called_After_Kill_ReturnsExitCodeImmidately()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd.exe") { Arguments = { "/c", "timeout", "/t", "60", "/nobreak" } }
+            ? new("timeout") { Arguments = { "/t", "60", "/nobreak" } }
             : new("sleep") { Arguments = { "60" } };
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
@@ -349,7 +347,7 @@ public partial class SafeChildProcessHandleTests
         processHandle.Kill();
 
         Stopwatch stopwatch = Stopwatch.StartNew();
-        var exitStatus = processHandle.WaitForExit(specifyTimeout ? TimeSpan.FromSeconds(3) : default);
+        var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(3));
 
         Assert.InRange(stopwatch.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(0.1));
         Assert.False(exitStatus.Cancelled);

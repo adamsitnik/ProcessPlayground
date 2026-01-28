@@ -117,18 +117,16 @@ public class CreateSuspendedTests
 
         Assert.False(exitStatus.Cancelled);
 
-        // On Windows, TerminateProcess sets exit code to -1
-        // On Unix with pidfd, the process is terminated by SIGKILL, so exit code is 9 (SIGKILL)
-        // On Unix without pidfd, the exit code is mapped to -1 for signaled processes
         if (OperatingSystem.IsWindows())
         {
+            // On Windows, TerminateProcess sets exit code to -1
             Assert.Equal(-1, exitStatus.ExitCode);
             Assert.Null(exitStatus.Signal);
         }
         else
         {
-            // TODO: use platform-specific exit code
             Assert.Equal(ProcessSignal.SIGKILL, exitStatus.Signal);
+            Assert.Equal(128 + (int)ProcessSignal.SIGKILL, exitStatus.ExitCode);
         }
     }
 

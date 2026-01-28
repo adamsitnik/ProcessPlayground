@@ -174,11 +174,11 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// So instead of creating expensive async machinery to wait for process exit,
     /// this method attempts to get the exit code directly.
     /// </summary>
-    internal bool TryGetExitCode(out int exitCode)
+    internal bool TryGetExitCode(out int exitCode, out ProcessSignal? signal)
     {
         Validate();
 
-        return TryGetExitCodeCore(out exitCode);
+        return TryGetExitCodeCore(out exitCode, out signal);
     }
 
     private void Validate()

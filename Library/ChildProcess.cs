@@ -197,7 +197,7 @@ public static partial class ChildProcess
                 Multiplexing.GetProcessOutputCore(processHandle, readStdOut, readStdErr, timeoutHelper,
                     ref outputBytesRead, ref errorBytesRead, ref outputBuffer, ref errorBuffer);
 
-                if (!processHandle.TryGetExitCode(out int exitCode))
+                if (!processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
                 {
                     exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow()).ExitCode;
                 }
@@ -295,7 +295,7 @@ public static partial class ChildProcess
                     }
                 }
 
-                if (!processHandle.TryGetExitCode(out int exitCode))
+                if (!processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
                 {
                     exitCode = await processHandle.WaitForExitAsync(cancellationToken);
                 }
@@ -376,7 +376,7 @@ public static partial class ChildProcess
 
                 // It's possible for the process to close STD OUT and ERR keep running.
                 // We optimize for hot path: process already exited and exit code is available.
-                if (timeoutHelper.HasExpired || !processHandle.TryGetExitCode(out int exitCode))
+                if (timeoutHelper.HasExpired || !processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
                 {
                     exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow()).ExitCode;
                 }
@@ -438,7 +438,7 @@ public static partial class ChildProcess
                 byte[] resultBuffer = BufferHelper.CreateCopy(buffer, totalBytesRead);
                 // It's possible for the process to close STD OUT and ERR keep running.
                 // We optimize for hot path: process already exited and exit code is available.
-                if (!processHandle.TryGetExitCode(out int exitCode))
+                if (!processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
                 {
                     exitCode = await processHandle.WaitForExitAsync(cancellationToken);
                 }

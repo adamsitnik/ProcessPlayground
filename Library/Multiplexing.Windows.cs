@@ -154,7 +154,7 @@ internal static class Multiplexing
                 }
             }
 
-            if (!processHandle.TryGetExitCode(out int exitCode))
+            if (!processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
             {
                 exitCode = processHandle.WaitForExit(timeout.GetRemainingOrThrow()).ExitCode;
             }

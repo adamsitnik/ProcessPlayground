@@ -125,7 +125,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                 moreData = await remaining.ReadLineAsync(cancellationToken);
             }
 
-            if (!procHandle.TryGetExitCode(out int exitCode))
+            if (!procHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
             {
                 exitCode = await procHandle.WaitForExitAsync(cancellationToken);
             }
