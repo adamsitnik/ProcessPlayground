@@ -67,7 +67,7 @@ public class ReadBoth
         };
 
         ProcessOutput processOutput = ChildProcess.CaptureOutput(info);
-        return processOutput.ExitCode ^ (processOutput.StandardOutput.Length + processOutput.StandardError.Length);
+        return processOutput.ExitStatus.ExitCode ^ (processOutput.StandardOutput.Length + processOutput.StandardError.Length);
     }
 
     [Benchmark]
@@ -79,6 +79,6 @@ public class ReadBoth
         };
 
         ProcessOutput processOutput = await ChildProcess.CaptureOutputAsync(info);
-        return processOutput.ExitCode ^ (processOutput.StandardOutput.Length + processOutput.StandardError.Length);
+        return processOutput.ExitStatus.ExitCode ^ (processOutput.StandardOutput.Length + processOutput.StandardError.Length);
     }
 }

@@ -3,9 +3,9 @@
 public readonly struct ProcessOutput
 {
     /// <summary>
-    /// Gets the exit code returned by the process after it has terminated.
+    /// Gets the exit status of the process after it has terminated.
     /// </summary>
-    public int ExitCode { get; }
+    public ProcessExitStatus ExitStatus { get; }
 
     /// <summary>
     /// Gets the decoded string content written to standard output.
@@ -23,9 +23,9 @@ public readonly struct ProcessOutput
     /// <remarks>This information can be useful to process any diagnostics/tracing data post run.</remarks>
     public int ProcessId { get; }
 
-    public ProcessOutput(int exitCode, string standardOutput, string standardError, int processId) : this()
+    public ProcessOutput(ProcessExitStatus exitStatus, string standardOutput, string standardError, int processId) : this()
     {
-        ExitCode = exitCode;
+        ExitStatus = exitStatus;
         StandardOutput = standardOutput;
         StandardError = standardError;
         ProcessId = processId;

@@ -26,7 +26,7 @@ public class ProcessOutputTests
 
         Assert.Equal(OperatingSystem.IsWindows() ? "Hello from stdout \r\n" : "Hello from stdout\n", result.StandardOutput);
         Assert.Equal(OperatingSystem.IsWindows() ? "Error from stderr \r\n" : "Error from stderr\n", result.StandardError);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -42,7 +42,7 @@ public class ProcessOutputTests
             ? await ChildProcess.CaptureOutputAsync(options)
             : ChildProcess.CaptureOutput(options);
 
-        Assert.Equal(42, result.ExitCode);
+        Assert.Equal(42, result.ExitStatus.ExitCode);
         Assert.Empty(result.StandardOutput);
         Assert.Empty(result.StandardError);
     }
@@ -62,7 +62,7 @@ public class ProcessOutputTests
 
         Assert.Empty(result.StandardOutput);
         Assert.Empty(result.StandardError);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -80,7 +80,7 @@ public class ProcessOutputTests
 
         Assert.Empty(result.StandardOutput);
         Assert.Empty(result.StandardError);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -104,7 +104,7 @@ public class ProcessOutputTests
         
         Assert.Equal(expected.ToString(), result.StandardOutput);
         Assert.Empty(result.StandardError);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -129,7 +129,7 @@ public class ProcessOutputTests
         
         Assert.Equal(expected.ToString(), result.StandardError);
         Assert.Empty(result.StandardOutput);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -148,7 +148,7 @@ public class ProcessOutputTests
 
         Assert.Equal(OperatingSystem.IsWindows() ? "OUT1 \r\nOUT2 \r\n" : "OUT1\nOUT2\n", result.StandardOutput);
         Assert.Equal(OperatingSystem.IsWindows() ? "ERR1  \r\nERR2 \r\n" : "ERR1\nERR2\n", result.StandardError);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -171,7 +171,7 @@ public class ProcessOutputTests
         Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(1));
         Assert.Equal(OperatingSystem.IsWindows() ? "Quick output\r\n" : "Quick output\n", result.StandardOutput);
         Assert.Empty(result.StandardError);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Fact]
@@ -263,7 +263,7 @@ public class ProcessOutputTests
         {
             Assert.Equal(OperatingSystem.IsWindows() ? "Concurrent test\r\n" : "Concurrent test\n", result.StandardOutput);
             Assert.Empty(result.StandardError);
-            Assert.Equal(0, result.ExitCode);
+            Assert.Equal(0, result.ExitStatus.ExitCode);
         }
     }
 
@@ -282,7 +282,7 @@ public class ProcessOutputTests
 
         Assert.Empty(result.StandardOutput);
         Assert.Equal(OperatingSystem.IsWindows() ? "Only stderr \r\n" : "Only stderr\n", result.StandardError);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -300,7 +300,7 @@ public class ProcessOutputTests
 
         Assert.Equal(OperatingSystem.IsWindows() ? "Only stdout\r\n" : "Only stdout\n", result.StandardOutput);
         Assert.Empty(result.StandardError);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -318,7 +318,7 @@ public class ProcessOutputTests
 
         // ProcessId should be a positive number
         Assert.True(result.ProcessId > 0);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -369,7 +369,7 @@ public class ProcessOutputTests
         // Should complete before the grandchild writes (which happens after 3 seconds)
         Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(1));
 
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
         Assert.Equal(OperatingSystem.IsWindows() ? "Child output \r\n" : "Child output\n", result.StandardOutput);
         Assert.Empty(result.StandardError);
     }
