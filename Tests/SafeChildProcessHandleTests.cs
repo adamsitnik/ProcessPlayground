@@ -372,6 +372,33 @@ public partial class SafeChildProcessHandleTests
         Assert.NotEqual(0, exitStatus.ExitCode);
     }
 
+    [Fact]
+    public async Task WaitForExitAsync_WithCancellation_KillsOnCancellation()
+    {
+        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
+        {
+            // On Windows, if standard input is redirected, the test cannot proceed
+            // because timeout utility requires it.
+            return;
+        }
+
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("timeout") { Arguments = { "/t", "60", "/nobreak" } }
+            : new("sleep") { Arguments = { "60" } };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: Console.OpenStandardInputHandle(), output: null, error: null);
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(1));
+        
+        var exitStatus = await processHandle.WaitForExitAsync(cts.Token);
+
+        Assert.InRange(stopwatch.Elapsed, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(3));
+        Assert.True(exitStatus.Cancelled);
+        Assert.NotEqual(0, exitStatus.ExitCode);
+    }
+
+
     [Theory]
     [InlineData(false)]
 #if WINDOWS // https://github.com/adamsitnik/ProcessPlayground/issues/61

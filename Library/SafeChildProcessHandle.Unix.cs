@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -165,43 +166,51 @@ public partial class SafeChildProcessHandle
 
     private async Task<ProcessExitStatus> WaitForExitAsyncCore(CancellationToken cancellationToken)
     {
-        // Register cancellation to kill the process
-        using CancellationTokenRegistration registration = !cancellationToken.CanBeCanceled ? default : cancellationToken.Register(() =>
-        {
-            KillCore(throwOnError: false);
-        });
-
-        // Treat the exit pipe fd as a socket and perform async read
-        // When the child process exits, all its file descriptors are closed,
-        // including the write end of the exit pipe. This will cause the read
-        // to return 0 bytes (orderly shutdown).
-        using SafeSocketHandle safeSocket = new(_exitPipeFd, ownsHandle: false);
-        using Socket socket = new(safeSocket);
-
-        // Returns number of bytes read, 0 means orderly shutdown by peer (pipe closed).
-        int bytesRead = await socket.ReceiveAsync(s_exitPipeBuffer, SocketFlags.None, cancellationToken).ConfigureAwait(false);
+        StrongBox<bool> wasKilledBox = new(false);
         
-        // When the child process exits, the write end of the pipe is closed,
-        // which should result in 0 bytes read (orderly shutdown).
-        if (bytesRead != 0)
+        // Register cancellation to kill the process
+        using CancellationTokenRegistration registration = !cancellationToken.CanBeCanceled ? default : cancellationToken.Register(state =>
         {
-            throw new InvalidOperationException($"Unexpected data read from exit pipe: {bytesRead} byte(s). Expected 0 bytes (pipe closure).");
+            var (handle, wasCancelled) = ((SafeChildProcessHandle, StrongBox<bool>))state!;
+            wasCancelled.Value = handle.KillCore(throwOnError: false);
+        }, (this, wasKilledBox));
+
+        try
+        {
+            // Treat the exit pipe fd as a socket and perform async read
+            // When the child process exits, all its file descriptors are closed,
+            // including the write end of the exit pipe. This will cause the read
+            // to return 0 bytes (orderly shutdown).
+            using SafeSocketHandle safeSocket = new(_exitPipeFd, ownsHandle: false);
+            using Socket socket = new(safeSocket);
+
+            // Returns number of bytes read, 0 means orderly shutdown by peer (pipe closed).
+            int bytesRead = await socket.ReceiveAsync(s_exitPipeBuffer, SocketFlags.None, cancellationToken).ConfigureAwait(false);
+            
+            // When the child process exits, the write end of the pipe is closed,
+            // which should result in 0 bytes read (orderly shutdown).
+            if (bytesRead != 0)
+            {
+                throw new InvalidOperationException($"Unexpected data read from exit pipe: {bytesRead} byte(s). Expected 0 bytes (pipe closure).");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancellation was requested - wait for the process to actually exit
+            // The cancellation callback should have killed it
         }
 
-        // The process has exited, now retrieve the exit status
-        // Note: Cancelled is set to false because WaitForExitAsync doesn't have a timeout parameter.
-        // The Cancelled flag is specifically for timeout-based cancellation in WaitForExit(TimeSpan).
-        // If a CancellationToken is cancelled, an OperationCanceledException will be thrown instead.
+        // The process has exited (or been killed), now retrieve the exit status
         ProcessExitStatus status = WaitForExitCore(milliseconds: Timeout.Infinite);
-        return new(status.ExitCode, cancelled: false, status.Signal);
+        return new(status.ExitCode, wasKilledBox.Value, status.Signal);
     }
 
-    private void KillCore(bool throwOnError)
+    private bool KillCore(bool throwOnError)
     {
         int result = send_signal(this, ProcessId, ProcessSignal.SIGKILL);
-        if (result == 0 || !throwOnError)
+        if (result == 0)
         {
-            return;
+            return true;
         }
 
         const int ESRCH = 3;
@@ -212,7 +221,12 @@ public partial class SafeChildProcessHandle
         int errno = Marshal.GetLastPInvokeError();
         if (errno == ESRCH || errno == EBADF)
         {
-            return;
+            return false; // Process already exited
+        }
+        
+        if (!throwOnError)
+        {
+            return false;
         }
         
         // Any other error is unexpected
