@@ -300,18 +300,11 @@ public partial class SafeChildProcessHandleTests
         var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
 
         Assert.False(exitStatus.Cancelled);
-        // Exit code should indicate termination (non-zero or signal number)
-        // On Linux with pidfd, this will be the signal number (9 for SIGKILL)
-        // On Unix with regular kill, this will be -1
-        // On Windows, this will be -1
-#if LINUX
-        Assert.Equal(ProcessSignal.SIGKILL, exitStatus.Signal);
-#elif WINDOWS
-        // Windows returns -1
+#if WINDOWS
         Assert.Equal(-1, exitStatus.ExitCode);
 #else
-        // Traditional Unix returns -1
-        Assert.Equal(-1, exitCode);
+        Assert.Equal(ProcessSignal.SIGKILL, exitStatus.Signal);
+        Assert.Equal(128 + (int)ProcessSignal.SIGKILL, exitStatus.ExitCode);
 #endif
     }
 
