@@ -5,4 +5,4 @@ ProcessStartOptions info = new("dotnet")
     Arguments = { "--help" },
 };
 
-return ChildProcess.Inherit(info);
+return ChildProcess.Inherit(info).ExitCode;

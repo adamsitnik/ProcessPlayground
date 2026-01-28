@@ -279,9 +279,9 @@ ProcessStartOptions options = new("dotnet")
     Arguments = { "--help" }
 };
 
-int exitCode = ChildProcess.Inherit(options);
+ProcessExitStatus exitStatus = ChildProcess.Inherit(options);
 // or async
-int exitCode = await ChildProcess.InheritAsync(options);
+ProcessExitStatus exitStatus = await ChildProcess.InheritAsync(options);
 ```
 
 ### Execute with Timeout
@@ -293,11 +293,11 @@ ProcessStartOptions options = new("ping")
 };
 
 // Kill after 3 seconds
-int exitCode = ChildProcess.Inherit(options, TimeSpan.FromSeconds(3));
+ProcessExitStatus exitStatus = ChildProcess.Inherit(options, TimeSpan.FromSeconds(3));
 
 // or with CancellationToken
 using CancellationTokenSource cts = new(TimeSpan.FromSeconds(3));
-int exitCode = await ChildProcess.InheritAsync(options, cts.Token);
+ProcessExitStatus exitStatus = await ChildProcess.InheritAsync(options, cts.Token);
 ```
 
 ### Discard Output
@@ -310,9 +310,9 @@ ProcessStartOptions options = new("dotnet")
     Arguments = { "--help" }
 };
 
-int exitCode = ChildProcess.Discard(options);
+ProcessExitStatus exitStatus = ChildProcess.Discard(options);
 // or async
-int exitCode = await ChildProcess.DiscardAsync(options);
+ProcessExitStatus exitStatus = await ChildProcess.DiscardAsync(options);
 ```
 
 This is more efficient than the traditional approach of redirecting output and discarding it in event handlers:
@@ -342,7 +342,7 @@ ProcessStartOptions options = new("dotnet")
     Arguments = { "--help" }
 };
 
-int exitCode = ChildProcess.RedirectToFiles(
+ProcessExitStatus exitStatus = ChildProcess.RedirectToFiles(
     options,
     inputFile: null,           // null = NUL device (EOF)
     outputFile: "output.txt",  // stdout goes here
@@ -350,7 +350,7 @@ int exitCode = ChildProcess.RedirectToFiles(
 );
 
 // or async
-int exitCode = await ChildProcess.RedirectToFilesAsync(options, null, "output.txt", null);
+ProcessExitStatus exitStatus = await ChildProcess.RedirectToFilesAsync(options, null, "output.txt", null);
 ```
 
 This is significantly faster than reading output through pipes and writing to files manually.
