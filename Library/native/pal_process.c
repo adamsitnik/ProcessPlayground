@@ -725,16 +725,16 @@ static int map_status(int status, int* out_exitCode, int* out_signal) {
     return -1; // Still running or unknown status
 }
 #else
-static int map_status(siginfo_t info, int* out_exitCode, int* out_signal) {
-    switch (info.si_code)
+static int map_status(const siginfo_t* info, int* out_exitCode, int* out_signal) {
+    switch (info->si_code)
     {
         case CLD_KILLED: // WIFSIGNALED
         case CLD_DUMPED: // WIFSIGNALED
-            *out_exitCode = 128 + info.si_status;
-            *out_signal = map_native_signal_to_managed(info.si_status);
+            *out_exitCode = 128 + info->si_status;
+            *out_signal = map_native_signal_to_managed(info->si_status);
             return 0;
         case CLD_EXITED: // WIFEXITED
-            *out_exitCode = info.si_status;
+            *out_exitCode = info->si_status;
             *out_signal = 0;
             return 0;
         default:
@@ -754,7 +754,7 @@ int try_get_exit_code(int pidfd, int pid, int* out_exitCode, int* out_signal) {
     while ((ret = waitid(P_PIDFD, pidfd, &info, WEXITED | WNOHANG)) < 0 && errno == EINTR);
 
     if (ret == 0 && info.si_pid != 0) {
-        return map_status(info, out_exitCode, out_signal);
+        return map_status(&info, out_exitCode, out_signal);
     }
 #else
     (void)pidfd;
@@ -840,7 +840,7 @@ int wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_e
     while ((ret = waitid(P_PIDFD, pidfd, &info, WEXITED)) < 0 && errno == EINTR);
 
     if (ret != -1) {
-        return map_status(info, out_exitCode, out_signal);
+        return map_status(&info, out_exitCode, out_signal);
     }
 #else
     int status;
