@@ -125,7 +125,7 @@ public class InheritedHandlesTests
                 }
 
                 // Wait for the child process to exit
-                int exitCode = processHandle.WaitForExit();
+                int exitCode = processHandle.WaitForExit().ExitCode;
 
                 if (inherit)
                 {
@@ -165,8 +165,7 @@ public class InheritedHandlesTests
             output: nullHandle,
             error: nullHandle);
 
-        int exitCode = processHandle.WaitForExit();
-        Assert.Equal(0, exitCode);
+        Assert.True(processHandle.WaitForExit().Success);
     }
 
     [Fact]
@@ -191,7 +190,7 @@ public class InheritedHandlesTests
             output: nullHandle,
             error: nullHandle);
 
-        int exitCode = processHandle.WaitForExit();
+        int exitCode = processHandle.WaitForExit().ExitCode;
         Assert.Equal(0, exitCode);
     }
 }

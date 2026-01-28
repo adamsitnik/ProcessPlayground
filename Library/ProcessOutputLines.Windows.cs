@@ -180,7 +180,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             // We optimize for hot path: process already exited and exit code is available.
             if (!processHandle.TryGetExitCode(out int exitCode))
             {
-                exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow());
+                exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow()).ExitCode;
             }
             _exitCode = exitCode;
 

@@ -108,7 +108,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
         }
     }
 
-    public int WaitForExit(TimeSpan? timeout = default)
+    public ProcessExitStatus WaitForExit(TimeSpan? timeout = default)
     {
         Validate();
 

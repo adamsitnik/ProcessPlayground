@@ -26,7 +26,7 @@ public static partial class ChildProcess
         using SafeFileHandle errorHandle = Console.OpenStandardErrorHandle();
 
         using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return procHandle.WaitForExit(timeout);
+        return procHandle.WaitForExit(timeout).ExitCode;
     }
 
     /// <summary>
@@ -82,7 +82,7 @@ public static partial class ChildProcess
         using SafeFileHandle nullHandle = File.OpenNullFileHandle();
 
         using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
-        return procHandle.WaitForExit(timeout);
+        return procHandle.WaitForExit(timeout).ExitCode;
     }
 
     /// <summary>
@@ -123,7 +123,7 @@ public static partial class ChildProcess
         using SafeFileHandle inputHandle = handles.input, outputHandle = handles.output, errorHandle = handles.error;
 
         using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return procHandle.WaitForExit(timeout);
+        return procHandle.WaitForExit(timeout).ExitCode;
     }
 
     /// <summary>
@@ -199,7 +199,7 @@ public static partial class ChildProcess
 
                 if (!processHandle.TryGetExitCode(out int exitCode))
                 {
-                    exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow());
+                    exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow()).ExitCode;
                 }
 
                 // Instead of decoding on the fly, we decode once at the end.
@@ -378,7 +378,7 @@ public static partial class ChildProcess
                 // We optimize for hot path: process already exited and exit code is available.
                 if (timeoutHelper.HasExpired || !processHandle.TryGetExitCode(out int exitCode))
                 {
-                    exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow());
+                    exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow()).ExitCode;
                 }
                 return new(exitCode, resultBuffer, processId);
             }

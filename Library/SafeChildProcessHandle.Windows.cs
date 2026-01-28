@@ -347,15 +347,16 @@ public partial class SafeChildProcessHandle
         }
     }
 
-    private int WaitForExitCore(int milliseconds)
+    private ProcessExitStatus WaitForExitCore(int milliseconds)
     {
+        bool wasKilledOnTimeout = false;
         using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(this);
         if (!processWaitHandle.WaitOne(milliseconds))
         {
-            KillCore(throwOnError: false);
+            wasKilledOnTimeout = KillCore(throwOnError: false);
         }
 
-        return GetExitCode();
+        return new(GetExitCode(), wasKilledOnTimeout);
     }
 
     private async Task<int> WaitForExitAsyncCore(CancellationToken cancellationToken)
@@ -399,21 +400,23 @@ public partial class SafeChildProcessHandle
         return GetExitCode();
     }
 
-    private void KillCore(bool throwOnError)
+    /// <summary>
+    /// Returns true when process was killed, false when it was already exited.
+    /// </summary>
+    private bool KillCore(bool throwOnError)
     {
-        if (!Interop.Kernel32.TerminateProcess(this, exitCode: -1) && throwOnError)
+        if (Interop.Kernel32.TerminateProcess(this, exitCode: -1) && throwOnError)
         {
-            int error = Marshal.GetLastPInvokeError();
-            if (error != Interop.Errors.ERROR_SUCCESS)
-            {
-                if (TryGetExitCode(out _))
-                {
-                    return; // Process has already exited.
-                }
-
-                throw new Win32Exception(error, "Failed to terminate process");
-            }
+            return true;
         }
+
+        int error = Marshal.GetLastPInvokeError();
+        return error switch
+        {
+            Interop.Errors.ERROR_SUCCESS => true,
+            Interop.Errors.ERROR_ACCESS_DENIED => false,// Process has already exited.
+            _ => throw new Win32Exception(error, "Failed to terminate process"),
+        };
     }
 
     private void ResumeCore()
