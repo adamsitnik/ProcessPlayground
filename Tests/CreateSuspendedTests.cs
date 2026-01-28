@@ -1,5 +1,4 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -27,11 +26,7 @@ public class CreateSuspendedTests
         // Now resume the process
         processHandle.Resume();
 
-        // Wait for the process to complete
-        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
-        
-        // Process should exit successfully
-        Assert.Equal(0, exitCode);
+        EnsureProcessCompletedSuccessfully(processHandle, TimeSpan.FromSeconds(5));
     }
 
     [Fact]
@@ -64,8 +59,7 @@ public class CreateSuspendedTests
             processHandle.Resume();
 
             // Wait for completion
-            int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
-            Assert.Equal(0, exitCode);
+            EnsureProcessCompletedSuccessfully(processHandle, TimeSpan.FromSeconds(5));
 
             // File should now exist
             Assert.True(File.Exists(tempFile), "File should exist after process resumed and completed");
@@ -118,19 +112,29 @@ public class CreateSuspendedTests
         processHandle.Kill();
 
         // Wait for it to be killed
-        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
-        
-        // On Windows, TerminateProcess sets exit code to -1
-        // On Unix with pidfd, the process is terminated by SIGKILL, so exit code is 9 (SIGKILL)
-        // On Unix without pidfd, the exit code is mapped to -1 for signaled processes
+        var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+
+        Assert.False(exitStatus.Cancelled);
+
         if (OperatingSystem.IsWindows())
         {
-            Assert.Equal(-1, exitCode);
+            // On Windows, TerminateProcess sets exit code to -1
+            Assert.Equal(-1, exitStatus.ExitCode);
+            Assert.Null(exitStatus.Signal);
         }
         else
         {
-            // On Unix, we accept either -1 or 9 (SIGKILL signal number)
-            Assert.True(exitCode == -1 || exitCode == 9, $"Expected exit code -1 or 9, but got {exitCode}");
+            Assert.Equal(ProcessSignal.SIGKILL, exitStatus.Signal);
+            Assert.Equal(128 + (int)ProcessSignal.SIGKILL, exitStatus.ExitCode);
         }
+    }
+
+    private static void EnsureProcessCompletedSuccessfully(SafeChildProcessHandle processHandle, TimeSpan? timeout = default)
+    {
+        var exitStatus = processHandle.WaitForExit(timeout);
+
+        Assert.Equal(0, exitStatus.ExitCode);
+        Assert.False(exitStatus.Cancelled);
+        Assert.Null(exitStatus.Signal);
     }
 }

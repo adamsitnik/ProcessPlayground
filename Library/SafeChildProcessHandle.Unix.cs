@@ -137,14 +137,26 @@ public partial class SafeChildProcessHandle
         }
     }
 
-    private bool TryGetExitCodeCore(out int exitCode)
-        => try_get_exit_code(this, ProcessId, out exitCode) != -1;
-
-    private int WaitForExitCore(int milliseconds)
+    private bool TryGetExitCodeCore(out int exitCode, out ProcessSignal? signal)
     {
-        if (wait_for_exit(this, ProcessId, _exitPipeFd, milliseconds, out int exitCode) != -1)
+        signal = null;
+        if (try_get_exit_code(this, ProcessId, out exitCode, out int rawSignal) != -1)
         {
-            return exitCode;
+            if (rawSignal != 0)
+            {
+                signal = (ProcessSignal)rawSignal;
+            }
+            return true;
+        }
+        return false;
+    }
+
+    private ProcessExitStatus WaitForExitCore(int milliseconds)
+    {
+        if (wait_for_exit(this, ProcessId, _exitPipeFd, milliseconds, out int exitCode, out int rawSignal, out int hasTimedout) != -1)
+        {
+            ProcessSignal? signal = rawSignal != 0 ? (ProcessSignal)rawSignal : null;
+            return new(exitCode, hasTimedout == 1, signal);
         }
 
         int errno = Marshal.GetLastPInvokeError();
@@ -177,7 +189,7 @@ public partial class SafeChildProcessHandle
         }
 
         // The process has exited, now retrieve the exit code
-        return WaitForExitCore(milliseconds: Timeout.Infinite);
+        return WaitForExitCore(milliseconds: Timeout.Infinite).ExitCode;
     }
 
     private void KillCore(bool throwOnError)
@@ -255,8 +267,8 @@ public partial class SafeChildProcessHandle
     private static partial int send_signal(SafeChildProcessHandle pidfd, int pid, ProcessSignal managed_signal);
 
     [LibraryImport("pal_process", SetLastError = true)]
-    private static partial int wait_for_exit(SafeChildProcessHandle pidfd, int pid, int exitPipeFd, int timeout_ms, out int exitCode);
+    private static partial int wait_for_exit(SafeChildProcessHandle pidfd, int pid, int exitPipeFd, int timeout_ms, out int exitCode, out int signal, out int hasTimedout);
 
     [LibraryImport("pal_process", SetLastError = true)]
-    private static partial int try_get_exit_code(SafeChildProcessHandle pidfd, int pid, out int exitCode);
+    private static partial int try_get_exit_code(SafeChildProcessHandle pidfd, int pid, out int exitCode, out int signal);
 }

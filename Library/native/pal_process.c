@@ -669,6 +669,26 @@ static int map_managed_signal_to_native(int managed_signal) {
     }
 }
 
+static int map_native_signal_to_managed(int native_signal) {
+    switch (native_signal) {
+        case SIGHUP: return 1;    // SIGHUP
+        case SIGINT: return 2;    // SIGINT
+        case SIGQUIT: return 3;   // SIGQUIT
+        case SIGABRT: return 6;   // SIGABRT
+        case SIGKILL: return 9;   // SIGKILL
+        case SIGUSR1: return 10;  // SIGUSR1
+        case SIGUSR2: return 12;  // SIGUSR2
+        case SIGPIPE: return 13;  // SIGPIPE
+        case SIGALRM: return 14;  // SIGALRM
+        case SIGTERM: return 15;  // SIGTERM
+        case SIGCHLD: return 17;  // SIGCHLD
+        case SIGCONT: return 18;  // SIGCONT
+        case SIGSTOP: return 19;  // SIGSTOP
+        case SIGTSTP: return 20;  // SIGTSTP
+        default: return -1;       // Invalid signal
+    }
+}
+
 int send_signal(int pidfd, int pid, int managed_signal) {
     // Map managed signal to native signal number
     int native_signal = map_managed_signal_to_native(managed_signal);
@@ -690,15 +710,16 @@ int send_signal(int pidfd, int pid, int managed_signal) {
 }
 
 #ifndef HAVE_PIDFD
-int map_status(int status, int* out_exitCode) {
+int map_status(int status, int* out_exitCode, int* out_signal) {
     if (WIFEXITED(status)) {
         *out_exitCode = WEXITSTATUS(status);
+        *out_signal = 0;
         return 0;
     }
     else if (WIFSIGNALED(status)) {
-        // Child was killed by signal - return 128 + signal number (common convention)
-        // *out_exitCode = 128 + WTERMSIG(status);
-        *out_exitCode = -1;
+        int sig = WTERMSIG(status);
+        *out_exitCode = 128 + sig;  // Shell convention for signaled processes, followed by dotnet/runtime for Process
+        *out_signal = map_native_signal_to_managed(sig);
         return 0;
     }
     return -1; // Still running or unknown status
@@ -707,7 +728,7 @@ int map_status(int status, int* out_exitCode) {
 
 // -1 is a valid exit code, so to distinguish between a normal exit code and an error, we return 0 on success and -1 on error
 // Returns 0 if process has exited (exit code set), -1 if still running or error occurred
-int try_get_exit_code(int pidfd, int pid, int* out_exitCode) {
+int try_get_exit_code(int pidfd, int pid, int* out_exitCode, int* out_signal) {
     int ret;
 #ifdef HAVE_PIDFD
     (void)pid;
@@ -725,7 +746,7 @@ int try_get_exit_code(int pidfd, int pid, int* out_exitCode) {
     while ((ret = waitpid(pid, &status, WNOHANG)) < 0 && errno == EINTR);
 
     if (ret > 0) {
-        return map_status(status, out_exitCode);
+        return map_status(status, out_exitCode, out_signal);
     }
 #endif
     // Process still running or error
@@ -733,7 +754,7 @@ int try_get_exit_code(int pidfd, int pid, int* out_exitCode) {
 }
 
 // -1 is a valid exit code, so to distinguish between a normal exit code and an error, we return 0 on success and -1 on error
-int wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_exitCode) {
+int wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_exitCode, int* out_signal, int* out_timeout) {
     int ret;
     if (timeout_ms >= 0) {
 #if defined(HAVE_KQUEUE) || defined(HAVE_KQUEUEX)
@@ -762,7 +783,7 @@ int wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_e
             close(queue);
 
             // If the target process does not exist at registration time kevent() returns -1 and errno == ESRCH.
-            if (errno == ESRCH && try_get_exit_code(pidfd, pid, out_exitCode) != -1)
+            if (errno == ESRCH && try_get_exit_code(pidfd, pid, out_exitCode, out_signal) != -1)
             {
                 return 0;
             }
@@ -792,7 +813,8 @@ int wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_e
 #endif
         // Both poll implementations fall through here on timeout with 0
         if (ret == 0) {
-            send_signal(pidfd, pid, SIGKILL);
+            *out_timeout = 1;
+            send_signal(pidfd, pid, map_native_signal_to_managed(SIGKILL));
         }
     }
 
@@ -802,7 +824,20 @@ int wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_e
     while ((ret = waitid(P_PIDFD, pidfd, &info, WEXITED)) < 0 && errno == EINTR);
 
     if (ret != -1) {
-        *out_exitCode = info.si_status;
+        switch (info.si_code)
+        {
+            case CLD_KILLED: // WIFSIGNALED
+            case CLD_DUMPED: // WIFSIGNALED
+                *out_exitCode = 128 + info.si_status;
+                *out_signal = map_native_signal_to_managed(info.si_status);
+                break;
+            case CLD_EXITED: // WIFEXITED
+                *out_exitCode = info.si_status;
+                *out_signal = 0;
+                break;
+            default:
+                return -1; // Unknown state
+        }
         return 0;
     }
 #else
@@ -810,7 +845,7 @@ int wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_e
     while ((ret = waitpid(pid, &status, 0)) < 0 && errno == EINTR);
 
     if (ret != -1) {
-        return map_status(status, out_exitCode);
+        return map_status(status, out_exitCode, out_signal);
     }
 #endif
     return -1;

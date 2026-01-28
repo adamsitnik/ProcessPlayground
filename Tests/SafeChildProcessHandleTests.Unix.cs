@@ -21,15 +21,10 @@ public partial class SafeChildProcessHandleTests
         processHandle.SendSignal(ProcessSignal.SIGTERM);
 
         // Process should exit after receiving SIGTERM
-        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
-        
-        // On Linux with pidfd, the exit code is the signal number (15 for SIGTERM)
-        // On other Unix systems, it's -1 when terminated by a signal
-#if LINUX
-        Assert.Equal(15, exitCode);
-#else
-        Assert.Equal(-1, exitCode);
-#endif
+        var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(ProcessSignal.SIGTERM, exitStatus.Signal);
+        Assert.Equal(128 + (int)ProcessSignal.SIGTERM, exitStatus.ExitCode);
     }
 
     [Fact]
@@ -44,15 +39,10 @@ public partial class SafeChildProcessHandleTests
         processHandle.SendSignal(ProcessSignal.SIGINT);
 
         // Process should exit after receiving SIGINT
-        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
-        
-        // On Linux with pidfd, the exit code is the signal number (2 for SIGINT)
-        // On other Unix systems, it's -1 when terminated by a signal
-#if LINUX
-        Assert.Equal(2, exitCode);
-#else
-        Assert.Equal(-1, exitCode);
-#endif
+        var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(ProcessSignal.SIGINT, exitStatus.Signal);
+        Assert.Equal(128 + (int)ProcessSignal.SIGINT, exitStatus.ExitCode);
     }
 
     [Fact]

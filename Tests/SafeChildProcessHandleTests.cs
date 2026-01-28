@@ -243,10 +243,10 @@ public partial class SafeChildProcessHandleTests
                 output: nullHandle,
                 error: nullHandle);
 
-            int exitCode = processHandle.WaitForExit();
+            var exitStatus = processHandle.WaitForExit();
             // printenv returns 1 when variable not found (Linux)
             // Windows cmd /c echo returns 0 even if variable is not set
-            Assert.Equal(OperatingSystem.IsWindows() ? 0 : 1, exitCode);
+            Assert.Equal(OperatingSystem.IsWindows() ? 0 : 1, exitStatus.ExitCode);
         }
         finally
         {
@@ -297,21 +297,14 @@ public partial class SafeChildProcessHandleTests
         processHandle.Kill();
 
         // Process should exit after being killed
-        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
-        
-        // Exit code should indicate termination (non-zero or signal number)
-        // On Linux with pidfd, this will be the signal number (9 for SIGKILL)
-        // On Unix with regular kill, this will be -1
-        // On Windows, this will be -1
-#if LINUX
-        // With pidfd on Linux, we get the signal number directly
-        Assert.True(exitCode == 9 || exitCode == -1, $"Exit code should be 9 (SIGKILL) or -1, but was {exitCode}");
-#elif WINDOWS
-        // Windows returns -1
-        Assert.Equal(-1, exitCode);
+        var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+
+        Assert.False(exitStatus.Cancelled);
+#if WINDOWS
+        Assert.Equal(-1, exitStatus.ExitCode);
 #else
-        // Traditional Unix returns -1
-        Assert.Equal(-1, exitCode);
+        Assert.Equal(ProcessSignal.SIGKILL, exitStatus.Signal);
+        Assert.Equal(128 + (int)ProcessSignal.SIGKILL, exitStatus.ExitCode);
 #endif
     }
 
@@ -329,19 +322,17 @@ public partial class SafeChildProcessHandleTests
         processHandle.Kill();
         
         // Wait for the process to actually exit
-        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+        _ = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
         
         // Second should not throw
         processHandle.Kill();
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void WaitForExit_Called_After_Kill_ReturnsExitCodeImmidately(bool specifyTimeout)
+    [Fact]
+    public void WaitForExit_Called_After_Kill_ReturnsExitCodeImmediately()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd.exe") { Arguments = { "/c", "timeout", "/t", "60", "/nobreak" } }
+            ? new("timeout") { Arguments = { "/t", "60", "/nobreak" } }
             : new("sleep") { Arguments = { "60" } };
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
@@ -349,9 +340,36 @@ public partial class SafeChildProcessHandleTests
         processHandle.Kill();
 
         Stopwatch stopwatch = Stopwatch.StartNew();
-        int exitCode = processHandle.WaitForExit(specifyTimeout ? TimeSpan.FromSeconds(3) : default);
+        var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(3));
+
         Assert.InRange(stopwatch.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(0.1));
-        Assert.NotEqual(0, exitCode);
+        Assert.False(exitStatus.Cancelled);
+        Assert.NotEqual(0, exitStatus.ExitCode);
+    }
+
+
+    [Fact]
+    public void WaitForExit_WithTimeout_KillsOnTimeout()
+    {
+        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
+        {
+            // On Windows, if standard input is redirected, the test cannot proceed
+            // because timeout utility requires it.
+            return;
+        }
+
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("timeout") { Arguments = { "/t", "60", "/nobreak" } }
+            : new("sleep") { Arguments = { "60" } };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: Console.OpenStandardInputHandle(), output: null, error: null);
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(1));
+
+        Assert.InRange(stopwatch.Elapsed, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
+        Assert.True(exitStatus.Cancelled);
+        Assert.NotEqual(0, exitStatus.ExitCode);
     }
 
     [Theory]
@@ -389,7 +407,7 @@ public partial class SafeChildProcessHandleTests
         // (even though the grandchild is still running for 5 seconds)
         int exitCode = useAsync
             ? await processHandle.WaitForExitAsync(cts.Token)
-            : processHandle.WaitForExit(timeout);
+            : processHandle.WaitForExit(timeout).ExitCode;
 
         // The child should have exited successfully (exit code 0)
         Assert.Equal(0, exitCode);
@@ -414,8 +432,8 @@ public partial class SafeChildProcessHandleTests
             output: nullHandle,
             error: nullHandle);
 
-        int exitCode = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
-        Assert.Equal(0, exitCode);
+        var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+        Assert.Equal(0, exitStatus.ExitCode);
     }
 
     [Fact]

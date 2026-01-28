@@ -216,9 +216,9 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             }
 
             // Both streams are closed, wait for process to exit
-            if (timeoutHelper.HasExpired || !processHandle.TryGetExitCode(out int exitCode))
+            if (timeoutHelper.HasExpired || !processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
             {
-                exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow());
+                exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow()).ExitCode;
             }
             _exitCode = exitCode;
 
