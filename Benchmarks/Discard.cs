@@ -61,24 +61,24 @@ public class Discard
 #endif
 
     [Benchmark]
-    public ProcessExitStatus New()
+    public int New()
     {
         ProcessStartOptions info = new("dotnet")
         {
             Arguments = { "--help" },
         };
 
-        return ChildProcess.Discard(info);
+        return ChildProcess.Discard(info).ExitCode;
     }
 
     [Benchmark]
-    public Task<ProcessExitStatus> NewAsync()
+    public async Task<int> NewAsync()
     {
         ProcessStartOptions info = new("dotnet")
         {
             Arguments = { "--help" },
         };
 
-        return ChildProcess.DiscardAsync(info);
+        return (await ChildProcess.DiscardAsync(info)).ExitCode;
     }
 }
