@@ -337,8 +337,7 @@ public static partial class ChildProcess
 
         using (read)
         using (write)
-        using (SafeFileHandle inputHandle = input ?? File.OpenNullFileHandle())
-        using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, inputHandle, output: write, error: write))
+        using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input, output: write, error: write))
         {
             int totalBytesRead = 0;
             byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
@@ -379,8 +378,7 @@ public static partial class ChildProcess
 
         using (read)
         using (write)
-        using (SafeFileHandle inputHandle = input ?? File.OpenNullFileHandle())
-        using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, inputHandle, output: write, error: write))
+        using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input, output: write, error: write))
         using (Stream outputStream = StreamHelper.CreateReadStream(read, cancellationToken))
         {
             int processId = processHandle.ProcessId;
