@@ -29,7 +29,7 @@ public class CombinedOutputTests
         string output = result.GetText();
         Assert.Contains("Hello from stdout", output);
         Assert.Contains("Error from stderr", output);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -45,7 +45,7 @@ public class CombinedOutputTests
             ? await ChildProcess.CaptureCombinedAsync(options)
             : ChildProcess.CaptureCombined(options);
 
-        Assert.Equal(42, result.ExitCode);
+        Assert.Equal(42, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -62,7 +62,7 @@ public class CombinedOutputTests
             : ChildProcess.CaptureCombined(options);
 
         Assert.True(result.Bytes.IsEmpty);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -79,7 +79,7 @@ public class CombinedOutputTests
             : ChildProcess.CaptureCombined(options);
 
         Assert.True(result.Bytes.IsEmpty);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -106,7 +106,7 @@ public class CombinedOutputTests
         }
         
         Assert.Equal(expected.ToString(), output, ignoreLineEndingDifferences: true);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -143,7 +143,7 @@ public class CombinedOutputTests
 
         string output = result.GetText();
         Assert.Contains("Quick output", output);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Fact]
@@ -162,8 +162,11 @@ public class CombinedOutputTests
 
         using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
 
-        Assert.Throws<TimeoutException>(() =>
-            ChildProcess.CaptureCombined(options, input: inputHandle, timeout: TimeSpan.FromMilliseconds(500)));
+        Stopwatch started = Stopwatch.StartNew();
+        CombinedOutput combinedOutput = ChildProcess.CaptureCombined(options, input: inputHandle, timeout: TimeSpan.FromMilliseconds(500));
+
+        Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(490), TimeSpan.FromSeconds(1));
+        Assert.True(combinedOutput.ExitStatus.Cancelled);
     }
 
     [Fact]
@@ -233,7 +236,60 @@ public class CombinedOutputTests
         {
             string output = result.GetText();
             Assert.Contains("Concurrent test", output);
-            Assert.Equal(0, result.ExitCode);
+            Assert.Equal(0, result.ExitStatus.ExitCode);
         }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    // [InlineData(true)] // https://github.com/adamsitnik/ProcessPlayground/issues/61
+    public async Task CombinedOutput_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
+    {
+        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
+        {
+            // On Windows, if standard input is redirected, the test cannot proceed
+            // because timeout utility requires it.
+            return;
+        }
+
+        // This test verifies that CombinedOutput/CombinedOutputAsync returns when the direct child process exits,
+        // even if that child has spawned a grandchild process that outlives the child.
+        // This is important because:
+        // - Output pipes are inherited by the grandchild
+        // - EOF is signaled when all handles to the pipe are closed. It happens not when the child exits, but when the grandchild exits.
+        // - We should only capture output from the child before it exits.
+
+        // This spawns a grandchild that writes to stdout after a delay, then the child exits immediately
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe")
+            {
+                // Child writes "Child output", spawns grandchild to write after 3 seconds, then exits
+                Arguments = { "/c", "echo Child output && start cmd.exe /c timeout /t 3 /nobreak && exit" }
+            }
+            : new("sh")
+            {
+                // Child writes "Child output", spawns grandchild to write after 3 seconds, then exits
+                Arguments = { "-c", "echo 'Child output' && sleep 3 & exit" }
+            };
+
+        Stopwatch started = Stopwatch.StartNew();
+
+        CombinedOutput result;
+        if (useAsync)
+        {
+            using CancellationTokenSource cts = new(TimeSpan.FromSeconds(5));
+            result = await ChildProcess.CaptureCombinedAsync(options, cancellationToken: cts.Token);
+        }
+        else
+        {
+            result = ChildProcess.CaptureCombined(options, timeout: TimeSpan.FromSeconds(5));
+        }
+
+        // Should complete before the grandchild writes (which happens after 3 seconds)
+        Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+
+        Assert.Equal(0, result.ExitStatus.ExitCode);
+        Assert.Equal(OperatingSystem.IsWindows() ? "Child output \r\n" : "Child output\n", result.GetText());
+        Assert.False(result.ExitStatus.Cancelled);
     }
 }

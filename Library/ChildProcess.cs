@@ -194,7 +194,7 @@ public static partial class ChildProcess
 
             try
             {
-                Multiplexing.GetProcessOutputCore(processHandle, readStdOut, readStdErr, timeoutHelper,
+                Multiplexing.ReadProcessOutputCore(processHandle, readStdOut, readStdErr, timeoutHelper,
                     ref outputBytesRead, ref errorBytesRead, ref outputBuffer, ref errorBuffer);
 
                 var exitStatus = processHandle.WaitForExit(timeoutHelper.GetRemaining());
@@ -330,59 +330,27 @@ public static partial class ChildProcess
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        SafeFileHandle? read = null;
-        SafeFileHandle? write = null;
+        SafeFileHandle read, write;
         TimeoutHelper timeoutHelper = TimeoutHelper.Start(timeout);
 
-        // We open ASYNC read handle and sync write handle to allow for cancellation for timeout on Windows.
-        File.CreatePipe(out read, out write, asyncRead: OperatingSystem.IsWindows() && timeoutHelper.CanExpire);
+        File.CreatePipe(out read, out write, asyncRead: OperatingSystem.IsWindows() || OperatingSystem.IsMacOS());
 
         using (read)
         using (write)
         using (SafeFileHandle inputHandle = input ?? File.OpenNullFileHandle())
         using (SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, inputHandle, output: write, error: write))
         {
-            int processId = processHandle.ProcessId;
-
-#if WINDOWS
-            // If timeout was specified, we need to use a different code path to read with timeout.
-            // We can also implement in on Unix, but for now, we only do it on Windows.
-            if (timeout is not null)
-            {
-                return Multiplexing.ReadAllBytesWithTimeout(read, processHandle, processId, timeoutHelper);
-            }
-#endif
-            using FileStream outputStream = new(read, FileAccess.Read, bufferSize: 1, isAsync: false);
-            byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
             int totalBytesRead = 0;
+            byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
 
             try
             {
-                while (true)
-                {
-                    int bytesRead = outputStream.Read(buffer.AsSpan(totalBytesRead));
-                    if (bytesRead <= 0)
-                    {
-                        break;
-                    }
+                Multiplexing.ReadCombinedOutputCore(read, processHandle, timeoutHelper, ref totalBytesRead, ref buffer);
 
-                    totalBytesRead += bytesRead;
-                    if (totalBytesRead == buffer.Length)
-                    {
-                        // Resize the buffer
-                        BufferHelper.RentLargerBuffer(ref buffer);
-                    }
-                }
+                var exitStatus = processHandle.WaitForExit(timeoutHelper.GetRemaining());
 
                 byte[] resultBuffer = BufferHelper.CreateCopy(buffer, totalBytesRead);
-
-                // It's possible for the process to close STD OUT and ERR keep running.
-                // We optimize for hot path: process already exited and exit code is available.
-                if (timeoutHelper.HasExpired || !processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
-                {
-                    exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow()).ExitCode;
-                }
-                return new(exitCode, resultBuffer, processId);
+                return new(exitStatus, resultBuffer, processHandle.ProcessId);
             }
             finally
             {
@@ -440,12 +408,12 @@ public static partial class ChildProcess
                 byte[] resultBuffer = BufferHelper.CreateCopy(buffer, totalBytesRead);
                 // It's possible for the process to close STD OUT and ERR keep running.
                 // We optimize for hot path: process already exited and exit code is available.
-                if (!processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
+                if (!processHandle.TryGetExitStatus(canceled: false, out ProcessExitStatus exitStatus))
                 {
-                    exitCode = (await processHandle.WaitForExitAsync(cancellationToken)).ExitCode;
+                    exitStatus = await processHandle.WaitForExitAsync(cancellationToken);
                 }
 
-                return new(exitCode, resultBuffer, processId);
+                return new(exitStatus, resultBuffer, processId);
             }
             finally
             {

@@ -8,7 +8,7 @@ namespace System.TBA;
 
 internal static class Multiplexing
 {
-    internal static void GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout,
+    internal static void ReadProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout,
         ref int outputBytesRead, ref int errorBytesRead, ref byte[] outputBuffer, ref byte[] errorBuffer)
     {
         int outputFd = (int)readStdOut.DangerousGetHandle();
@@ -93,6 +93,64 @@ internal static class Multiplexing
         }
     }
 
+    internal static unsafe void ReadCombinedOutputCore(SafeFileHandle fileHandle, SafeChildProcessHandle processHandle, TimeoutHelper timeout, ref int totalBytesRead, ref byte[] array)
+    {
+        int fd = (int)fileHandle.DangerousGetHandle();
+
+        int kq = create_kqueue_cloexec();
+        if (kq == -1)
+        {
+            ThrowForLastError(nameof(create_kqueue_cloexec));
+        }
+
+        try
+        {
+            // Register two events: file handle read and process exit
+            bool processExited = !RegisterKqueueEventsForCombined(kq, fd, processHandle.ProcessId);
+            bool closed = false;
+
+            while (!processExited && !closed)
+            {
+                Span<KEvent> events = stackalloc KEvent[2];
+                int numEvents;
+                if (!timeout.TryGetRemainingMilliseconds(out int timeoutMs) || (numEvents = WaitForEvents(kq, events, timeoutMs)) == 0)
+                {
+                    return; // Timeout
+                }
+
+                for (int i = 0; i < numEvents; i++)
+                {
+                    ref KEvent evt = ref events[i];
+
+                    if (evt.filter == EVFILT_READ)
+                    {
+                        closed = !ReadNonBlocking(fd, ref array, ref totalBytesRead);
+                    }
+                    else if (evt.filter == EVFILT_PROC && (evt.fflags & NOTE_EXIT) != 0)
+                    {
+                        processExited = true;
+                    }
+                }
+            }
+
+            // If process exited, drain any remaining buffered data from pipe
+            if (!closed)
+            {
+                // Small delay to allow data to arrive.
+                // We have tried other solutions:
+                // - Repeated non-blocking reads until EAGAIN: doesn't work, data may not have arrived yet.
+                // - Waiting on kqueue with zero timeout: doesn't work, kqueue doesn't always signal again.
+                Thread.Sleep(TimeSpan.FromMilliseconds(1));
+                ReadNonBlocking(fd, ref array, ref totalBytesRead);
+            }
+        }
+        finally
+        {
+            // Closing the kqueue fd automatically removes all registered events
+            close(kq);
+        }
+    }
+
     private static bool RegisterKqueueEvents(int kq, int outputFd, int errorFd, int pid)
     {
         Span<KEvent> changes = stackalloc KEvent[3];
@@ -135,6 +193,52 @@ internal static class Multiplexing
             fixed (KEvent* pChanges = changes)
             {
                 if (kevent(kq, pChanges, 3, null, 0, null) != -1)
+                {
+                    return true;
+                }
+            }
+        }
+
+        int errno = Marshal.GetLastPInvokeError();
+        if (errno != ESRCH) // Process does not exist
+        {
+            ThrowForLastError("kevent() registration");
+        }
+
+        return false; // Process already exited
+    }
+
+    private static bool RegisterKqueueEventsForCombined(int kq, int fd, int pid)
+    {
+        Span<KEvent> changes = stackalloc KEvent[2];
+        
+        // Monitor file handle for readable data
+        changes[0] = new KEvent
+        {
+            ident = (nuint)fd,
+            filter = EVFILT_READ,
+            flags = EV_ADD,
+            fflags = 0,
+            data = 0,
+            udata = 0
+        };
+
+        // Monitor process for exit
+        changes[1] = new KEvent
+        {
+            ident = (nuint)pid,
+            filter = EVFILT_PROC,
+            flags = EV_ADD,
+            fflags = NOTE_EXIT,
+            data = 0,
+            udata = 0
+        };
+
+        unsafe
+        {
+            fixed (KEvent* pChanges = changes)
+            {
+                if (kevent(kq, pChanges, 2, null, 0, null) != -1)
                 {
                     return true;
                 }
