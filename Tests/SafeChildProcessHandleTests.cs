@@ -289,8 +289,8 @@ public partial class SafeChildProcessHandleTests
     {
         // Start a long-running process
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd.exe") { Arguments = { "/c", "timeout", "/t", "60", "/nobreak" } }
-            : new("sleep") { Arguments = { "60" } };
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" } }
+            : new("sleep") { Arguments = { "10" } };
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
@@ -316,8 +316,8 @@ public partial class SafeChildProcessHandleTests
     {
         // Start a long-running process
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd.exe") { Arguments = { "/c", "timeout", "/t", "60", "/nobreak" } }
-            : new("sleep") { Arguments = { "60" } };
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" } }
+            : new("sleep") { Arguments = { "10" } };
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
@@ -337,8 +337,8 @@ public partial class SafeChildProcessHandleTests
     public static void WaitForExit_Called_After_Kill_ReturnsExitCodeImmediately()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("timeout") { Arguments = { "/t", "60", "/nobreak" } }
-            : new("sleep") { Arguments = { "60" } };
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" } }
+            : new("sleep") { Arguments = { "10" } };
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
 

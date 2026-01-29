@@ -1,5 +1,4 @@
 using System;
-using System.Runtime.InteropServices;
 using System.TBA;
 using Microsoft.Win32.SafeHandles;
 
@@ -11,7 +10,7 @@ public partial class SafeChildProcessHandleTests
     public void SendSignal_ThrowsPlatformNotSupportedExceptionOnWindows()
     {
         // Start a process
-        ProcessStartOptions options = new("cmd.exe") { Arguments = { "/c", "timeout", "/t", "5", "/nobreak" } };
+        ProcessStartOptions options = new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" } };
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
