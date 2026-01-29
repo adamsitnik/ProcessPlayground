@@ -95,7 +95,7 @@ public class CreateSuspendedTests
     public static void StartSuspended_ProcessCanBeKilledWhileSuspended()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd.exe") { Arguments = { "/c", "timeout /t 60 /nobreak" } }
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 60" } }
             : new("sleep") { Arguments = { "60" } };
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.StartSuspended(

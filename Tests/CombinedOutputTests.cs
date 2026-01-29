@@ -149,21 +149,12 @@ public class CombinedOutputTests
     [Fact]
     public static void CombinedOutput_WithTimeout_ThrowsOnTimeout()
     {
-        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
-        {
-            // On Windows, if standard input is redirected, the test cannot proceed
-            // because timeout utility requires it.
-            return;
-        }
-
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd") { Arguments = { "/c", "timeout /t 10 /nobreak" } }
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" } }
             : new("sh") { Arguments = { "-c", "sleep 10" } };
 
-        using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
-
         Stopwatch started = Stopwatch.StartNew();
-        CombinedOutput combinedOutput = ChildProcess.CaptureCombined(options, input: inputHandle, timeout: TimeSpan.FromMilliseconds(500));
+        CombinedOutput combinedOutput = ChildProcess.CaptureCombined(options, timeout: TimeSpan.FromMilliseconds(500));
 
         Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(490), TimeSpan.FromSeconds(1));
         Assert.True(combinedOutput.ExitStatus.Canceled);
@@ -172,25 +163,17 @@ public class CombinedOutputTests
     [Fact]
     public static async Task CombinedOutputAsync_WithCancellation_ThrowsOperationCanceled()
     {
-        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
-        {
-            // On Windows, if standard input is redirected, the test cannot proceed
-            // because timeout utility requires it.
-            return;
-        }
-
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd") { Arguments = { "/c", "timeout /t 10 /nobreak" } }
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" } }
             : new("sh") { Arguments = { "-c", "sleep 10" } };
 
         using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(500));
-        using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
 
         Stopwatch started = Stopwatch.StartNew();
 
         // Accept either OperationCanceledException or TaskCanceledException (which derives from it)
         var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-            await ChildProcess.CaptureCombinedAsync(options, inputHandle, cancellationToken: cts.Token));
+            await ChildProcess.CaptureCombinedAsync(options, cancellationToken: cts.Token));
 
         Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(5));
     }
@@ -198,18 +181,11 @@ public class CombinedOutputTests
     [Fact]
     public static void CombinedOutput_WithInfiniteTimeout_Waits()
     {
-        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
-        {
-            // On Windows, if standard input is redirected, the test cannot proceed
-            // because timeout utility requires it.
-            return;
-        }
-
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd") { Arguments = { "/c", "timeout /t 3 /nobreak" } }
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 3; Write-Output 'Waiting done'" } }
             : new("sh") { Arguments = { "-c", "sleep 3 && echo 'Waiting done'" } };
 
-        CombinedOutput result = ChildProcess.CaptureCombined(options, input: Console.OpenStandardInputHandle(), timeout: Timeout.InfiniteTimeSpan);
+        CombinedOutput result = ChildProcess.CaptureCombined(options, timeout: Timeout.InfiniteTimeSpan);
 
         string output = result.GetText();
         Assert.True(output.Contains("Waiting") || output.Contains("done"));
@@ -245,13 +221,6 @@ public class CombinedOutputTests
     // [InlineData(true)] // https://github.com/adamsitnik/ProcessPlayground/issues/61
     public static async Task CombinedOutput_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {
-        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
-        {
-            // On Windows, if standard input is redirected, the test cannot proceed
-            // because timeout utility requires it.
-            return;
-        }
-
         // This test verifies that CombinedOutput/CombinedOutputAsync returns when the direct child process exits,
         // even if that child has spawned a grandchild process that outlives the child.
         // This is important because:
@@ -264,7 +233,7 @@ public class CombinedOutputTests
             ? new("cmd.exe")
             {
                 // Child writes "Child output", spawns grandchild to write after 3 seconds, then exits
-                Arguments = { "/c", "echo Child output && start cmd.exe /c timeout /t 3 /nobreak && exit" }
+                Arguments = { "/c", "echo Child output && start powershell.exe -InputFormat None -Command \"Start-Sleep 3\" && exit" }
             }
             : new("sh")
             {

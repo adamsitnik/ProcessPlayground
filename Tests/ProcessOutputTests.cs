@@ -201,25 +201,17 @@ public class ProcessOutputTests
     [Fact]
     public static async Task ProcessOutputAsync_WithCancellation_ThrowsOperationCanceled()
     {
-        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
-        {
-            // On Windows, if standard input is redirected, the test cannot proceed
-            // because timeout utility requires it.
-            return;
-        }
-
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd") { Arguments = { "/c", "timeout /t 10 /nobreak" } }
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" } }
             : new("sh") { Arguments = { "-c", "sleep 10" } };
 
         using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(500));
-        using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
 
         Stopwatch started = Stopwatch.StartNew();
 
         // Accept either OperationCanceledException or TaskCanceledException (which derives from it)
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-            await ChildProcess.CaptureOutputAsync(options, input: inputHandle, cancellationToken: cts.Token));
+            await ChildProcess.CaptureOutputAsync(options, cancellationToken: cts.Token));
         Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(470), TimeSpan.FromSeconds(1));
 
     }
@@ -229,21 +221,14 @@ public class ProcessOutputTests
     [InlineData(false)]
     public static async Task ProcessOutput_WithInfiniteTimeout_Waits(bool useAsync)
     {
-        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
-        {
-            // On Windows, if standard input is redirected, the test cannot proceed
-            // because timeout utility requires it.
-            return;
-        }
-
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd") { Arguments = { "/c", "timeout /t 3 /nobreak" } }
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 3; Write-Output 'Waiting done'" } }
             : new("sh") { Arguments = { "-c", "sleep 3 && echo 'Waiting done'" } };
 
         Stopwatch started = Stopwatch.StartNew();
         ProcessOutput result = useAsync
-            ? await ChildProcess.CaptureOutputAsync(options, input: Console.OpenStandardInputHandle())
-            : ChildProcess.CaptureOutput(options, input: Console.OpenStandardInputHandle(), timeout: Timeout.InfiniteTimeSpan);
+            ? await ChildProcess.CaptureOutputAsync(options)
+            : ChildProcess.CaptureOutput(options, timeout: Timeout.InfiniteTimeSpan);
 
         Assert.InRange(started.Elapsed, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4));
         Assert.Contains("Waiting", result.StandardOutput);
@@ -329,13 +314,6 @@ public class ProcessOutputTests
     // [InlineData(true)] // https://github.com/adamsitnik/ProcessPlayground/issues/61
     public static async Task ProcessOutput_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {
-        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
-        {
-            // On Windows, if standard input is redirected, the test cannot proceed
-            // because timeout utility requires it.
-            return;
-        }
-
         // This test verifies that CaptureOutput/CaptureOutputAsync returns when the direct child process exits,
         // even if that child has spawned a grandchild process that outlives the child.
         // This is important because:
@@ -348,7 +326,7 @@ public class ProcessOutputTests
             ? new("cmd.exe")
             {
                 // Child writes "Child output", spawns grandchild to write after 3 seconds, then exits
-                Arguments = { "/c", "echo Child output && start cmd.exe /c timeout /t 3 /nobreak && exit" }
+                Arguments = { "/c", "echo Child output && start powershell.exe -InputFormat None -Command \"Start-Sleep 3\" && exit" }
             }
             : new("sh")
             {

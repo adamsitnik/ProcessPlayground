@@ -279,15 +279,8 @@ public class ReadOutputLinesTests
     [Fact]
     public static void ReadOutputLines_WithTimeout_ThrowsOnTimeout()
     {
-        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
-        {
-            // On Windows, if standard input is redirected, the test cannot proceed
-            // because timeout utility requires it.
-            return;
-        }
-
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd") { Arguments = { "/c", "timeout /t 10 /nobreak" } }
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" } }
             : new("sh") { Arguments = { "-c", "sleep 10" } };
 
         Stopwatch started = Stopwatch.StartNew();
@@ -306,15 +299,8 @@ public class ReadOutputLinesTests
     [Fact]
     public static async Task ReadOutputLinesAsync_WithCancellation_ThrowsOperationCanceled()
     {
-        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
-        {
-            // On Windows, if standard input is redirected, the test cannot proceed
-            // because timeout utility requires it.
-            return;
-        }
-
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd") { Arguments = { "/c", "timeout /t 10 /nobreak" } }
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" } }
             : new("sh") { Arguments = { "-c", "sleep 10" } };
 
         using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(500));
