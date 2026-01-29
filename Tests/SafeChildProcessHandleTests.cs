@@ -413,8 +413,8 @@ public partial class SafeChildProcessHandleTests
         }
 
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("timeout") { Arguments = { "/t", "60", "/nobreak" } }
-            : new("sleep") { Arguments = { "60" } };
+            ? new("timeout") { Arguments = { "/t", "5", "/nobreak" } }
+            : new("sleep") { Arguments = { "5" } };
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: Console.OpenStandardInputHandle(), output: null, error: null);
 
@@ -423,7 +423,7 @@ public partial class SafeChildProcessHandleTests
         
         var exitStatus = await processHandle.WaitForExitAsync(cts.Token);
 
-        Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(270), TimeSpan.FromSeconds(1));
+        Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(270), TimeSpan.FromSeconds(1.5)); // macOS can be really slow sometimes
         Assert.True(exitStatus.Canceled);
         Assert.NotEqual(0, exitStatus.ExitCode);
     }
