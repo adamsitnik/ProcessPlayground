@@ -187,7 +187,7 @@ public class CombinedOutputTests
         CombinedOutput result = ChildProcess.CaptureCombined(options, timeout: Timeout.InfiniteTimeSpan);
 
         string output = result.GetText();
-        Assert.True(output.Contains("Waiting") || output.Contains("done"));
+        Assert.Equal(OperatingSystem.IsWindows() ? "Waiting done\r\n" : "Waiting done\n", output);
     }
 
     [Fact]

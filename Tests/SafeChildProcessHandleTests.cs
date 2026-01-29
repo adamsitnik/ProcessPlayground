@@ -382,8 +382,8 @@ public partial class SafeChildProcessHandleTests
     public static void WaitForExit_WithTimeout_KillsOnTimeout()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 60" } }
-            : new("sleep") { Arguments = { "60" } };
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" } }
+            : new("sleep") { Arguments = { "10" } };
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
 

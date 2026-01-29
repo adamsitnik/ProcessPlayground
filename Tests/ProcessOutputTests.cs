@@ -221,7 +221,7 @@ public class ProcessOutputTests
             : ChildProcess.CaptureOutput(options, timeout: Timeout.InfiniteTimeSpan);
 
         Assert.InRange(started.Elapsed, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4));
-        Assert.Contains("Waiting", result.StandardOutput);
+        Assert.Equal(OperatingSystem.IsWindows() ? "Waiting done\r\n" : "Waiting done\n", result.StandardOutput);
     }
 
     [Fact]
