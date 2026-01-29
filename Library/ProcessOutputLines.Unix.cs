@@ -86,6 +86,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                 }
                 else if (pollResult == 0)
                 {
+                    processHandle.KillCore(throwOnError: false);
                     throw new TimeoutException("Timed out waiting for process OUT and ERR.");
                 }
 
@@ -216,11 +217,11 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             }
 
             // Both streams are closed, wait for process to exit
-            if (timeoutHelper.HasExpired || !processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
+            if (!processHandle.TryGetExitStatus(canceled: false, out ProcessExitStatus exitStatus))
             {
-                exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow()).ExitCode;
+                exitStatus = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow());
             }
-            _exitCode = exitCode;
+            _exitStatus = exitStatus;
 
             yield break;
         }
