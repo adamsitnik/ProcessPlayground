@@ -374,5 +374,6 @@ public class ProcessOutputTests
         Assert.Equal(0, result.ExitStatus.ExitCode);
         Assert.Equal(OperatingSystem.IsWindows() ? "Child output \r\n" : "Child output\n", result.StandardOutput);
         Assert.Empty(result.StandardError);
+        Assert.False(result.ExitStatus.Cancelled);
     }
 }
