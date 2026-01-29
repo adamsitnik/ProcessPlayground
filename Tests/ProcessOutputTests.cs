@@ -177,21 +177,12 @@ public class ProcessOutputTests
     [Fact]
     public static void ProcessOutput_WithTimeout_KillsOnTimeout()
     {
-        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
-        {
-            // On Windows, if standard input is redirected, the test cannot proceed
-            // because timeout utility requires it.
-            return;
-        }
-
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("timeout") { Arguments = { "/t", "10", "/nobreak" } }
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" } }
             : new("sh") { Arguments = { "-c", "sleep 10" } };
 
-        using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
-
         Stopwatch started = Stopwatch.StartNew();
-        ProcessOutput processOutput = ChildProcess.CaptureOutput(options, input: inputHandle, timeout: TimeSpan.FromMilliseconds(500));
+        ProcessOutput processOutput = ChildProcess.CaptureOutput(options, timeout: TimeSpan.FromMilliseconds(500));
         Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(490), TimeSpan.FromSeconds(1));
         Assert.Equal(OperatingSystem.IsWindows() ? null : ProcessSignal.SIGKILL, processOutput.ExitStatus.Signal);
         Assert.True(processOutput.ExitStatus.Canceled);
