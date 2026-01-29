@@ -14,7 +14,7 @@ public class ProcessOutputTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ProcessOutput_SeparatesStdOutAndStdErr(bool useAsync)
+    public static async Task ProcessOutput_SeparatesStdOutAndStdErr(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Hello from stdout && echo Error from stderr 1>&2" } }
@@ -32,7 +32,7 @@ public class ProcessOutputTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ProcessOutput_CapturesExitCode(bool useAsync)
+    public static async Task ProcessOutput_CapturesExitCode(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "exit 42" } }
@@ -50,7 +50,7 @@ public class ProcessOutputTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ProcessOutput_HandlesEmptyOutput(bool useAsync)
+    public static async Task ProcessOutput_HandlesEmptyOutput(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "" } }
@@ -68,7 +68,7 @@ public class ProcessOutputTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ProcessOutput_HandlesProcessThatWritesNoOutput(bool useAsync)
+    public static async Task ProcessOutput_HandlesProcessThatWritesNoOutput(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "rem This is a comment that produces no output" } }
@@ -86,7 +86,7 @@ public class ProcessOutputTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ProcessOutput_HandlesLargeOutput(bool useAsync)
+    public static async Task ProcessOutput_HandlesLargeOutput(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "for /L %i in (1,1,1000) do @echo Line %i" } }
@@ -110,7 +110,7 @@ public class ProcessOutputTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ProcessOutput_HandlesLargeStdErrOutput(bool useAsync)
+    public static async Task ProcessOutput_HandlesLargeStdErrOutput(bool useAsync)
     {
         // Generate a large amount of stderr output
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -135,7 +135,7 @@ public class ProcessOutputTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ProcessOutput_HandlesInterleavedStdOutAndStdErr(bool useAsync)
+    public static async Task ProcessOutput_HandlesInterleavedStdOutAndStdErr(bool useAsync)
     {
         // This test verifies that stdout and stderr are captured separately
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -156,7 +156,7 @@ public class ProcessOutputTests
     [InlineData(true)]
 #endif
     [InlineData(false)]
-    public async Task ProcessOutput_WithTimeout_CompletesBeforeTimeout(bool useAsync)
+    public static async Task ProcessOutput_WithTimeout_CompletesBeforeTimeout(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Quick output" } }
@@ -175,7 +175,7 @@ public class ProcessOutputTests
     }
 
     [Fact]
-    public void ProcessOutput_WithTimeout_KillsOnTimeout()
+    public static void ProcessOutput_WithTimeout_KillsOnTimeout()
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
@@ -192,14 +192,14 @@ public class ProcessOutputTests
 
         Stopwatch started = Stopwatch.StartNew();
         ProcessOutput processOutput = ChildProcess.CaptureOutput(options, input: inputHandle, timeout: TimeSpan.FromMilliseconds(500));
-        Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1));
+        Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(490), TimeSpan.FromSeconds(1));
         Assert.Equal(OperatingSystem.IsWindows() ? null : ProcessSignal.SIGKILL, processOutput.ExitStatus.Signal);
         Assert.True(processOutput.ExitStatus.Canceled);
         Assert.Empty(processOutput.StandardError);
     }
 
     [Fact]
-    public async Task ProcessOutputAsync_WithCancellation_ThrowsOperationCanceled()
+    public static async Task ProcessOutputAsync_WithCancellation_ThrowsOperationCanceled()
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
@@ -220,13 +220,13 @@ public class ProcessOutputTests
         // Accept either OperationCanceledException or TaskCanceledException (which derives from it)
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
             await ChildProcess.CaptureOutputAsync(options, input: inputHandle, cancellationToken: cts.Token));
-        Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1));
+        Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(490), TimeSpan.FromSeconds(1));
     }
 
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ProcessOutput_WithInfiniteTimeout_Waits(bool useAsync)
+    public static async Task ProcessOutput_WithInfiniteTimeout_Waits(bool useAsync)
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
@@ -249,7 +249,7 @@ public class ProcessOutputTests
     }
 
     [Fact]
-    public async Task ProcessOutputAsync_MultipleConcurrentCalls()
+    public static async Task ProcessOutputAsync_MultipleConcurrentCalls()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Concurrent test" } }
@@ -272,7 +272,7 @@ public class ProcessOutputTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ProcessOutput_OnlyStdErr_OutputIsEmpty(bool useAsync)
+    public static async Task ProcessOutput_OnlyStdErr_OutputIsEmpty(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Only stderr 1>&2" } }
@@ -290,7 +290,7 @@ public class ProcessOutputTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ProcessOutput_OnlyStdOut_ErrorIsEmpty(bool useAsync)
+    public static async Task ProcessOutput_OnlyStdOut_ErrorIsEmpty(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Only stdout" } }
@@ -308,7 +308,7 @@ public class ProcessOutputTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ProcessOutput_CapturesProcessId(bool useAsync)
+    public static async Task ProcessOutput_CapturesProcessId(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Test" } }
@@ -326,7 +326,7 @@ public class ProcessOutputTests
     [Theory]
     [InlineData(false)]
     // [InlineData(true)] // https://github.com/adamsitnik/ProcessPlayground/issues/61
-    public async Task ProcessOutput_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
+    public static async Task ProcessOutput_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {

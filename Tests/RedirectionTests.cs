@@ -14,7 +14,7 @@ public class RedirectionTests
     [InlineData(true)]
 #endif
     [InlineData(false)]
-    public async Task StandardOutputAndErrorCanPointToTheSameHandle(bool useNamedPipes)
+    public static async Task StandardOutputAndErrorCanPointToTheSameHandle(bool useNamedPipes)
     {
         bool isAsync = useNamedPipes && OperatingSystem.IsWindows();
         ProcessStartOptions info = new("dotnet")

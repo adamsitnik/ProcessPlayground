@@ -7,7 +7,7 @@ namespace Tests;
 public class AnonymousPipeTests
 {
     [Fact]
-    public void CreateAnonymousPipe_CreatesValidHandles()
+    public static void CreateAnonymousPipe_CreatesValidHandles()
     {
         File.CreatePipe(out SafeFileHandle readHandle, out SafeFileHandle writeHandle);
 
@@ -18,7 +18,7 @@ public class AnonymousPipeTests
     }
 
     [Fact]
-    public async Task AnonymousPipe_AllowsCommunication()
+    public static async Task AnonymousPipe_AllowsCommunication()
     {
         byte[] message = "Hello, Pipe!"u8.ToArray();
 

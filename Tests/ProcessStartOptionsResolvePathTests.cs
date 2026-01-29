@@ -7,26 +7,26 @@ namespace Tests;
 public class ProcessStartOptionsResolvePathTests
 {
     [Fact]
-    public void ResolvePath_ThrowsOnNull()
+    public static void ResolvePath_ThrowsOnNull()
     {
         Assert.Throws<ArgumentNullException>(() => ProcessStartOptions.ResolvePath(null!));
     }
 
     [Fact]
-    public void ResolvePath_ThrowsOnEmpty()
+    public static void ResolvePath_ThrowsOnEmpty()
     {
         Assert.Throws<ArgumentException>(() => ProcessStartOptions.ResolvePath(string.Empty));
     }
 
     [Fact]
-    public void ResolvePath_ThrowsFileNotFoundException_WhenFileDoesNotExist()
+    public static void ResolvePath_ThrowsFileNotFoundException_WhenFileDoesNotExist()
     {
         string nonExistentFile = Guid.NewGuid().ToString() + ".exe";
         Assert.Throws<FileNotFoundException>(() => ProcessStartOptions.ResolvePath(nonExistentFile));
     }
 
     [Fact]
-    public void ResolvePath_ReturnsAbsolutePath_WhenGivenAbsolutePath()
+    public static void ResolvePath_ReturnsAbsolutePath_WhenGivenAbsolutePath()
     {
         // Create a temporary file
         string tempFile = Path.GetTempFileName();
@@ -46,7 +46,7 @@ public class ProcessStartOptionsResolvePathTests
     }
 
     [Fact]
-    public void ResolvePath_ReturnsAbsolutePath_EvenIfFileDoesNotExist_WhenGivenAbsolutePath()
+    public static void ResolvePath_ReturnsAbsolutePath_EvenIfFileDoesNotExist_WhenGivenAbsolutePath()
     {
         // For rooted paths, the method should return the path even if the file doesn't exist
         string nonExistentAbsolutePath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString() + ".exe");
@@ -57,7 +57,7 @@ public class ProcessStartOptionsResolvePathTests
     }
 
     [Fact]
-    public void ResolvePath_FindsFileInCurrentDirectory()
+    public static void ResolvePath_FindsFileInCurrentDirectory()
     {
         // Create a temporary file in current directory
         string fileName = Guid.NewGuid().ToString() + ".tmp";
@@ -81,7 +81,7 @@ public class ProcessStartOptionsResolvePathTests
     }
 
     [Fact]
-    public void ResolvePath_FindsExecutableInPath()
+    public static void ResolvePath_FindsExecutableInPath()
     {
         // Test with a common executable that should be in PATH
         string executable = OperatingSystem.IsWindows() ? "cmd.exe" : "sh";
@@ -98,7 +98,7 @@ public class ProcessStartOptionsResolvePathTests
 #endif
     [InlineData("cmd.exe")]
     [InlineData("notepad.exe")]
-    public void ResolvePath_FindsCommonWindowsExecutables(string executable)
+    public static void ResolvePath_FindsCommonWindowsExecutables(string executable)
     {
         var options = ProcessStartOptions.ResolvePath(executable);
         Assert.NotNull(options);
@@ -112,7 +112,7 @@ public class ProcessStartOptionsResolvePathTests
     [InlineData("sh")]
     [InlineData("ls")]
     [InlineData("cat")]
-    public void ResolvePath_FindsCommonUnixExecutables(string executable)
+    public static void ResolvePath_FindsCommonUnixExecutables(string executable)
     {
         var options = ProcessStartOptions.ResolvePath(executable);
         Assert.NotNull(options);
@@ -121,7 +121,7 @@ public class ProcessStartOptionsResolvePathTests
     }
 
     [Fact]
-    public void ResolvePath_FindsFileInExecutableDirectory()
+    public static void ResolvePath_FindsFileInExecutableDirectory()
     {
         // Note: The "executable directory" refers to the directory where the current process
         // executable is located (e.g., dotnet.exe or the test host), not the test assembly.

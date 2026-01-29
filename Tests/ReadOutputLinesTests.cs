@@ -15,7 +15,7 @@ public class ReadOutputLinesTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ReadOutputLines_ReturnsStdOutAndStdErr(bool useAsync)
+    public static async Task ReadOutputLines_ReturnsStdOutAndStdErr(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Hello from stdout && echo Error from stderr 1>&2" } }
@@ -49,7 +49,7 @@ public class ReadOutputLinesTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ReadOutputLines_DistinguishesStdOutAndStdErr(bool useAsync)
+    public static async Task ReadOutputLines_DistinguishesStdOutAndStdErr(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo OUT1 && echo ERR1 1>&2 && echo OUT2 && echo ERR2 1>&2" } }
@@ -87,7 +87,7 @@ public class ReadOutputLinesTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ReadOutputLines_HandlesEmptyOutput(bool useAsync)
+    public static async Task ReadOutputLines_HandlesEmptyOutput(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "" } }
@@ -116,7 +116,7 @@ public class ReadOutputLinesTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ReadOutputLines_HandlesLargeOutput(bool useAsync)
+    public static async Task ReadOutputLines_HandlesLargeOutput(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "for /L %i in (1,1,1000) do @echo Line %i" } }
@@ -150,7 +150,7 @@ public class ReadOutputLinesTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ReadOutputLines_HandlesInterleavedOutput(bool useAsync)
+    public static async Task ReadOutputLines_HandlesInterleavedOutput(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo A && echo B 1>&2 && echo C && echo D 1>&2 && echo E" } }
@@ -195,7 +195,7 @@ public class ReadOutputLinesTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ReadOutputLines_HandlesOnlyStdOut(bool useAsync)
+    public static async Task ReadOutputLines_HandlesOnlyStdOut(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Line1 && echo Line2 && echo Line3" } }
@@ -228,7 +228,7 @@ public class ReadOutputLinesTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ReadOutputLines_HandlesOnlyStdErr(bool useAsync)
+    public static async Task ReadOutputLines_HandlesOnlyStdErr(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Error1 1>&2 && echo Error2 1>&2 && echo Error3 1>&2" } }
@@ -259,7 +259,7 @@ public class ReadOutputLinesTests
     }
 
     [Fact]
-    public void ReadOutputLines_WithTimeout_CompletesBeforeTimeout()
+    public static void ReadOutputLines_WithTimeout_CompletesBeforeTimeout()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Quick output" } }
@@ -277,7 +277,7 @@ public class ReadOutputLinesTests
     }
 
     [Fact]
-    public void ReadOutputLines_WithTimeout_ThrowsOnTimeout()
+    public static void ReadOutputLines_WithTimeout_ThrowsOnTimeout()
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
@@ -300,11 +300,11 @@ public class ReadOutputLinesTests
             }
         });
 
-        Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(5));
+        Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(490), TimeSpan.FromSeconds(5));
     }
 
     [Fact]
-    public async Task ReadOutputLinesAsync_WithCancellation_ThrowsOperationCanceled()
+    public static async Task ReadOutputLinesAsync_WithCancellation_ThrowsOperationCanceled()
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
@@ -330,11 +330,11 @@ public class ReadOutputLinesTests
             }
         });
 
-        Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(5));
+        Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(490), TimeSpan.FromSeconds(5));
     }
 
     [Fact]
-    public async Task ReadOutputLinesAsync_MultipleConcurrentCalls()
+    public static async Task ReadOutputLinesAsync_MultipleConcurrentCalls()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Concurrent test" } }
@@ -369,7 +369,7 @@ public class ReadOutputLinesTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ReadOutputLines_PreservesLineOrder(bool useAsync)
+    public static async Task ReadOutputLines_PreservesLineOrder(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "for /L %i in (1,1,100) do @echo Line %i" } }
@@ -405,7 +405,7 @@ public class ReadOutputLinesTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ReadOutputLines_HandlesLongLines(bool useAsync)
+    public static async Task ReadOutputLines_HandlesLongLines(bool useAsync)
     {
         // Create a very long line (1KB)
         string longString = new('X', 1000);
@@ -437,7 +437,7 @@ public class ReadOutputLinesTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task ReadOutputLines_CanProcessLineByLine(bool useAsync)
+    public static async Task ReadOutputLines_CanProcessLineByLine(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "for /L %i in (1,1,10) do @echo Line %i" } }

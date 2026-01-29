@@ -10,7 +10,7 @@ namespace Tests;
 public class SocketTests
 {
     [Fact]
-    public async Task CanUseSocketPairForProcessOutput_Unix()
+    public static async Task CanUseSocketPairForProcessOutput_Unix()
     {
         // Create a socket pair
         int[] fds = new int[2];
