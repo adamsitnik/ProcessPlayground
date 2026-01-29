@@ -125,13 +125,16 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// <summary>
     /// Terminates the process.
     /// </summary>
+    /// <returns>
+    /// <c>true</c> if the process was terminated; <c>false</c> if the process had already exited.
+    /// </returns>
     /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
     /// <exception cref="Win32Exception">Thrown when the kill operation fails for reasons other than the process having already exited.</exception>
-    public void Kill()
+    public bool Kill()
     {
         Validate();
 
-        KillCore(throwOnError: true);
+        return KillCore(throwOnError: true);
     }
 
     /// <summary>
