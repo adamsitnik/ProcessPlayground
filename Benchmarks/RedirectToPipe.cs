@@ -120,7 +120,7 @@ public class RedirectToPipe
             // We don't re-print, so the benchmark focuses on reading only.
             _ = line.Content;
         }
-        return lines.ExitCode;
+        return lines.ExitStatus.ExitCode;
     }
 
     [Benchmark]
@@ -173,6 +173,6 @@ public class RedirectToPipe
             // We don't re-print, so the benchmark focuses on reading only.
             _ = line.Content;
         }
-        return lines.ExitCode;
+        return lines.ExitStatus.ExitCode;
     }
 }

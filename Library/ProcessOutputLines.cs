@@ -17,7 +17,8 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
     private readonly ProcessStartOptions _options;
     private readonly TimeSpan? _timeout;
     private readonly Encoding? _encoding;
-    private int? _exitCode, _processId;
+    private int? _processId;
+    private ProcessExitStatus? _exitStatus;
 
     internal ProcessOutputLines(ProcessStartOptions options, TimeSpan? timeout, Encoding? encoding)
     {
@@ -38,7 +39,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
     /// Gets the exit code of the process.
     /// </summary>
     /// <remarks>Throws <see cref="InvalidOperationException"/> if the process has not exited yet.</remarks>
-    public int ExitCode => _exitCode ?? throw new InvalidOperationException("Process has not exited yet.");
+    public ProcessExitStatus ExitStatus => _exitStatus ?? throw new InvalidOperationException("Process has not exited yet.");
 
     // Design: prevent the deadlocks: the user has to consume output lines, otherwise the process is not even started.
     public async IAsyncEnumerator<ProcessOutputLine> GetAsyncEnumerator(CancellationToken cancellationToken = default)
@@ -125,11 +126,11 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                 moreData = await remaining.ReadLineAsync(cancellationToken);
             }
 
-            if (!procHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
+            if (!procHandle.TryGetExitStatus(canceled: false, out ProcessExitStatus exitStatus))
             {
-                exitCode = (await procHandle.WaitForExitAsync(cancellationToken)).ExitCode;
+                exitStatus = await procHandle.WaitForExitAsync(cancellationToken);
             }
-            _exitCode = exitCode;
+            _exitStatus = exitStatus;
         }
     }
 

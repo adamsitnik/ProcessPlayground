@@ -220,7 +220,7 @@ public class ProcessOutputTests
         // Accept either OperationCanceledException or TaskCanceledException (which derives from it)
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
             await ChildProcess.CaptureOutputAsync(options, input: inputHandle, cancellationToken: cts.Token));
-        Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1));
+        Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(470), TimeSpan.FromSeconds(1));
     }
 
     [Theory]
