@@ -39,6 +39,17 @@ internal readonly struct TimeoutHelper
         return (int)remainedMilliseconds;
     }
 
+    internal int GetRemainingMilliseconds()
+    {
+        if (_stopwatch is null)
+        {
+            return Timeout.Infinite;
+        }
+
+        long remainedMilliseconds = _timeoutMilliseconds - _stopwatch.ElapsedMilliseconds;
+        return Math.Max((int)remainedMilliseconds, 0);
+    }
+
     internal TimeSpan GetRemaining()
     {
         if (_stopwatch is null)

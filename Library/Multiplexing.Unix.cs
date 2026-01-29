@@ -63,7 +63,7 @@ internal static class Multiplexing
                 numFds++;
             }
 
-            int timeoutMs = timeout.GetRemainingMillisecondsOrThrow();
+            int timeoutMs = timeout.GetRemainingMilliseconds();
             int pollResult;
             unsafe
             {
@@ -135,6 +135,93 @@ internal static class Multiplexing
                 {
                     currentFs.Close();
                     closed = true;
+                }
+            }
+        }
+    }
+
+    internal static unsafe void ReadCombinedOutputCore(SafeFileHandle fileHandle, SafeChildProcessHandle processHandle, TimeoutHelper timeout, ref int totalBytesRead, ref byte[] array)
+    {
+        using FileStream stream = new(fileHandle, FileAccess.Read, bufferSize: 1, isAsync: false);
+
+        int fd = (int)fileHandle.DangerousGetHandle();
+
+        // Get the pidfd for process exit detection
+        int pidfd = (int)processHandle.DangerousGetHandle();
+        bool hasPidFd = pidfd != SafeChildProcessHandle.NoPidFd;
+
+        // Allocate pollfd buffer once, outside the loop
+        // We need up to 2 entries: the file handle and optionally pidfd
+        // We watch for pidfd, because it's possible for a process to exit
+        // without signaling EOF on the pipe.
+        // It happens when the child process spawns other processes
+        // that derive the file descriptor.
+        PollFd[] pollFdsBuffer = new PollFd[2];
+
+        // Main loop: use poll to wait for data
+        while (true)
+        {
+            int numFds = 0;
+
+            pollFdsBuffer[numFds].fd = fd;
+            pollFdsBuffer[numFds].events = POLLIN;
+            pollFdsBuffer[numFds].revents = 0;
+            numFds++;
+
+            // Add pidfd to detect process exit, if available
+            if (hasPidFd)
+            {
+                pollFdsBuffer[numFds].fd = pidfd;
+                pollFdsBuffer[numFds].events = POLLIN | POLLHUP; // Linux uses POLLIN, FreeBSD uses POLLHUP.
+                pollFdsBuffer[numFds].revents = 0;
+                numFds++;
+            }
+
+            int timeoutMs = timeout.GetRemainingMilliseconds();
+            int pollResult;
+            fixed (PollFd* pollFds = pollFdsBuffer)
+            {
+                pollResult = poll(pollFds, (nuint)numFds, timeoutMs);
+            }
+
+            if (pollResult < 0)
+            {
+                int errno = Marshal.GetLastPInvokeError();
+                if (errno == EINTR)
+                {
+                    continue;
+                }
+                throw new Win32Exception(errno, "poll() failed");
+            }
+            else if (pollResult == 0)
+            {
+                return; // Timeout occurred
+            }
+
+            // Check which file descriptors have data available
+            for (int i = 0; i < numFds; i++)
+            {
+                if ((pollFdsBuffer[i].revents & (POLLIN | POLLHUP | POLLERR)) == 0)
+                {
+                    continue; // No events on this fd
+                }
+
+                if (hasPidFd && i == 1)
+                {
+                    // Process has exited (pidfd is always the last descriptor)
+                    return;
+                }
+
+                int bytesRead = stream.Read(array.AsSpan(totalBytesRead));
+                if (bytesRead == 0)
+                {
+                    return; // EOF reached
+                }
+
+                totalBytesRead += bytesRead;
+                if (totalBytesRead == array.Length)
+                {
+                    BufferHelper.RentLargerBuffer(ref array);
                 }
             }
         }
