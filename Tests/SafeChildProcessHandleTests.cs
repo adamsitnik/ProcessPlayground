@@ -381,18 +381,11 @@ public partial class SafeChildProcessHandleTests
     [Fact]
     public static void WaitForExit_WithTimeout_KillsOnTimeout()
     {
-        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
-        {
-            // On Windows, if standard input is redirected, the test cannot proceed
-            // because timeout utility requires it.
-            return;
-        }
-
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("timeout") { Arguments = { "/t", "60", "/nobreak" } }
-            : new("sleep") { Arguments = { "60" } };
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" } }
+            : new("sleep") { Arguments = { "10" } };
 
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: Console.OpenStandardInputHandle(), output: null, error: null);
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
         var exitStatus = processHandle.WaitForExit(TimeSpan.FromMilliseconds(300));
@@ -405,18 +398,11 @@ public partial class SafeChildProcessHandleTests
     [Fact]
     public static async Task WaitForExitAsync_WithCancellation_KillsOnCancellation()
     {
-        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
-        {
-            // On Windows, if standard input is redirected, the test cannot proceed
-            // because timeout utility requires it.
-            return;
-        }
-
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("timeout") { Arguments = { "/t", "5", "/nobreak" } }
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 5" } }
             : new("sleep") { Arguments = { "5" } };
 
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: Console.OpenStandardInputHandle(), output: null, error: null);
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
         using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(300));

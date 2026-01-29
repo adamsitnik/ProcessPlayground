@@ -104,7 +104,7 @@ public class FireAndForgetTests
     public static void FireAndForget_CanBeUsedWithProcessGetProcessById()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd") { Arguments = { "/c", "timeout /t 2 /nobreak" } }
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 2" } }
             : new("sleep") { Arguments = { "2" } };
 
         int pid = ChildProcess.FireAndForget(options);
