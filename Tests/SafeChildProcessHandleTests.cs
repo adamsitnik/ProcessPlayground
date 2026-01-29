@@ -294,7 +294,10 @@ public partial class SafeChildProcessHandleTests
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
-        processHandle.Kill();
+        bool wasKilled = processHandle.Kill();
+
+        // Kill should return true when it successfully terminates the process
+        Assert.True(wasKilled);
 
         // Process should exit after being killed
         var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
@@ -318,14 +321,16 @@ public partial class SafeChildProcessHandleTests
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
-        // First attempt should succeed
-        processHandle.Kill();
+        // First attempt should succeed and return true
+        bool firstKill = processHandle.Kill();
+        Assert.True(firstKill);
         
         // Wait for the process to actually exit
         _ = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
         
-        // Second should not throw
-        processHandle.Kill();
+        // Second should not throw and return false (process already exited)
+        bool secondKill = processHandle.Kill();
+        Assert.False(secondKill);
     }
 
     [Fact]
@@ -337,7 +342,8 @@ public partial class SafeChildProcessHandleTests
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
 
-        processHandle.Kill();
+        bool wasKilled = processHandle.Kill();
+        Assert.True(wasKilled);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
         var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(3));
@@ -345,6 +351,30 @@ public partial class SafeChildProcessHandleTests
         Assert.InRange(stopwatch.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(0.1));
         Assert.False(exitStatus.Canceled);
         Assert.NotEqual(0, exitStatus.ExitCode);
+    }
+
+    [Fact]
+    public void Kill_OnAlreadyExitedProcess_ReturnsFalse()
+    {
+        // Start a short-lived process
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "echo test" } }
+            : new("echo") { Arguments = { "test" } };
+
+        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
+            options,
+            input: null,
+            output: nullHandle,
+            error: nullHandle);
+        
+        // Wait for process to exit normally
+        var exitStatus = processHandle.WaitForExit();
+        Assert.Equal(0, exitStatus.ExitCode);
+        
+        // Try to kill the already exited process - should return false
+        bool wasKilled = processHandle.Kill();
+        Assert.False(wasKilled);
     }
 
 
