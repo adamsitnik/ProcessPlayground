@@ -263,7 +263,7 @@ public partial class SafeChildProcessHandleTests
         ProcessOutputLines output = ChildProcess.StreamOutputLines(options);
         ProcessOutputLine singleLine = Assert.Single((IEnumerable<ProcessOutputLine>)output);
         Assert.False(singleLine.StandardError, "Expected standard output line");
-        Assert.Equal(0, output.ExitCode);
+        Assert.Equal(0, output.ExitStatus.ExitCode);
         return singleLine.Content;
     }
 
@@ -365,9 +365,10 @@ public partial class SafeChildProcessHandleTests
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: Console.OpenStandardInputHandle(), output: null, error: null);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
-        var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(1));
+        var exitStatus = processHandle.WaitForExit(TimeSpan.FromMilliseconds(300));
 
-        Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(990), TimeSpan.FromSeconds(2));
+        Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(290), TimeSpan.FromMilliseconds(400));
+
         Assert.True(exitStatus.Canceled);
         Assert.NotEqual(0, exitStatus.ExitCode);
     }
@@ -389,11 +390,12 @@ public partial class SafeChildProcessHandleTests
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: Console.OpenStandardInputHandle(), output: null, error: null);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
-        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(1));
+        using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(300));
         
         var exitStatus = await processHandle.WaitForExitAsync(cts.Token);
 
-        Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(990), TimeSpan.FromSeconds(3));
+        Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(270), TimeSpan.FromSeconds(1));
+
         Assert.True(exitStatus.Canceled);
         Assert.NotEqual(0, exitStatus.ExitCode);
     }
