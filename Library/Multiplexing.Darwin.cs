@@ -52,11 +52,11 @@ internal static class Multiplexing
                         
                         if (fd == outputFd && !outputClosed)
                         {
-                            outputClosed = !ReadNonBlocking(outputFd, ref outputBuffer, ref outputBytesRead);
+                            outputClosed = !UnixHelpers.DrainPipe(readStdOut, ref outputBuffer, ref outputBytesRead);
                         }
                         else if (fd == errorFd && !errorClosed)
                         {
-                            errorClosed = !ReadNonBlocking(errorFd, ref errorBuffer, ref errorBytesRead);
+                            errorClosed = !UnixHelpers.DrainPipe(readStdErr, ref errorBuffer, ref errorBytesRead);
                         }
                     }
                     else if (evt.filter == EVFILT_PROC && (evt.fflags & NOTE_EXIT) != 0)
@@ -77,12 +77,12 @@ internal static class Multiplexing
 
                 if (!outputClosed)
                 {
-                    ReadNonBlocking(outputFd, ref outputBuffer, ref outputBytesRead);
+                    UnixHelpers.DrainPipe(readStdOut, ref outputBuffer, ref outputBytesRead);
                 }
 
                 if (!errorClosed)
                 {
-                    ReadNonBlocking(errorFd, ref errorBuffer, ref errorBytesRead);
+                    UnixHelpers.DrainPipe(readStdErr, ref errorBuffer, ref errorBytesRead);
                 }
             }
         }
@@ -95,8 +95,6 @@ internal static class Multiplexing
 
     internal static unsafe void ReadCombinedOutputCore(SafeFileHandle fileHandle, SafeChildProcessHandle processHandle, TimeoutHelper timeout, ref int totalBytesRead, ref byte[] array)
     {
-        int fd = (int)fileHandle.DangerousGetHandle();
-
         int kq = create_kqueue_cloexec();
         if (kq == -1)
         {
@@ -106,7 +104,7 @@ internal static class Multiplexing
         try
         {
             // Register two events: file handle read and process exit
-            bool processExited = !RegisterKqueueEventsForCombined(kq, fd, processHandle.ProcessId);
+            bool processExited = !RegisterKqueueEventsForCombined(kq, fileHandle, processHandle.ProcessId);
             bool closed = false;
 
             while (!processExited && !closed)
@@ -124,7 +122,7 @@ internal static class Multiplexing
 
                     if (evt.filter == EVFILT_READ)
                     {
-                        closed = !ReadNonBlocking(fd, ref array, ref totalBytesRead);
+                        closed = !UnixHelpers.DrainPipe(fileHandle, ref array, ref totalBytesRead);
                     }
                     else if (evt.filter == EVFILT_PROC && (evt.fflags & NOTE_EXIT) != 0)
                     {
@@ -141,7 +139,7 @@ internal static class Multiplexing
                 // - Repeated non-blocking reads until EAGAIN: doesn't work, data may not have arrived yet.
                 // - Waiting on kqueue with zero timeout: doesn't work, kqueue doesn't always signal again.
                 Thread.Sleep(TimeSpan.FromMilliseconds(1));
-                ReadNonBlocking(fd, ref array, ref totalBytesRead);
+                UnixHelpers.DrainPipe(fileHandle, ref array, ref totalBytesRead);
             }
         }
         finally
@@ -208,14 +206,14 @@ internal static class Multiplexing
         return false; // Process already exited
     }
 
-    private static bool RegisterKqueueEventsForCombined(int kq, int fd, int pid)
+    private static bool RegisterKqueueEventsForCombined(int kq, SafeFileHandle fd, int pid)
     {
         Span<KEvent> changes = stackalloc KEvent[2];
         
         // Monitor file handle for readable data
         changes[0] = new KEvent
         {
-            ident = (nuint)fd,
+            ident = (nuint)fd.DangerousGetHandle(),
             filter = EVFILT_READ,
             flags = EV_ADD,
             fflags = 0,
@@ -280,7 +278,7 @@ internal static class Multiplexing
             if (numEvents < 0)
             {
                 int errno = Marshal.GetLastPInvokeError();
-                if (errno == EINTR)
+                if (errno == UnixHelpers.EINTR)
                 {
                     return 0; // Interrupted, caller will retry
                 }
@@ -288,55 +286,6 @@ internal static class Multiplexing
             }
 
             return numEvents;
-        }
-    }
-
-    private static bool ReadNonBlocking(int fd, ref byte[] buffer, ref int bytesRead)
-    {
-        // Read all available data from the file descriptor until EAGAIN/EWOULDBLOCK
-        nint result;
-        while (true)
-        {
-            unsafe
-            {
-                fixed (byte* ptr = &buffer[bytesRead])
-                {
-                    result = read(fd, ptr, buffer.Length - bytesRead);
-                }
-            }
-
-            if (result > 0)
-            {
-                bytesRead += (int)result;
-
-                if (bytesRead == buffer.Length)
-                {
-                    BufferHelper.RentLargerBuffer(ref buffer);
-                }
-            }
-            else if (result == 0)
-            {
-                // EOF - pipe closed
-                return false;
-            }
-            else
-            {
-                int errno = Marshal.GetLastPInvokeError();
-                if (errno == EAGAIN || errno == EWOULDBLOCK)
-                {
-                    // No more data available right now (non-blocking)
-                    return true;
-                }
-                else if (errno == EINTR)
-                {
-                    // Interrupted, try again
-                    continue;
-                }
-                else
-                {
-                    throw new Win32Exception(errno, $"read() failed with errno={errno}");
-                }
-            }
         }
     }
 
@@ -376,19 +325,13 @@ internal static class Multiplexing
     private const uint NOTE_EXIT = 0x80000000;
 
     // errno values
-    private const int EINTR = 4;
     private const int ESRCH = 3; // No such process
-    private const int EAGAIN = 35;
-    private const int EWOULDBLOCK = EAGAIN; // On macOS, EWOULDBLOCK == EAGAIN
 
     [DllImport("libc", SetLastError = true)]
     private static extern unsafe int kevent(int kq, KEvent* changelist, int nchanges, KEvent* eventlist, int nevents, TimeSpec* timeout);
 
     [DllImport("libc", SetLastError = true)]
     private static extern int close(int fd);
-
-    [DllImport("libc", SetLastError = true)]
-    private static extern unsafe nint read(int fd, void* buf, nint count);
 
     [DllImport("libpal_process", EntryPoint = "create_kqueue_cloexec", SetLastError = true)]
     private static extern int create_kqueue_cloexec();

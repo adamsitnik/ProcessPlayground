@@ -142,10 +142,6 @@ internal static class Multiplexing
 
     internal static unsafe void ReadCombinedOutputCore(SafeFileHandle fileHandle, SafeChildProcessHandle processHandle, TimeoutHelper timeout, ref int totalBytesRead, ref byte[] array)
     {
-        using FileStream stream = new(fileHandle, FileAccess.Read, bufferSize: 1, isAsync: false);
-
-        int fd = (int)fileHandle.DangerousGetHandle();
-
         // Get the pidfd for process exit detection
         int pidfd = (int)processHandle.DangerousGetHandle();
         bool hasPidFd = pidfd != SafeChildProcessHandle.NoPidFd;
@@ -163,7 +159,7 @@ internal static class Multiplexing
         {
             int numFds = 0;
 
-            pollFdsBuffer[numFds].fd = fd;
+            pollFdsBuffer[numFds].fd = (int)fileHandle.DangerousGetHandle();
             pollFdsBuffer[numFds].events = POLLIN;
             pollFdsBuffer[numFds].revents = 0;
             numFds++;
@@ -212,16 +208,9 @@ internal static class Multiplexing
                     return;
                 }
 
-                int bytesRead = stream.Read(array.AsSpan(totalBytesRead));
-                if (bytesRead == 0)
+                if (!UnixHelpers.DrainPipe(fileHandle, ref array, ref totalBytesRead))
                 {
                     return; // EOF reached
-                }
-
-                totalBytesRead += bytesRead;
-                if (totalBytesRead == array.Length)
-                {
-                    BufferHelper.RentLargerBuffer(ref array);
                 }
             }
         }
