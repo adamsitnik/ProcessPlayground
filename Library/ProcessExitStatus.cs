@@ -10,7 +10,7 @@ public readonly struct ProcessExitStatus : IEquatable<ProcessExitStatus>
     {
         ExitCode = exitCode;
         Signal = signal;
-        Cancelled = cancelled;
+        Canceled = cancelled;
     }
 
     /// <summary>
@@ -35,14 +35,14 @@ public readonly struct ProcessExitStatus : IEquatable<ProcessExitStatus>
     /// <summary>
     /// Gets a value indicating whether the process has been terminated due to timeout or cancellation.
     /// </summary>
-    public bool Cancelled { get; }
+    public bool Canceled { get; }
 
     /// <summary>
     /// Gets a value indicating whether the process was terminated by a signal.
     /// </summary>
     public bool Signaled => Signal.HasValue;
 
-    public bool Equals(ProcessExitStatus other) => ExitCode == other.ExitCode && Cancelled == other.Cancelled && Signal == other.Signal;
+    public bool Equals(ProcessExitStatus other) => ExitCode == other.ExitCode && Canceled == other.Canceled && Signal == other.Signal;
 
     public override bool Equals([NotNullWhen(true)] object? obj) => obj is ProcessExitStatus other && Equals(other);
 
@@ -50,5 +50,5 @@ public readonly struct ProcessExitStatus : IEquatable<ProcessExitStatus>
 
     public static bool operator !=(ProcessExitStatus left, ProcessExitStatus right) => !left.Equals(right);
 
-    public override int GetHashCode() => HashCode.Combine(ExitCode, Cancelled, Signal);
+    public override int GetHashCode() => HashCode.Combine(ExitCode, Canceled, Signal);
 }

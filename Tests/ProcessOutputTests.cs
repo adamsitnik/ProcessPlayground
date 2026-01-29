@@ -194,7 +194,7 @@ public class ProcessOutputTests
         ProcessOutput processOutput = ChildProcess.CaptureOutput(options, input: inputHandle, timeout: TimeSpan.FromMilliseconds(500));
         Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(500), TimeSpan.FromSeconds(1));
         Assert.Equal(OperatingSystem.IsWindows() ? null : ProcessSignal.SIGKILL, processOutput.ExitStatus.Signal);
-        Assert.True(processOutput.ExitStatus.Cancelled);
+        Assert.True(processOutput.ExitStatus.Canceled);
         Assert.Empty(processOutput.StandardError);
     }
 
@@ -374,6 +374,6 @@ public class ProcessOutputTests
         Assert.Equal(0, result.ExitStatus.ExitCode);
         Assert.Equal(OperatingSystem.IsWindows() ? "Child output \r\n" : "Child output\n", result.StandardOutput);
         Assert.Empty(result.StandardError);
-        Assert.False(result.ExitStatus.Cancelled);
+        Assert.False(result.ExitStatus.Canceled);
     }
 }

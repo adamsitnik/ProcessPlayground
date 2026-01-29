@@ -114,7 +114,7 @@ public class CreateSuspendedTests
         // Wait for it to be killed
         var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
 
-        Assert.False(exitStatus.Cancelled);
+        Assert.False(exitStatus.Canceled);
 
         if (OperatingSystem.IsWindows())
         {
@@ -134,7 +134,7 @@ public class CreateSuspendedTests
         var exitStatus = processHandle.WaitForExit(timeout);
 
         Assert.Equal(0, exitStatus.ExitCode);
-        Assert.False(exitStatus.Cancelled);
+        Assert.False(exitStatus.Canceled);
         Assert.Null(exitStatus.Signal);
     }
 }

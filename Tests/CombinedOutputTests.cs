@@ -166,7 +166,7 @@ public class CombinedOutputTests
         CombinedOutput combinedOutput = ChildProcess.CaptureCombined(options, input: inputHandle, timeout: TimeSpan.FromMilliseconds(500));
 
         Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(490), TimeSpan.FromSeconds(1));
-        Assert.True(combinedOutput.ExitStatus.Cancelled);
+        Assert.True(combinedOutput.ExitStatus.Canceled);
     }
 
     [Fact]
@@ -290,6 +290,6 @@ public class CombinedOutputTests
 
         Assert.Equal(0, result.ExitStatus.ExitCode);
         Assert.Equal(OperatingSystem.IsWindows() ? "Child output \r\n" : "Child output\n", result.GetText());
-        Assert.False(result.ExitStatus.Cancelled);
+        Assert.False(result.ExitStatus.Canceled);
     }
 }

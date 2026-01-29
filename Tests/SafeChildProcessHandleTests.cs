@@ -299,7 +299,7 @@ public partial class SafeChildProcessHandleTests
         // Process should exit after being killed
         var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
 
-        Assert.False(exitStatus.Cancelled);
+        Assert.False(exitStatus.Canceled);
 #if WINDOWS
         Assert.Equal(-1, exitStatus.ExitCode);
 #else
@@ -343,7 +343,7 @@ public partial class SafeChildProcessHandleTests
         var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(3));
 
         Assert.InRange(stopwatch.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(0.1));
-        Assert.False(exitStatus.Cancelled);
+        Assert.False(exitStatus.Canceled);
         Assert.NotEqual(0, exitStatus.ExitCode);
     }
 
@@ -368,7 +368,7 @@ public partial class SafeChildProcessHandleTests
         var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(1));
 
         Assert.InRange(stopwatch.Elapsed, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
-        Assert.True(exitStatus.Cancelled);
+        Assert.True(exitStatus.Canceled);
         Assert.NotEqual(0, exitStatus.ExitCode);
     }
 
@@ -394,7 +394,7 @@ public partial class SafeChildProcessHandleTests
         var exitStatus = await processHandle.WaitForExitAsync(cts.Token);
 
         Assert.InRange(stopwatch.Elapsed, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(3));
-        Assert.True(exitStatus.Cancelled);
+        Assert.True(exitStatus.Canceled);
         Assert.NotEqual(0, exitStatus.ExitCode);
     }
 
