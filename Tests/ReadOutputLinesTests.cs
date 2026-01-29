@@ -292,13 +292,15 @@ public class ReadOutputLinesTests
 
         Stopwatch started = Stopwatch.StartNew();
 
-        foreach (var line in ChildProcess.StreamOutputLines(options, timeout: TimeSpan.FromMilliseconds(500)))
+        ProcessOutputLines output = ChildProcess.StreamOutputLines(options, timeout: TimeSpan.FromMilliseconds(500));
+        foreach (var line in output)
         {
             _ = line;
         }
         
         // Should have killed the process due to timeout
         Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(5));
+        Assert.True(output.ExitStatus.Cancelled);
     }
 
     [Fact]

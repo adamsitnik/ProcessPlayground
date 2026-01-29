@@ -149,12 +149,6 @@ public class CombinedOutputTests
     [Fact]
     public void CombinedOutput_WithTimeout_ThrowsOnTimeout()
     {
-        if (!OperatingSystem.IsWindows())
-        {
-            // Timeout handling for synchronous CaptureCombined is only implemented on Windows
-            return;
-        }
-        
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
             // On Windows, if standard input is redirected, the test cannot proceed

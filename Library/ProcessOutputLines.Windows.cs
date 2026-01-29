@@ -43,6 +43,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             // We don't optimize for reading one (when other is closed).
             // This is a rare scenario, as they are usually both closed at the end of process lifetime.
             WaitHandle[] waitHandles = [outputContext.WaitHandle, errorContext.WaitHandle];
+            bool timedOut = false;
 
             unsafe
             {
@@ -61,6 +62,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                 {
                     // Kill the process on timeout
                     processHandle.Kill();
+                    timedOut = true;
                 }
                 else if (waitResult is 0 or 1)
                 {
@@ -182,7 +184,14 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             // It's possible for the process to close STD OUT and ERR keep running.
             // We optimize for hot path: process already exited and exit code is available.
             ProcessExitStatus exitStatus;
-            if (!processHandle.TryGetExitStatus(canceled: false, out exitStatus))
+            if (timedOut)
+            {
+                // We already killed the process due to timeout, just wait for it to exit
+                ProcessExitStatus tempStatus = processHandle.WaitForExit(timeoutHelper.GetRemaining());
+                // Override the cancelled flag since we know we timed out
+                exitStatus = new ProcessExitStatus(tempStatus.ExitCode, cancelled: true, tempStatus.Signal);
+            }
+            else if (!processHandle.TryGetExitStatus(canceled: false, out exitStatus))
             {
                 exitStatus = processHandle.WaitForExit(timeoutHelper.GetRemaining());
             }

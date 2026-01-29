@@ -40,6 +40,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             int errorFd = (int)parentErrorHandle.DangerousGetHandle();
             bool outputClosed = false;
             bool errorClosed = false;
+            bool timedOut = false;
 
             // Allocate pollfd buffer once, outside the loop
             PollFd[] pollFdsBuffer = new PollFd[2];
@@ -93,6 +94,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
                 {
                     // Timeout occurred, kill the process
                     processHandle.Kill();
+                    timedOut = true;
                     break;
                 }
 
@@ -224,7 +226,14 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 
             // Both streams are closed, wait for process to exit
             ProcessExitStatus exitStatus;
-            if (timeoutHelper.HasExpired || !processHandle.TryGetExitStatus(canceled: false, out exitStatus))
+            if (timedOut)
+            {
+                // We already killed the process due to timeout, just wait for it to exit
+                ProcessExitStatus tempStatus = processHandle.WaitForExit(timeoutHelper.GetRemaining());
+                // Override the cancelled flag since we know we timed out
+                exitStatus = new ProcessExitStatus(tempStatus.ExitCode, cancelled: true, tempStatus.Signal);
+            }
+            else if (timeoutHelper.HasExpired || !processHandle.TryGetExitStatus(canceled: false, out exitStatus))
             {
                 exitStatus = processHandle.WaitForExit(timeoutHelper.GetRemaining());
             }
