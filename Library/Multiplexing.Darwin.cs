@@ -8,7 +8,7 @@ namespace System.TBA;
 
 internal static class Multiplexing
 {
-    internal static void GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout,
+    internal static void ReadProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout,
         ref int outputBytesRead, ref int errorBytesRead, ref byte[] outputBuffer, ref byte[] errorBuffer)
     {
         int outputFd = (int)readStdOut.DangerousGetHandle();

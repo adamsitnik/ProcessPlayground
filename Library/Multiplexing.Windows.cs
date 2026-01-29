@@ -6,7 +6,7 @@ namespace System.TBA;
 
 internal static class Multiplexing
 {
-    internal static void GetProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout,
+    internal static void ReadProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout,
         ref int outputBytesRead, ref int errorBytesRead, ref byte[] outputBuffer, ref byte[] errorBuffer)
     {
         MemoryHandle outputPin = outputBuffer.AsMemory().Pin();
@@ -116,77 +116,48 @@ internal static class Multiplexing
         }
     }
 
-    internal static unsafe CombinedOutput ReadAllBytesWithTimeout(SafeFileHandle fileHandle, SafeChildProcessHandle processHandle, int processId, TimeoutHelper timeout)
+    internal static unsafe void ReadCombinedOutputCore(SafeFileHandle fileHandle, SafeChildProcessHandle processHandle, TimeoutHelper timeout, ref int totalBytesRead, ref byte[] array)
     {
-        int totalBytesRead = 0;
-        bool canceled = false;
+        using OverlappedContext overlappedContext = OverlappedContext.Allocate();
+        using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(processHandle);
 
-        byte[] array = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
-        try
+        WaitHandle[] waitHandles = [processWaitHandle, overlappedContext.WaitHandle];
+
+        while (true)
         {
-            using OverlappedContext overlappedContext = OverlappedContext.Allocate();
-            using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(processHandle);
-            
-            WaitHandle[] waitHandles = [processWaitHandle, overlappedContext.WaitHandle];
-            
-            while (true)
+            Span<byte> remainingBytes = array.AsSpan(totalBytesRead);
+            fixed (byte* pinnedRemaining = remainingBytes)
             {
-                Span<byte> remainingBytes = array.AsSpan(totalBytesRead);
-                fixed (byte* pinnedRemaining = remainingBytes)
+                Interop.Kernel32.ReadFile(fileHandle, pinnedRemaining, remainingBytes.Length, IntPtr.Zero, overlappedContext.GetOverlapped());
+
+                int errorCode = fileHandle.GetLastWin32ErrorAndDisposeHandleIfInvalid();
+                if (errorCode == Interop.Errors.ERROR_IO_PENDING)
                 {
-                    Interop.Kernel32.ReadFile(fileHandle, pinnedRemaining, remainingBytes.Length, IntPtr.Zero, overlappedContext.GetOverlapped());
+                    int waitResult = timeout.TryGetRemainingMilliseconds(out int remainingMilliseconds)
+                        ? WaitHandle.WaitAny(waitHandles, remainingMilliseconds)
+                        : WaitHandle.WaitTimeout;
 
-                    int errorCode = fileHandle.GetLastWin32ErrorAndDisposeHandleIfInvalid();
-                    if (errorCode == Interop.Errors.ERROR_IO_PENDING)
+                    if (waitResult == 0 || waitResult == WaitHandle.WaitTimeout)
                     {
-                        int waitResult = timeout.TryGetRemainingMilliseconds(out int remainingMilliseconds)
-                            ? WaitHandle.WaitAny(waitHandles, remainingMilliseconds)
-                            : WaitHandle.WaitTimeout;
-
-                        if (waitResult == 0)
-                        {
-                            // Process has exited, stop reading (grandchild may still have pipe open)
-                            overlappedContext.CancelPendingIO(fileHandle);
-                            break;
-                        }
-                        else if (waitResult == WaitHandle.WaitTimeout)
-                        {
-                            canceled = HandleTimeout(processHandle, fileHandle, overlappedContext);
-                            break;
-                        }
-                    }
-
-                    int bytesRead = overlappedContext.GetOverlappedResult(fileHandle);
-                    if (bytesRead <= 0)
-                    {
+                        // Process has exited or the read has timed out, stop reading (grandchild may still have pipe open)
+                        overlappedContext.CancelPendingIO(fileHandle);
                         break;
                     }
-
-                    totalBytesRead += bytesRead;
-                    if (array.Length == totalBytesRead)
-                    {
-                        BufferHelper.RentLargerBuffer(ref array);
-                    }
                 }
+
+                int bytesRead = overlappedContext.GetOverlappedResult(fileHandle);
+                if (bytesRead <= 0)
+                {
+                    break;
+                }
+
+                totalBytesRead += bytesRead;
             }
 
-            if (!processHandle.TryGetExitStatus(canceled, out ProcessExitStatus exitStatus))
+            if (array.Length == totalBytesRead)
             {
-                exitStatus = processHandle.WaitForExit(timeout.GetRemaining());
+                BufferHelper.RentLargerBuffer(ref array);
             }
-
-            return new(exitStatus, BufferHelper.CreateCopy(array, totalBytesRead), processId);
         }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(array);
-        }
-    }
-
-    private static bool HandleTimeout(SafeChildProcessHandle processHandle, SafeFileHandle fileHandle, OverlappedContext overlappedContext)
-    {
-        overlappedContext.CancelPendingIO(fileHandle);
-
-        return processHandle.KillCore(throwOnError: false);
     }
 }
