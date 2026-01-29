@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using Microsoft.Win32.SafeHandles;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -8,8 +10,13 @@ namespace System.TBA;
 
 internal static partial class UnixHelpers
 {
+    internal const int EINTR = 4;
+
     [LibraryImport("libc", SetLastError = true, StringMarshalling = StringMarshalling.Utf8)]
     internal static partial int access(string pathname, int mode);
+
+    [LibraryImport("libc", SetLastError = true)]
+    private static unsafe partial nint read(SafeHandle fd, byte* buf, nint count);
 
     internal static bool IsExecutable(string path)
     {
@@ -86,6 +93,63 @@ internal static partial class UnixHelpers
         if (ptr is not null)
         {
             NativeMemory.Free(ptr);
+        }
+    }
+
+    /// <summary>
+    /// Read all available data from the file descriptor until EAGAIN/EWOULDBLOCK
+    /// </summary>
+    /// <returns>True if more data may be available, false if EOF (pipe closed)</returns>
+    internal static bool DrainPipe(SafeFileHandle pipeHandle, ref byte[] buffer, ref int bytesRead)
+    {
+        int EWOULDBLOCK = OperatingSystem.IsLinux() ? 11 : 35;
+
+        nint result;
+        while (true)
+        {
+            unsafe
+            {
+                fixed (byte* ptr = &buffer[bytesRead])
+                {
+                    result = read(pipeHandle, ptr, buffer.Length - bytesRead);
+                }
+            }
+
+            if (result > 0)
+            {
+                bytesRead += (int)result;
+
+                if (bytesRead == buffer.Length)
+                {
+                    BufferHelper.RentLargerBuffer(ref buffer);
+                }
+                else
+                {
+                    // Read has returned less data than requested, so we have drained the pipe for now.
+                    // Don't repeat the sys-call (PERF).
+                    return true;
+                }
+            }
+            else if (result == 0)
+            {
+                return false; // EOF - pipe closed
+            }
+            else
+            {
+                int errno = Marshal.GetLastPInvokeError();
+                if (errno == EWOULDBLOCK)
+                {
+                    return true; // No more data available right now (non-blocking)
+                }
+                else if (errno == EINTR)
+                {
+                    continue; // Interrupted, try again
+                }
+                else
+                {
+                    throw new Win32Exception(errno, $"read() failed with errno={errno}");
+                }
+            }
         }
     }
 }
