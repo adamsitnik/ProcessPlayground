@@ -424,7 +424,6 @@ public partial class SafeChildProcessHandleTests
         var exitStatus = await processHandle.WaitForExitAsync(cts.Token);
 
         Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(270), TimeSpan.FromSeconds(1));
-
         Assert.True(exitStatus.Canceled);
         Assert.NotEqual(0, exitStatus.ExitCode);
     }
