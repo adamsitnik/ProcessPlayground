@@ -119,6 +119,7 @@ internal static class Multiplexing
     internal static unsafe CombinedOutput ReadAllBytesWithTimeout(SafeFileHandle fileHandle, SafeChildProcessHandle processHandle, int processId, TimeoutHelper timeout)
     {
         int totalBytesRead = 0;
+        bool canceled = false;
 
         byte[] array = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
         try
@@ -134,9 +135,10 @@ internal static class Multiplexing
                     int errorCode = fileHandle.GetLastWin32ErrorAndDisposeHandleIfInvalid();
                     if (errorCode == Interop.Errors.ERROR_IO_PENDING)
                     {
-                        if (timeout.HasExpired || !overlappedContext.WaitHandle.WaitOne(timeout.GetRemainingMillisecondsOrThrow()))
+                        if (!timeout.TryGetRemainingMilliseconds(out int remainingMilliseconds) || !overlappedContext.WaitHandle.WaitOne(remainingMilliseconds))
                         {
-                            HandleTimeout(processHandle, fileHandle, overlappedContext.GetOverlapped());
+                            canceled = HandleTimeout(processHandle, fileHandle, overlappedContext);
+                            break;
                         }
 
                         errorCode = Interop.Errors.ERROR_SUCCESS;
@@ -156,12 +158,12 @@ internal static class Multiplexing
                 }
             }
 
-            if (!processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
+            if (!processHandle.TryGetExitStatus(canceled, out ProcessExitStatus exitStatus))
             {
-                exitCode = processHandle.WaitForExit(timeout.GetRemainingOrThrow()).ExitCode;
+                exitStatus = processHandle.WaitForExit(timeout.GetRemaining());
             }
 
-            return new(exitCode, BufferHelper.CreateCopy(array, totalBytesRead), processId);
+            return new(exitStatus, BufferHelper.CreateCopy(array, totalBytesRead), processId);
         }
         finally
         {
@@ -169,17 +171,10 @@ internal static class Multiplexing
         }
     }
 
-    private static unsafe void HandleTimeout(SafeChildProcessHandle processHandle, SafeFileHandle fileHandle, NativeOverlapped* overlapped)
+    private static bool HandleTimeout(SafeChildProcessHandle processHandle, SafeFileHandle fileHandle, OverlappedContext overlappedContext)
     {
-        try
-        {
-            Interop.Kernel32.CancelIoEx(fileHandle, overlapped);
-            // Ignore all failures: no matter whether it succeeds or fails, completion is handled via the IOCallback.
-        }
-        catch (ObjectDisposedException) { } // in case the SafeHandle is (erroneously) closed concurrently
+        overlappedContext.CancelPendingIO(fileHandle);
 
-        Interop.Kernel32.TerminateProcess(processHandle, exitCode: -1);
-
-        throw new TimeoutException("The operation has timed out.");
+        return processHandle.KillCore(throwOnError: false);
     }
 }

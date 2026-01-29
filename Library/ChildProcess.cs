@@ -378,11 +378,11 @@ public static partial class ChildProcess
 
                 // It's possible for the process to close STD OUT and ERR keep running.
                 // We optimize for hot path: process already exited and exit code is available.
-                if (timeoutHelper.HasExpired || !processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
+                if (!processHandle.TryGetExitStatus(canceled: false, out ProcessExitStatus exitStatus))
                 {
-                    exitCode = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow()).ExitCode;
+                    exitStatus = processHandle.WaitForExit(timeoutHelper.GetRemaining());
                 }
-                return new(exitCode, resultBuffer, processId);
+                return new(exitStatus, resultBuffer, processId);
             }
             finally
             {
@@ -440,12 +440,12 @@ public static partial class ChildProcess
                 byte[] resultBuffer = BufferHelper.CreateCopy(buffer, totalBytesRead);
                 // It's possible for the process to close STD OUT and ERR keep running.
                 // We optimize for hot path: process already exited and exit code is available.
-                if (!processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
+                if (!processHandle.TryGetExitStatus(canceled: false, out ProcessExitStatus exitStatus))
                 {
-                    exitCode = (await processHandle.WaitForExitAsync(cancellationToken)).ExitCode;
+                    exitStatus = await processHandle.WaitForExitAsync(cancellationToken);
                 }
 
-                return new(exitCode, resultBuffer, processId);
+                return new(exitStatus, resultBuffer, processId);
             }
             finally
             {

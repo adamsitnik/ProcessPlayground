@@ -29,7 +29,7 @@ public class CombinedOutputTests
         string output = result.GetText();
         Assert.Contains("Hello from stdout", output);
         Assert.Contains("Error from stderr", output);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -45,7 +45,7 @@ public class CombinedOutputTests
             ? await ChildProcess.CaptureCombinedAsync(options)
             : ChildProcess.CaptureCombined(options);
 
-        Assert.Equal(42, result.ExitCode);
+        Assert.Equal(42, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -62,7 +62,7 @@ public class CombinedOutputTests
             : ChildProcess.CaptureCombined(options);
 
         Assert.True(result.Bytes.IsEmpty);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -79,7 +79,7 @@ public class CombinedOutputTests
             : ChildProcess.CaptureCombined(options);
 
         Assert.True(result.Bytes.IsEmpty);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -106,7 +106,7 @@ public class CombinedOutputTests
         }
         
         Assert.Equal(expected.ToString(), output, ignoreLineEndingDifferences: true);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Theory]
@@ -143,7 +143,7 @@ public class CombinedOutputTests
 
         string output = result.GetText();
         Assert.Contains("Quick output", output);
-        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(0, result.ExitStatus.ExitCode);
     }
 
     [Fact]
@@ -162,8 +162,11 @@ public class CombinedOutputTests
 
         using SafeFileHandle inputHandle = Console.OpenStandardInputHandle();
 
-        Assert.Throws<TimeoutException>(() =>
-            ChildProcess.CaptureCombined(options, input: inputHandle, timeout: TimeSpan.FromMilliseconds(500)));
+        Stopwatch started = Stopwatch.StartNew();
+        CombinedOutput combinedOutput = ChildProcess.CaptureCombined(options, input: inputHandle, timeout: TimeSpan.FromMilliseconds(500));
+
+        Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(490), TimeSpan.FromSeconds(1));
+        Assert.True(combinedOutput.ExitStatus.Cancelled);
     }
 
     [Fact]
@@ -233,7 +236,7 @@ public class CombinedOutputTests
         {
             string output = result.GetText();
             Assert.Contains("Concurrent test", output);
-            Assert.Equal(0, result.ExitCode);
+            Assert.Equal(0, result.ExitStatus.ExitCode);
         }
     }
 }
