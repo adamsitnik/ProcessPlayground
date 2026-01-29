@@ -123,6 +123,12 @@ internal static partial class UnixHelpers
                 {
                     BufferHelper.RentLargerBuffer(ref buffer);
                 }
+                else
+                {
+                    // Read has returned less data than requested, so we have drained the pipe for now.
+                    // Don't repeat the sys-call (PERF).
+                    return true;
+                }
             }
             else if (result == 0)
             {
