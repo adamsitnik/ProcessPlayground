@@ -125,6 +125,10 @@ internal static class Multiplexing
         try
         {
             using OverlappedContext overlappedContext = OverlappedContext.Allocate();
+            using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(processHandle);
+            
+            WaitHandle[] waitHandles = [processWaitHandle, overlappedContext.WaitHandle];
+            
             while (true)
             {
                 Span<byte> remainingBytes = array.AsSpan(totalBytesRead);
@@ -135,13 +139,21 @@ internal static class Multiplexing
                     int errorCode = fileHandle.GetLastWin32ErrorAndDisposeHandleIfInvalid();
                     if (errorCode == Interop.Errors.ERROR_IO_PENDING)
                     {
-                        if (!timeout.TryGetRemainingMilliseconds(out int remainingMilliseconds) || !overlappedContext.WaitHandle.WaitOne(remainingMilliseconds))
+                        int waitResult = timeout.TryGetRemainingMilliseconds(out int remainingMilliseconds)
+                            ? WaitHandle.WaitAny(waitHandles, remainingMilliseconds)
+                            : WaitHandle.WaitTimeout;
+
+                        if (waitResult == 0)
+                        {
+                            // Process has exited, stop reading (grandchild may still have pipe open)
+                            overlappedContext.CancelPendingIO(fileHandle);
+                            break;
+                        }
+                        else if (waitResult == WaitHandle.WaitTimeout)
                         {
                             canceled = HandleTimeout(processHandle, fileHandle, overlappedContext);
                             break;
                         }
-
-                        errorCode = Interop.Errors.ERROR_SUCCESS;
                     }
 
                     int bytesRead = overlappedContext.GetOverlappedResult(fileHandle);
