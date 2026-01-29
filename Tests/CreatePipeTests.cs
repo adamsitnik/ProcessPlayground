@@ -79,8 +79,8 @@ public class CreatePipeTests
 
     [Theory]
     [InlineData(false, false)]
-    [InlineData(true, false)]
 #if WINDOWS // FileStream does not handle would-block on Unix
+    [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
 #endif
