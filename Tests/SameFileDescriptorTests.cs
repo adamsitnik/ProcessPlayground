@@ -20,7 +20,7 @@ public class SameFileDescriptorTests
     [Theory]
 #endif
     [MemberData(nameof(AndStdErrorData))]
-    public async Task CanUseSameSocketForStdinAndStdout_Unix(bool andStdError)
+    public static async Task CanUseSameSocketForStdinAndStdout_Unix(bool andStdError)
     {
         // Create a socket pair - socket[0] and socket[1] are bidirectional
         int[] fds = new int[2];
@@ -76,7 +76,7 @@ public class SameFileDescriptorTests
     [Theory]
 #endif
     [MemberData(nameof(AndStdErrorData))]
-    public async Task CanUseSameHandleForStdinAndStdout_Windows(bool andStdError)
+    public static async Task CanUseSameHandleForStdinAndStdout_Windows(bool andStdError)
     {
         // Create a temporary file for bidirectional I/O
         string tempFile = Path.GetTempFileName();

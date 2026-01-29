@@ -9,7 +9,7 @@ namespace Tests;
 public class PipingTests
 {
     [Fact]
-    public async Task CanPipeFromEchoToFindstr()
+    public static async Task CanPipeFromEchoToFindstr()
     {
         File.CreatePipe(out SafeFileHandle readPipe, out SafeFileHandle writePipe);
 

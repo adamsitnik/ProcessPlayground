@@ -9,13 +9,13 @@ namespace Tests;
 public class FireAndForgetTests
 {
     [Fact]
-    public void FireAndForget_ThrowsOnNullOptions()
+    public static void FireAndForget_ThrowsOnNullOptions()
     {
         Assert.Throws<ArgumentNullException>(() => ChildProcess.FireAndForget(null!));
     }
 
     [Fact]
-    public void FireAndForget_ReturnsValidProcessId()
+    public static void FireAndForget_ReturnsValidProcessId()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo test" } }
@@ -27,7 +27,7 @@ public class FireAndForgetTests
     }
 
     [Fact]
-    public void FireAndForget_ProcessActuallyRuns()
+    public static void FireAndForget_ProcessActuallyRuns()
     {
         File.CreatePipe(out SafeFileHandle readHandle, out SafeFileHandle writeHandle);
 
@@ -49,7 +49,7 @@ public class FireAndForgetTests
     }
 
     [Fact]
-    public void FireAndForget_CanStartMultipleProcesses()
+    public static void FireAndForget_CanStartMultipleProcesses()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo test" } }
@@ -65,7 +65,7 @@ public class FireAndForgetTests
     }
 
     [Fact]
-    public void FireAndForget_CanProvideInput()
+    public static void FireAndForget_CanProvideInput()
     {
         File.CreatePipe(out SafeFileHandle readInput, out SafeFileHandle writeInput);
         File.CreatePipe(out SafeFileHandle readOutput, out SafeFileHandle writeOutput);
@@ -101,7 +101,7 @@ public class FireAndForgetTests
 
 
     [Fact]
-    public void FireAndForget_CanBeUsedWithProcessGetProcessById()
+    public static void FireAndForget_CanBeUsedWithProcessGetProcessById()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "timeout /t 2 /nobreak" } }

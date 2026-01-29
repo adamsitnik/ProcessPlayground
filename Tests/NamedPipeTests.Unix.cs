@@ -15,7 +15,7 @@ public class NamedPipeTests
     private const int TaskStartDelayMs = 100;
 
     [Fact]
-    public async Task CanUseFifoForProcessOutput_Unix()
+    public static async Task CanUseFifoForProcessOutput_Unix()
     {
         string fifoPath = Path.Combine(Path.GetTempPath(), $"test_fifo_{Guid.NewGuid()}");
         Assert.Equal(0, mkfifo(fifoPath, UnixFifoMode));

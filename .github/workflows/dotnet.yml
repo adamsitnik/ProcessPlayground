@@ -34,4 +34,4 @@ jobs:
     - name: Build Debug
       run: dotnet build --no-restore
     - name: Test Debug
-      run: dotnet test --configuration Debug --verbosity normal
+      run: dotnet test --configuration Debug --verbosity detailed --blame-hang-timeout 20s

@@ -10,7 +10,7 @@ namespace Tests;
 public class InheritedHandlesTests
 {
     [Fact]
-    public void InheritedHandles_IsInitiallyEmpty()
+    public static void InheritedHandles_IsInitiallyEmpty()
     {
         ProcessStartOptions options = new("test_executable");
 
@@ -22,7 +22,7 @@ public class InheritedHandlesTests
     }
 
     [Fact]
-    public void InheritedHandles_CanAddHandle()
+    public static void InheritedHandles_CanAddHandle()
     {
         ProcessStartOptions options = new("test_executable");
 
@@ -36,7 +36,7 @@ public class InheritedHandlesTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task InheritedHandles_ChildProcessCanReadFromInheritedPipe(bool inherit)
+    public static async Task InheritedHandles_ChildProcessCanReadFromInheritedPipe(bool inherit)
     {
         // This test creates a pipe, writes data to it, and passes the read end to a child process
         // The child process should be able to read the data from the inherited pipe handle
@@ -141,7 +141,7 @@ public class InheritedHandlesTests
     }
 
     [Fact]
-    public void InheritedHandles_NoDuplicates_WhenSameHandleAddedTwice()
+    public static void InheritedHandles_NoDuplicates_WhenSameHandleAddedTwice()
     {
         // This test verifies that the implementation doesn't create duplicate handles
         // internally when the same handle is added to InheritedHandles multiple times
@@ -170,7 +170,7 @@ public class InheritedHandlesTests
     }
 
     [Fact]
-    public void InheritedHandles_DoesNotConflictWithStdioHandles()
+    public static void InheritedHandles_DoesNotConflictWithStdioHandles()
     {
         // This test verifies that inherited handles don't conflict with stdio handles
         // even if the same handle is used for both

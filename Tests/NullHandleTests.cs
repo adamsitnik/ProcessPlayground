@@ -7,7 +7,7 @@ namespace Tests;
 public class NullHandleTests
 {
     [Fact]
-    public void NullFileHandle_IsValid()
+    public static void NullFileHandle_IsValid()
     {
         using SafeFileHandle handle = File.OpenNullFileHandle();
 
@@ -16,7 +16,7 @@ public class NullHandleTests
     }
 
     [Fact]
-    public async Task NullFileHandle_ReturnsEOF()
+    public static async Task NullFileHandle_ReturnsEOF()
     {
         using SafeFileHandle handle = File.OpenNullFileHandle();
         using FileStream stream = new(handle, FileAccess.Read, bufferSize: 1);
@@ -29,7 +29,7 @@ public class NullHandleTests
     }
 
     [Fact]
-    public async Task NullFileHandle_DiscardsWrites()
+    public static async Task NullFileHandle_DiscardsWrites()
     {
         using SafeFileHandle handle = File.OpenNullFileHandle();
         using FileStream stream = new(handle, FileAccess.Write, bufferSize: 1);

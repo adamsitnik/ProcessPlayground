@@ -10,7 +10,7 @@ namespace Tests;
 public class CreateSuspendedTests
 {
     [Fact]
-    public void StartSuspended_StartsProcessInSuspendedState()
+    public static void StartSuspended_StartsProcessInSuspendedState()
     {
         // Create a simple process that will write output
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -30,7 +30,7 @@ public class CreateSuspendedTests
     }
 
     [Fact]
-    public void StartSuspended_ResumeAllowsProcessToRun()
+    public static void StartSuspended_ResumeAllowsProcessToRun()
     {
         // Create a process that creates a file after a delay
         string tempFile = Path.Combine(Path.GetTempPath(), $"suspend_test_{Guid.NewGuid()}.txt");
@@ -75,7 +75,7 @@ public class CreateSuspendedTests
     }
 
     [Fact]
-    public async Task StartSuspended_WorksWithAsync()
+    public static async Task StartSuspended_WorksWithAsync()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd.exe") { Arguments = { "/c", "echo", "async_test" } }
@@ -92,7 +92,7 @@ public class CreateSuspendedTests
     }
 
     [Fact]
-    public void StartSuspended_ProcessCanBeKilledWhileSuspended()
+    public static void StartSuspended_ProcessCanBeKilledWhileSuspended()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd.exe") { Arguments = { "/c", "timeout /t 60 /nobreak" } }

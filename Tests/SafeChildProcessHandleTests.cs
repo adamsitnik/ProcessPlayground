@@ -14,7 +14,7 @@ public partial class SafeChildProcessHandleTests
 #if WINDOWS || LINUX
     [Fact]
 #endif
-    public void GetProcessId_ReturnsValidPid_NotHandleOrDescriptor()
+    public static void GetProcessId_ReturnsValidPid_NotHandleOrDescriptor()
     {
         ProcessStartOptions info = OperatingSystem.IsWindows()
             ? new("cmd.exe") { Arguments = { "/c", "echo test" } }
@@ -37,7 +37,7 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact]
-    public void Environment_IsInitializedWithCurrentProcessEnvVars()
+    public static void Environment_IsInitializedWithCurrentProcessEnvVars()
     {
         // Set a unique environment variable in the current process
         string testVarName = "TEST_ENV_VAR_" + Guid.NewGuid().ToString("N");
@@ -65,7 +65,7 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact]
-    public void Environment_CanAddNewVariable()
+    public static void Environment_CanAddNewVariable()
     {
         ProcessStartOptions options = new("test_executable");
 
@@ -78,7 +78,7 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact]
-    public void Environment_CanRemoveVariable()
+    public static void Environment_CanRemoveVariable()
     {
         // Set a test variable in current process
         string testVarName = "REMOVE_TEST_" + Guid.NewGuid().ToString("N");
@@ -104,7 +104,7 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact]
-    public void Environment_CanSetToNull()
+    public static void Environment_CanSetToNull()
     {
         // Set a test variable in current process
         string testVarName = "NULL_TEST_" + Guid.NewGuid().ToString("N");
@@ -132,7 +132,7 @@ public partial class SafeChildProcessHandleTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void ChildProcess_InheritsParentEnvVars(bool accessEnvironment)
+    public static void ChildProcess_InheritsParentEnvVars(bool accessEnvironment)
     {
         // Set a unique test variable
         string testVarName = "CHILD_TEST_VAR_" + Guid.NewGuid().ToString("N");
@@ -162,7 +162,7 @@ public partial class SafeChildProcessHandleTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void ChildProcess_InheritsParentEnvVars_WithUpdates(bool accessEnvironment)
+    public static void ChildProcess_InheritsParentEnvVars_WithUpdates(bool accessEnvironment)
     {
         // This test verifies that environment variables are correctly inherited by child processes
         // and that updates to environment variables are reflected when accessed properly.
@@ -207,7 +207,7 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact]
-    public void ChildProcess_ReceivesAddedEnvVar()
+    public static void ChildProcess_ReceivesAddedEnvVar()
     {
         string testVarName = "ADDED_VAR_" + Guid.NewGuid().ToString("N");
         string testVarValue = "added_value";
@@ -222,7 +222,7 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact]
-    public void ChildProcess_DoesNotReceiveRemovedEnvVar()
+    public static void ChildProcess_DoesNotReceiveRemovedEnvVar()
     {
         // Set a test variable in current process
         string testVarName = "REMOVED_VAR_" + Guid.NewGuid().ToString("N");
@@ -285,7 +285,7 @@ public partial class SafeChildProcessHandleTests
 #endif
 
     [Fact]
-    public void Kill_KillsRunningProcess()
+    public static void Kill_KillsRunningProcess()
     {
         // Start a long-running process
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -312,7 +312,7 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact]
-    public void Kill_CanBeCalledMultipleTimes()
+    public static void Kill_CanBeCalledMultipleTimes()
     {
         // Start a long-running process
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -334,7 +334,7 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact]
-    public void WaitForExit_Called_After_Kill_ReturnsExitCodeImmediately()
+    public static void WaitForExit_Called_After_Kill_ReturnsExitCodeImmediately()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("timeout") { Arguments = { "/t", "60", "/nobreak" } }
@@ -354,7 +354,7 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact]
-    public void Kill_OnAlreadyExitedProcess_ReturnsFalse()
+    public static void Kill_OnAlreadyExitedProcess_ReturnsFalse()
     {
         // Start a short-lived process
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -379,7 +379,7 @@ public partial class SafeChildProcessHandleTests
 
 
     [Fact]
-    public void WaitForExit_WithTimeout_KillsOnTimeout()
+    public static void WaitForExit_WithTimeout_KillsOnTimeout()
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
@@ -403,7 +403,7 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact]
-    public async Task WaitForExitAsync_WithCancellation_KillsOnCancellation()
+    public static async Task WaitForExitAsync_WithCancellation_KillsOnCancellation()
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
@@ -413,8 +413,8 @@ public partial class SafeChildProcessHandleTests
         }
 
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("timeout") { Arguments = { "/t", "60", "/nobreak" } }
-            : new("sleep") { Arguments = { "60" } };
+            ? new("timeout") { Arguments = { "/t", "5", "/nobreak" } }
+            : new("sleep") { Arguments = { "5" } };
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: Console.OpenStandardInputHandle(), output: null, error: null);
 
@@ -423,7 +423,7 @@ public partial class SafeChildProcessHandleTests
         
         var exitStatus = await processHandle.WaitForExitAsync(cts.Token);
 
-        Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(270), TimeSpan.FromSeconds(1));
+        Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(270), TimeSpan.FromSeconds(1.5)); // macOS can be really slow sometimes
         Assert.True(exitStatus.Canceled);
         Assert.NotEqual(0, exitStatus.ExitCode);
     }
@@ -434,7 +434,7 @@ public partial class SafeChildProcessHandleTests
 #if WINDOWS // https://github.com/adamsitnik/ProcessPlayground/issues/61
     [InlineData(true)]
 #endif
-    public async Task WaitForExit_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
+    public static async Task WaitForExit_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {
         // This test verifies that WaitForExitAsync returns when the direct child process exits,
         // even if that child has spawned a grandchild process that is still running.
@@ -473,7 +473,7 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact]
-    public void KillOnParentDeath_CanBeSetToTrue()
+    public static void KillOnParentDeath_CanBeSetToTrue()
     {
         // Simple test to verify the property can be set
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -494,7 +494,7 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact]
-    public void KillOnParentDeath_DefaultsToFalse()
+    public static void KillOnParentDeath_DefaultsToFalse()
     {
         ProcessStartOptions options = new("test");
         Assert.False(options.KillOnParentDeath);

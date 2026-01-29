@@ -16,7 +16,7 @@ public class CombinedOutputTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task CombinedOutput_ReturnsStdOutAndStdErr(bool useAsync)
+    public static async Task CombinedOutput_ReturnsStdOutAndStdErr(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Hello from stdout && echo Error from stderr 1>&2" } }
@@ -35,7 +35,7 @@ public class CombinedOutputTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task CombinedOutput_CapturesExitCode(bool useAsync)
+    public static async Task CombinedOutput_CapturesExitCode(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "exit 42" } }
@@ -51,7 +51,7 @@ public class CombinedOutputTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task CombinedOutput_HandlesEmptyOutput(bool useAsync)
+    public static async Task CombinedOutput_HandlesEmptyOutput(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "" } }
@@ -68,7 +68,7 @@ public class CombinedOutputTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task CombinedOutput_HandlesProcessThatWritesNoOutput(bool useAsync)
+    public static async Task CombinedOutput_HandlesProcessThatWritesNoOutput(bool useAsync)
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "rem This is a comment that produces no output" } }
@@ -85,7 +85,7 @@ public class CombinedOutputTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task CombinedOutput_HandlesLargeOutput(bool useAsync)
+    public static async Task CombinedOutput_HandlesLargeOutput(bool useAsync)
     {
         // Generate a large amount of output
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -112,7 +112,7 @@ public class CombinedOutputTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task CombinedOutput_MergesStdOutAndStdErrInCorrectOrder(bool useAsync)
+    public static async Task CombinedOutput_MergesStdOutAndStdErrInCorrectOrder(bool useAsync)
     {
         // This test verifies that stdout and stderr are interleaved correctly
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -133,7 +133,7 @@ public class CombinedOutputTests
     }
 
     [Fact]
-    public void CombinedOutput_WithTimeout_CompletesBeforeTimeout()
+    public static void CombinedOutput_WithTimeout_CompletesBeforeTimeout()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Quick output" } }
@@ -147,7 +147,7 @@ public class CombinedOutputTests
     }
 
     [Fact]
-    public void CombinedOutput_WithTimeout_ThrowsOnTimeout()
+    public static void CombinedOutput_WithTimeout_ThrowsOnTimeout()
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
@@ -170,7 +170,7 @@ public class CombinedOutputTests
     }
 
     [Fact]
-    public async Task CombinedOutputAsync_WithCancellation_ThrowsOperationCanceled()
+    public static async Task CombinedOutputAsync_WithCancellation_ThrowsOperationCanceled()
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
@@ -196,7 +196,7 @@ public class CombinedOutputTests
     }
 
     [Fact]
-    public void CombinedOutput_WithInfiniteTimeout_Waits()
+    public static void CombinedOutput_WithInfiniteTimeout_Waits()
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
@@ -216,7 +216,7 @@ public class CombinedOutputTests
     }
 
     [Fact]
-    public async Task CombinedOutputAsync_MultipleConcurrentCalls()
+    public static async Task CombinedOutputAsync_MultipleConcurrentCalls()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd") { Arguments = { "/c", "echo Concurrent test" } }
@@ -243,7 +243,7 @@ public class CombinedOutputTests
     [Theory]
     [InlineData(false)]
     // [InlineData(true)] // https://github.com/adamsitnik/ProcessPlayground/issues/61
-    public async Task CombinedOutput_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
+    public static async Task CombinedOutput_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {

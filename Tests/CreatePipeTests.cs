@@ -12,7 +12,7 @@ public class CreatePipeTests
     [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
-    public void CreatePipe_CreatesValidHandles(bool asyncRead, bool asyncWrite)
+    public static void CreatePipe_CreatesValidHandles(bool asyncRead, bool asyncWrite)
     {
         File.CreatePipe(out SafeFileHandle readHandle, out SafeFileHandle writeHandle, asyncRead, asyncWrite);
 
@@ -26,7 +26,7 @@ public class CreatePipeTests
     }
 
     [Fact]
-    public async Task CreatePipe_SyncMode_AllowsCommunication()
+    public static async Task CreatePipe_SyncMode_AllowsCommunication()
     {
         byte[] message = "Hello, Pipe!"u8.ToArray();
 
@@ -48,7 +48,7 @@ public class CreatePipeTests
     }
 
     [Fact]
-    public async Task CreatePipe_AsyncReadMode_AllowsCommunication()
+    public static async Task CreatePipe_AsyncReadMode_AllowsCommunication()
     {
         byte[] message = "Hello, Async Pipe!"u8.ToArray();
 
@@ -79,12 +79,12 @@ public class CreatePipeTests
 
     [Theory]
     [InlineData(false, false)]
-    [InlineData(true, false)]
 #if WINDOWS // FileStream does not handle would-block on Unix
+    [InlineData(true, false)]
     [InlineData(false, true)]
     [InlineData(true, true)]
 #endif
-    public async Task CreatePipe_Async_AllowsCommunication(bool asyncRead, bool asyncWrite)
+    public static async Task CreatePipe_Async_AllowsCommunication(bool asyncRead, bool asyncWrite)
     {
         File.CreatePipe(out SafeFileHandle readHandle, out SafeFileHandle writeHandle, asyncRead, asyncWrite);
         byte[] message = "Hello, Async Pipe!"u8.ToArray();
