@@ -19,8 +19,10 @@ public readonly struct ProcessExitStatus : IEquatable<ProcessExitStatus>
     /// <remarks>
     /// <para>On Windows, this is the value passed to ExitProcess or returned from main().</para>
     /// <para>On Unix, if the process exited normally, this is the value passed to exit() or returned from main().</para>
-    /// <para>If the process was terminated by a signal on Unix, this may be the signal number on some platforms, or -1.</para>
-    /// <para>If the process was killed due to timeout/cancellation, this is typically -1 on Windows or the signal number (usually 9 for SIGKILL) on Unix.</para>
+    /// <para>
+    /// If the process was terminated by a signal on Unix, this is 128 + the signal number. 
+    /// Use <see cref="Signal"/> to get the actual signal.
+    /// </para>
     /// </remarks>
     public int ExitCode { get; }
 
@@ -36,11 +38,6 @@ public readonly struct ProcessExitStatus : IEquatable<ProcessExitStatus>
     /// Gets a value indicating whether the process has been terminated due to timeout or cancellation.
     /// </summary>
     public bool Canceled { get; }
-
-    /// <summary>
-    /// Gets a value indicating whether the process was terminated by a signal.
-    /// </summary>
-    public bool Signaled => Signal.HasValue;
 
     public bool Equals(ProcessExitStatus other) => ExitCode == other.ExitCode && Canceled == other.Canceled && Signal == other.Signal;
 
