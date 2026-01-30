@@ -117,7 +117,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     {
         Validate();
 
-        return WaitForExitCore(Timeout.Infinite);
+        return WaitForExitCore();
     }
 
     /// <summary>

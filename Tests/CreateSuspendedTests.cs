@@ -26,7 +26,7 @@ public class CreateSuspendedTests
         // Now resume the process
         processHandle.Resume();
 
-        EnsureProcessCompletedSuccessfully(processHandle, TimeSpan.FromSeconds(5));
+        EnsureProcessCompletedSuccessfully(processHandle, TimeSpan.FromSeconds(1));
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public class CreateSuspendedTests
             processHandle.Resume();
 
             // Wait for completion
-            EnsureProcessCompletedSuccessfully(processHandle, TimeSpan.FromSeconds(5));
+            EnsureProcessCompletedSuccessfully(processHandle, TimeSpan.FromSeconds(1));
 
             // File should now exist
             Assert.True(File.Exists(tempFile), "File should exist after process resumed and completed");

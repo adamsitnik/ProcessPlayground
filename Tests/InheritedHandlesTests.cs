@@ -125,17 +125,19 @@ public class InheritedHandlesTests
                 }
 
                 // Wait for the child process to exit
-                int exitCode = processHandle.WaitForExit().ExitCode;
+                var exitStatus = processHandle.WaitForExit();
 
                 if (inherit)
                 {
-                    Assert.Equal(0, exitCode);
+                    Assert.Equal(0, exitStatus.ExitCode);
                 }
                 else
                 {
                     // If the handle was not inherited, the child process should fail to read
-                    Assert.NotEqual(0, exitCode);
+                    Assert.NotEqual(0, exitStatus.ExitCode);
                 }
+                Assert.Null(exitStatus.Signal);
+                Assert.False(exitStatus.Canceled);
             }
         }
     }
@@ -167,6 +169,8 @@ public class InheritedHandlesTests
 
         var exitStatus = processHandle.WaitForExit();
         Assert.Equal(0, exitStatus.ExitCode);
+        Assert.Null(exitStatus.Signal);
+        Assert.False(exitStatus.Canceled);
     }
 
     [Fact]
