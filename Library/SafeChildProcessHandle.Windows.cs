@@ -408,7 +408,7 @@ public partial class SafeChildProcessHandle
                 ctr = cancellationToken.Register(
                     static state =>
                     {
-                        var (taskSource) = ((TaskCompletionSource<bool>))state!;
+                        var taskSource = (TaskCompletionSource<bool>)state!;
                         taskSource.TrySetCanceled();
                     },
                     tcs);

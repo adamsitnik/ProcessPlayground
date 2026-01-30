@@ -560,6 +560,23 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact]
+    public static async Task WaitForExitAsync_WithoutCancellationToken_CompletesNormally()
+    {
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "echo test" } }
+            : new("echo") { Arguments = { "test" } };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+
+        // Call without explicit cancellation token (uses default parameter)
+        var exitStatus = await processHandle.WaitForExitAsync();
+
+        Assert.Equal(0, exitStatus.ExitCode);
+        Assert.False(exitStatus.Canceled);
+        Assert.Null(exitStatus.Signal);
+    }
+
+    [Fact]
     public static async Task WaitForExitOrKillOnCancellationAsync_CompletesNormallyWhenProcessExits()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
