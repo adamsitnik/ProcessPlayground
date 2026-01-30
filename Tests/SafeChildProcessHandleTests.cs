@@ -33,7 +33,10 @@ public partial class SafeChildProcessHandleTests
         Assert.NotEqual(handleValue, (nint)pid);
 
         // Wait for process to complete
-        processHandle.WaitForExit();
+        var exitStatus = processHandle.WaitForExit();
+        Assert.Equal(0, exitStatus.ExitCode);
+        Assert.Null(exitStatus.Signal);
+        Assert.False(exitStatus.Canceled);
     }
 
     [Fact]
@@ -235,13 +238,7 @@ public partial class SafeChildProcessHandleTests
             // Remove the variable from the environment
             options.Environment.Remove(testVarName);
 
-            using SafeFileHandle nullHandle = File.OpenNullFileHandle();
-
-            using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
-                options,
-                input: null,
-                output: nullHandle,
-                error: nullHandle);
+            using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
 
             var exitStatus = processHandle.WaitForExit();
             // printenv returns 1 when variable not found (Linux)
@@ -361,13 +358,8 @@ public partial class SafeChildProcessHandleTests
             ? new("cmd.exe") { Arguments = { "/c", "echo test" } }
             : new("echo") { Arguments = { "test" } };
 
-        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
-            options,
-            input: null,
-            output: nullHandle,
-            error: nullHandle);
-        
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+
         // Wait for process to exit normally
         var exitStatus = processHandle.WaitForExit();
         Assert.Equal(0, exitStatus.ExitCode);
@@ -403,12 +395,7 @@ public partial class SafeChildProcessHandleTests
             ? new("cmd.exe") { Arguments = { "/c", "echo test" } }
             : new("echo") { Arguments = { "test" } };
 
-        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
-            options,
-            input: null,
-            output: nullHandle,
-            error: nullHandle);
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
         var exitStatus = processHandle.WaitForExit();
@@ -417,8 +404,7 @@ public partial class SafeChildProcessHandleTests
         Assert.Equal(0, exitStatus.ExitCode);
         Assert.False(exitStatus.Canceled);
         Assert.Null(exitStatus.Signal);
-        // Should complete quickly (within 2 seconds)
-        Assert.InRange(stopwatch.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(2));
+        Assert.InRange(stopwatch.Elapsed, TimeSpan.Zero, TimeSpan.FromMilliseconds(300));
     }
 
     [Fact]
@@ -429,12 +415,7 @@ public partial class SafeChildProcessHandleTests
             ? new("cmd.exe") { Arguments = { "/c", "echo test" } }
             : new("echo") { Arguments = { "test" } };
 
-        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
-            options,
-            input: null,
-            output: nullHandle,
-            error: nullHandle);
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
 
         bool exited = processHandle.TryWaitForExit(TimeSpan.FromSeconds(5), out ProcessExitStatus exitStatus);
 
@@ -480,12 +461,7 @@ public partial class SafeChildProcessHandleTests
             ? new("cmd.exe") { Arguments = { "/c", "echo test" } }
             : new("echo") { Arguments = { "test" } };
 
-        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
-            options,
-            input: null,
-            output: nullHandle,
-            error: nullHandle);
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
 
         var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
 
@@ -596,12 +572,7 @@ public partial class SafeChildProcessHandleTests
 
         Assert.True(options.KillOnParentDeath);
 
-        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
-            options,
-            input: null,
-            output: nullHandle,
-            error: nullHandle);
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
 
         var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
         Assert.Equal(0, exitStatus.ExitCode);
