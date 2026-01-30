@@ -266,12 +266,8 @@ public partial class SafeChildProcessHandle
         }
 
         const int ESRCH = 3;
-        const int EBADF = 9;
-        // Check if the process has already exited
-        // ESRCH (3): No such process
-        // EBADF (9): Bad file descriptor (pidfd no longer valid because process exited)
         int errno = Marshal.GetLastPInvokeError();
-        if (errno == ESRCH || errno == EBADF)
+        if (errno == ESRCH)
         {
             return false; // Process already exited
         }
