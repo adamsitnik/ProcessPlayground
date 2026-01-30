@@ -300,7 +300,7 @@ public partial class SafeChildProcessHandleTests
         Assert.True(wasKilled);
 
         // Process should exit after being killed
-        var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
 
         Assert.False(exitStatus.Canceled);
 #if WINDOWS
@@ -326,7 +326,7 @@ public partial class SafeChildProcessHandleTests
         Assert.True(firstKill);
         
         // Wait for the process to actually exit
-        _ = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+        _ = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
         
         // Second should not throw and return false (process already exited)
         bool secondKill = processHandle.Kill();
@@ -346,7 +346,7 @@ public partial class SafeChildProcessHandleTests
         Assert.True(wasKilled);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
-        var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(3));
+        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(3));
 
         Assert.InRange(stopwatch.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(0.1));
         Assert.False(exitStatus.Canceled);
@@ -379,7 +379,7 @@ public partial class SafeChildProcessHandleTests
 
 
     [Fact]
-    public static void WaitForExit_WithTimeout_KillsOnTimeout()
+    public static void WaitForExitOrKillOnTimeout_KillsOnTimeout()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" } }
@@ -388,11 +388,139 @@ public partial class SafeChildProcessHandleTests
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
 
         Stopwatch stopwatch = Stopwatch.StartNew();
-        var exitStatus = processHandle.WaitForExit(TimeSpan.FromMilliseconds(300));
+        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromMilliseconds(300));
 
         Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(290), TimeSpan.FromMilliseconds(400));
         Assert.True(exitStatus.Canceled);
         Assert.NotEqual(0, exitStatus.ExitCode);
+    }
+
+    [Fact]
+    public static void WaitForExit_WaitsIndefinitelyForProcessToComplete()
+    {
+        // Start a process that exits quickly
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "echo test" } }
+            : new("echo") { Arguments = { "test" } };
+
+        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
+            options,
+            input: null,
+            output: nullHandle,
+            error: nullHandle);
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        var exitStatus = processHandle.WaitForExit();
+        stopwatch.Stop();
+
+        Assert.Equal(0, exitStatus.ExitCode);
+        Assert.False(exitStatus.Canceled);
+        Assert.Null(exitStatus.Signal);
+        // Should complete quickly (within 2 seconds)
+        Assert.InRange(stopwatch.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
+    public static void TryWaitForExit_ReturnsTrueWhenProcessExitsBeforeTimeout()
+    {
+        // Start a process that exits quickly
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "echo test" } }
+            : new("echo") { Arguments = { "test" } };
+
+        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
+            options,
+            input: null,
+            output: nullHandle,
+            error: nullHandle);
+
+        bool exited = processHandle.TryWaitForExit(TimeSpan.FromSeconds(5), out ProcessExitStatus exitStatus);
+
+        Assert.True(exited);
+        Assert.Equal(0, exitStatus.ExitCode);
+        Assert.False(exitStatus.Canceled);
+        Assert.Null(exitStatus.Signal);
+    }
+
+    [Fact]
+    public static void TryWaitForExit_ReturnsFalseWhenProcessDoesNotExitBeforeTimeout()
+    {
+        // Start a long-running process
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" } }
+            : new("sleep") { Arguments = { "10" } };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+
+        try
+        {
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            bool exited = processHandle.TryWaitForExit(TimeSpan.FromMilliseconds(300), out ProcessExitStatus exitStatus);
+            stopwatch.Stop();
+
+            Assert.False(exited);
+            Assert.Equal(default, exitStatus);
+            Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(290), TimeSpan.FromMilliseconds(600));
+        }
+        finally
+        {
+            // Clean up - kill the process
+            processHandle.Kill();
+            processHandle.WaitForExit();
+        }
+    }
+
+    [Fact]
+    public static void WaitForExitOrKillOnTimeout_DoesNotKillWhenProcessExitsBeforeTimeout()
+    {
+        // Start a process that exits quickly
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "echo test" } }
+            : new("echo") { Arguments = { "test" } };
+
+        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(
+            options,
+            input: null,
+            output: nullHandle,
+            error: nullHandle);
+
+        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(0, exitStatus.ExitCode);
+        Assert.False(exitStatus.Canceled, "Process should not be marked as canceled when it exits normally before timeout");
+        Assert.Null(exitStatus.Signal);
+    }
+
+    [Fact]
+    public static void WaitForExitOrKillOnTimeout_KillsAndWaitsWhenTimeoutOccurs()
+    {
+        // Start a long-running process
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" } }
+            : new("sleep") { Arguments = { "10" } };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromMilliseconds(300));
+        stopwatch.Stop();
+
+        // Should wait for timeout, then kill, then wait for process to actually exit
+        Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(290), TimeSpan.FromSeconds(2));
+        Assert.True(exitStatus.Canceled, "Process should be marked as canceled when killed due to timeout");
+        Assert.NotEqual(0, exitStatus.ExitCode);
+
+#if !WINDOWS
+        // On Unix, the process should have been killed with SIGKILL
+        Assert.Equal(ProcessSignal.SIGKILL, exitStatus.Signal);
+        Assert.Equal(128 + (int)ProcessSignal.SIGKILL, exitStatus.ExitCode);
+#else
+        // On Windows, TerminateProcess sets exit code to -1
+        Assert.Equal(-1, exitStatus.ExitCode);
+#endif
     }
 
     [Fact]
@@ -450,7 +578,7 @@ public partial class SafeChildProcessHandleTests
         // (even though the grandchild is still running for 5 seconds)
         int exitCode = useAsync
             ? (await processHandle.WaitForExitAsync(cts.Token)).ExitCode
-            : processHandle.WaitForExit(timeout).ExitCode;
+            : processHandle.WaitForExitOrKillOnTimeout(timeout).ExitCode;
 
         // The child should have exited successfully (exit code 0)
         Assert.Equal(0, exitCode);
@@ -475,7 +603,7 @@ public partial class SafeChildProcessHandleTests
             output: nullHandle,
             error: nullHandle);
 
-        var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
         Assert.Equal(0, exitStatus.ExitCode);
     }
 

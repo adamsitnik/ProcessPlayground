@@ -108,11 +108,44 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
         }
     }
 
-    public ProcessExitStatus WaitForExit(TimeSpan? timeout = default)
+    /// <summary>
+    /// Waits for the process to exit without a timeout.
+    /// </summary>
+    /// <returns>The exit status of the process.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
+    public ProcessExitStatus WaitForExit()
     {
         Validate();
 
-        return WaitForExitCore(GetTimeoutInMilliseconds(timeout));
+        return WaitForExitCore(Timeout.Infinite);
+    }
+
+    /// <summary>
+    /// Waits for the process to exit within the specified timeout.
+    /// </summary>
+    /// <param name="timeout">The maximum time to wait for the process to exit.</param>
+    /// <param name="exitStatus">When this method returns true, contains the exit status of the process.</param>
+    /// <returns>true if the process exited before the timeout; otherwise, false.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
+    public bool TryWaitForExit(TimeSpan timeout, out ProcessExitStatus exitStatus)
+    {
+        Validate();
+
+        return TryWaitForExitCore(GetTimeoutInMilliseconds(timeout), out exitStatus);
+    }
+
+    /// <summary>
+    /// Waits for the process to exit within the specified timeout.
+    /// If the process does not exit before the timeout, it is killed and then waited for exit.
+    /// </summary>
+    /// <param name="timeout">The maximum time to wait for the process to exit before killing it.</param>
+    /// <returns>The exit status of the process. If the process was killed due to timeout, Canceled will be true.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
+    public ProcessExitStatus WaitForExitOrKillOnTimeout(TimeSpan timeout)
+    {
+        Validate();
+
+        return WaitForExitOrKillOnTimeoutCore(GetTimeoutInMilliseconds(timeout));
     }
 
     public Task<ProcessExitStatus> WaitForExitAsync(CancellationToken cancellationToken = default)
