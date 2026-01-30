@@ -152,9 +152,9 @@ public partial class SafeChildProcessHandle
         return false;
     }
 
-    private ProcessExitStatus WaitForExitCore(int milliseconds)
+    private ProcessExitStatus WaitForExitCore()
     {
-        if (wait_for_exit(this, ProcessId, _exitPipeFd, milliseconds, out int exitCode, out int rawSignal, out int hasTimedout) != -1)
+        if (wait_for_exit(this, ProcessId, _exitPipeFd, Timeout.Infinite, out int exitCode, out int rawSignal, out int hasTimedout) != -1)
         {
             ProcessSignal? signal = rawSignal != 0 ? (ProcessSignal)rawSignal : null;
             return new(exitCode, false, signal);
@@ -234,7 +234,7 @@ public partial class SafeChildProcessHandle
         }
 
         // The process has exited (or been killed), now retrieve the exit status
-        ProcessExitStatus status = WaitForExitCore(milliseconds: Timeout.Infinite);
+        ProcessExitStatus status = WaitForExitCore();
         return new(status.ExitCode, wasKilledBox.Value, status.Signal);
     }
 

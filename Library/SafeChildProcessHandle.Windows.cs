@@ -352,10 +352,10 @@ public partial class SafeChildProcessHandle
         }
     }
 
-    private ProcessExitStatus WaitForExitCore(int milliseconds)
+    private ProcessExitStatus WaitForExitCore()
     {
         using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(this);
-        processWaitHandle.WaitOne(milliseconds);
+        processWaitHandle.WaitOne(Timeout.Infinite);
 
         return new(GetExitCode(), false);
     }
