@@ -529,10 +529,20 @@ public partial class SafeChildProcessHandleTests
 
         try
         {
+            Stopwatch stopwatch = Stopwatch.StartNew();
             using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(300));
             
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => 
                 await processHandle.WaitForExitAsync(cts.Token));
+            
+            stopwatch.Stop();
+            
+            // Verify the operation timed out around the expected time
+            Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(600));
+            
+            // Verify the process has not exited yet
+            bool hasExited = processHandle.TryWaitForExit(TimeSpan.Zero, out _);
+            Assert.False(hasExited, "Process should still be running after cancellation");
         }
         finally
         {
@@ -585,7 +595,7 @@ public partial class SafeChildProcessHandleTests
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
 
-        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(5));
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(1));
         var exitStatus = await processHandle.WaitForExitOrKillOnCancellationAsync(cts.Token);
 
         Assert.Equal(0, exitStatus.ExitCode);
