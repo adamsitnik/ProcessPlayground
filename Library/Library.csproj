@@ -104,42 +104,42 @@
     <!-- Create items for runtime-specific assemblies and native libraries -->
     <ItemGroup>
       <!-- Windows assemblies -->
-      <None Include="bin\$(Configuration)\$(TargetFramework)\win-x64\$(AssemblyName).dll" 
+      <None Include="bin/$(Configuration)/$(TargetFramework)/win-x64/$(AssemblyName).dll" 
             Pack="true" 
             PackagePath="runtimes/win-x64/lib/$(TargetFramework)/"
-            Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-x64\$(AssemblyName).dll')" />
-      <None Include="bin\$(Configuration)\$(TargetFramework)\win-x64\$(AssemblyName).pdb" 
+            Condition="Exists('bin/$(Configuration)/$(TargetFramework)/win-x64/$(AssemblyName).dll')" />
+      <None Include="bin/$(Configuration)/$(TargetFramework)/win-x64/$(AssemblyName).pdb" 
             Pack="true" 
             PackagePath="runtimes/win-x64/lib/$(TargetFramework)/"
-            Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-x64\$(AssemblyName).pdb')" />
+            Condition="Exists('bin/$(Configuration)/$(TargetFramework)/win-x64/$(AssemblyName).pdb')" />
       
       <!-- Linux assemblies -->
-      <None Include="bin\$(Configuration)\$(TargetFramework)\linux-x64\$(AssemblyName).dll" 
+      <None Include="bin/$(Configuration)/$(TargetFramework)/linux-x64/$(AssemblyName).dll" 
             Pack="true" 
             PackagePath="runtimes/linux-x64/lib/$(TargetFramework)/"
-            Condition="Exists('bin\$(Configuration)\$(TargetFramework)\linux-x64\$(AssemblyName).dll')" />
-      <None Include="bin\$(Configuration)\$(TargetFramework)\linux-x64\$(AssemblyName).pdb" 
+            Condition="Exists('bin/$(Configuration)/$(TargetFramework)/linux-x64/$(AssemblyName).dll')" />
+      <None Include="bin/$(Configuration)/$(TargetFramework)/linux-x64/$(AssemblyName).pdb" 
             Pack="true" 
             PackagePath="runtimes/linux-x64/lib/$(TargetFramework)/"
-            Condition="Exists('bin\$(Configuration)\$(TargetFramework)\linux-x64\$(AssemblyName).pdb')" />
-      <None Include="native\build\libpal_process.so" 
+            Condition="Exists('bin/$(Configuration)/$(TargetFramework)/linux-x64/$(AssemblyName).pdb')" />
+      <None Include="native/build/libpal_process.so" 
             Pack="true" 
             PackagePath="runtimes/linux-x64/native/"
-            Condition="Exists('native\build\libpal_process.so')" />
+            Condition="Exists('native/build/libpal_process.so')" />
       
       <!-- macOS assemblies -->
-      <None Include="bin\$(Configuration)\$(TargetFramework)\osx-x64\$(AssemblyName).dll" 
+      <None Include="bin/$(Configuration)/$(TargetFramework)/osx-x64/$(AssemblyName).dll" 
             Pack="true" 
             PackagePath="runtimes/osx-x64/lib/$(TargetFramework)/"
-            Condition="Exists('bin\$(Configuration)\$(TargetFramework)\osx-x64\$(AssemblyName).dll')" />
-      <None Include="bin\$(Configuration)\$(TargetFramework)\osx-x64\$(AssemblyName).pdb" 
+            Condition="Exists('bin/$(Configuration)/$(TargetFramework)/osx-x64/$(AssemblyName).dll')" />
+      <None Include="bin/$(Configuration)/$(TargetFramework)/osx-x64/$(AssemblyName).pdb" 
             Pack="true" 
             PackagePath="runtimes/osx-x64/lib/$(TargetFramework)/"
-            Condition="Exists('bin\$(Configuration)\$(TargetFramework)\osx-x64\$(AssemblyName).pdb')" />
-      <None Include="native\build\libpal_process.dylib" 
+            Condition="Exists('bin/$(Configuration)/$(TargetFramework)/osx-x64/$(AssemblyName).pdb')" />
+      <None Include="native/build/libpal_process.dylib" 
             Pack="true" 
             PackagePath="runtimes/osx-x64/native/"
-            Condition="Exists('native\build\libpal_process.dylib')" />
+            Condition="Exists('native/build/libpal_process.dylib')" />
     </ItemGroup>
   </Target>
 

@@ -78,4 +78,3 @@ echo "To publish to NuGet.org:"
 echo "  dotnet nuget push $SCRIPT_DIR/artifacts/ProcessPlayground.Library.*.nupkg \\"
 echo "    --api-key YOUR_API_KEY \\"
 echo "    --source https://api.nuget.org/v3/index.json"
-

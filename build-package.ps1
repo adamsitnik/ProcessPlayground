@@ -6,9 +6,7 @@ Write-Host "Building ProcessPlayground.Library NuGet package for multiple platfo
 Write-Host ""
 
 # Navigate to Library directory
-$ScriptDir = Split-Path -Parent $PSScriptRoot
-if ($ScriptDir -eq "") { $ScriptDir = $PSScriptRoot }
-Set-Location "$ScriptDir\Library"
+Set-Location "$PSScriptRoot\Library"
 
 # Clean previous builds
 Write-Host "Cleaning previous builds..." -ForegroundColor Yellow
@@ -39,14 +37,14 @@ Write-Host ""
 
 # Create NuGet package that includes all runtime builds
 Write-Host "Creating NuGet package..." -ForegroundColor Cyan
-dotnet pack -c Release -p:NoBuild=true -o "$ScriptDir\artifacts"
+dotnet pack -c Release -p:NoBuild=true -o "$PSScriptRoot\artifacts"
 Write-Host ""
 
 Write-Host "============================================" -ForegroundColor Green
 Write-Host "Package created successfully!" -ForegroundColor Green
 Write-Host "============================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "Location: $ScriptDir\artifacts\ProcessPlayground.Library.*.nupkg" -ForegroundColor White
+Write-Host "Location: $PSScriptRoot\artifacts\ProcessPlayground.Library.*.nupkg" -ForegroundColor White
 Write-Host ""
 Write-Host "IMPORTANT: To create a complete multi-platform package:" -ForegroundColor Yellow
 Write-Host "1. Ensure native libraries are built:" -ForegroundColor Yellow
@@ -55,6 +53,6 @@ Write-Host "   - On macOS: Library\native\build\libpal_process.dylib" -Foregroun
 Write-Host "2. Native libraries will be included automatically if they exist" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "To publish to NuGet.org:" -ForegroundColor Yellow
-Write-Host "  dotnet nuget push $ScriptDir\artifacts\ProcessPlayground.Library.*.nupkg ``" -ForegroundColor Gray
+Write-Host "  dotnet nuget push $PSScriptRoot\artifacts\ProcessPlayground.Library.*.nupkg ``" -ForegroundColor Gray
 Write-Host "    --api-key YOUR_API_KEY ``" -ForegroundColor Gray
 Write-Host "    --source https://api.nuget.org/v3/index.json" -ForegroundColor Gray
