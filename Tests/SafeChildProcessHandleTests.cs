@@ -500,7 +500,7 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact]
-    public static async Task WaitForExitAsync_WithCancellation_KillsOnCancellation()
+    public static async Task WaitForExitOrKillOnCancellationAsync_KillsOnCancellation()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 5" } }
@@ -511,11 +511,96 @@ public partial class SafeChildProcessHandleTests
         Stopwatch stopwatch = Stopwatch.StartNew();
         using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(300));
         
-        var exitStatus = await processHandle.WaitForExitAsync(cts.Token);
+        var exitStatus = await processHandle.WaitForExitOrKillOnCancellationAsync(cts.Token);
 
         Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(270), TimeSpan.FromSeconds(1.5)); // macOS can be really slow sometimes
         Assert.True(exitStatus.Canceled);
         Assert.NotEqual(0, exitStatus.ExitCode);
+    }
+
+    [Fact]
+    public static async Task WaitForExitAsync_ThrowsOnCancellation()
+    {
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 5" } }
+            : new("sleep") { Arguments = { "5" } };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+
+        try
+        {
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(300));
+            
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => 
+                await processHandle.WaitForExitAsync(cts.Token));
+            
+            stopwatch.Stop();
+            
+            // Verify the operation timed out around the expected time
+            Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(600));
+            
+            // Verify the process has not exited yet
+            bool hasExited = processHandle.TryWaitForExit(TimeSpan.Zero, out _);
+            Assert.False(hasExited, "Process should still be running after cancellation");
+        }
+        finally
+        {
+            // Clean up - kill the process since it's still running
+            processHandle.Kill();
+            processHandle.WaitForExit();
+        }
+    }
+
+    [Fact]
+    public static async Task WaitForExitAsync_CompletesNormallyWhenProcessExits()
+    {
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "echo test" } }
+            : new("echo") { Arguments = { "test" } };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(5));
+        var exitStatus = await processHandle.WaitForExitAsync(cts.Token);
+
+        Assert.Equal(0, exitStatus.ExitCode);
+        Assert.False(exitStatus.Canceled);
+        Assert.Null(exitStatus.Signal);
+    }
+
+    [Fact]
+    public static async Task WaitForExitAsync_WithoutCancellationToken_CompletesNormally()
+    {
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "echo test" } }
+            : new("echo") { Arguments = { "test" } };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+
+        // Call without explicit cancellation token (uses default parameter)
+        var exitStatus = await processHandle.WaitForExitAsync();
+
+        Assert.Equal(0, exitStatus.ExitCode);
+        Assert.False(exitStatus.Canceled);
+        Assert.Null(exitStatus.Signal);
+    }
+
+    [Fact]
+    public static async Task WaitForExitOrKillOnCancellationAsync_CompletesNormallyWhenProcessExits()
+    {
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "echo test" } }
+            : new("echo") { Arguments = { "test" } };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+
+        using CancellationTokenSource cts = new(TimeSpan.FromSeconds(1));
+        var exitStatus = await processHandle.WaitForExitOrKillOnCancellationAsync(cts.Token);
+
+        Assert.Equal(0, exitStatus.ExitCode);
+        Assert.False(exitStatus.Canceled);
+        Assert.Null(exitStatus.Signal);
     }
 
 
@@ -553,7 +638,7 @@ public partial class SafeChildProcessHandleTests
         // WaitForExitAsync should return quickly because the child exits immediately
         // (even though the grandchild is still running for 5 seconds)
         int exitCode = useAsync
-            ? (await processHandle.WaitForExitAsync(cts.Token)).ExitCode
+            ? (await processHandle.WaitForExitOrKillOnCancellationAsync(cts.Token)).ExitCode
             : processHandle.WaitForExitOrKillOnTimeout(timeout).ExitCode;
 
         // The child should have exited successfully (exit code 0)

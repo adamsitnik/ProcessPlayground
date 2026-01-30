@@ -392,6 +392,46 @@ public partial class SafeChildProcessHandle
         TaskCompletionSource<bool> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         RegisteredWaitHandle? registeredWaitHandle = null;
         CancellationTokenRegistration ctr = default;
+
+        try
+        {
+            // Register a wait on the process handle (infinite timeout, we rely on CancellationToken)
+            registeredWaitHandle = ThreadPool.RegisterWaitForSingleObject(
+                processWaitHandle,
+                (state, timedOut) => ((TaskCompletionSource<bool>)state!).TrySetResult(true),
+                tcs,
+                Timeout.Infinite,
+                executeOnlyOnce: true);
+
+            if (cancellationToken.CanBeCanceled)
+            {
+                ctr = cancellationToken.Register(
+                    static state =>
+                    {
+                        var taskSource = (TaskCompletionSource<bool>)state!;
+                        taskSource.TrySetCanceled();
+                    },
+                    tcs);
+            }
+
+            await tcs.Task.ConfigureAwait(false);
+        }
+        finally
+        {
+            ctr.Dispose();
+            registeredWaitHandle?.Unregister(null);
+        }
+
+        return new(GetExitCode(), false);
+    }
+
+    private async Task<ProcessExitStatus> WaitForExitOrKillOnCancellationAsyncCore(CancellationToken cancellationToken)
+    {
+        using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(this);
+
+        TaskCompletionSource<bool> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        RegisteredWaitHandle? registeredWaitHandle = null;
+        CancellationTokenRegistration ctr = default;
         StrongBox<bool> wasKilledBox = new(false);
 
         try

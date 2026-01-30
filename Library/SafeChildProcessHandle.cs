@@ -148,11 +148,44 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
         return WaitForExitOrKillOnTimeoutCore(GetTimeoutInMilliseconds(timeout));
     }
 
+    /// <summary>
+    /// Waits asynchronously for the process to exit and reports the exit status.
+    /// </summary>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the wait operation.</param>
+    /// <returns>A task that represents the asynchronous wait operation. The task result contains the exit status of the process.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the cancellation token is canceled.</exception>
+    /// <remarks>
+    /// When the cancellation token is canceled, this method stops waiting and throws <see cref="OperationCanceledException"/>.
+    /// The process is NOT killed and continues running. If you want to kill the process on cancellation,
+    /// use <see cref="WaitForExitOrKillOnCancellationAsync"/> instead.
+    /// </remarks>
     public Task<ProcessExitStatus> WaitForExitAsync(CancellationToken cancellationToken = default)
     {
         Validate();
 
         return WaitForExitAsyncCore(cancellationToken);
+    }
+
+    /// <summary>
+    /// Waits asynchronously for the process to exit and reports the exit status.
+    /// When cancelled, kills the process and then waits for exit without timeout.
+    /// </summary>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the wait operation and kill the process.</param>
+    /// <returns>A task that represents the asynchronous wait operation. The task result contains the exit status of the process.
+    /// If the process was killed due to cancellation, the Canceled property will be true.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
+    /// <remarks>
+    /// When the cancellation token is canceled, this method kills the process and waits for it to exit.
+    /// The returned exit status will have the <see cref="ProcessExitStatus.Canceled"/> property set to true if the process was killed.
+    /// If the cancellation token cannot be canceled (e.g., <see cref="CancellationToken.None"/>), this method behaves identically
+    /// to <see cref="WaitForExitAsync"/> and will wait indefinitely for the process to exit.
+    /// </remarks>
+    public Task<ProcessExitStatus> WaitForExitOrKillOnCancellationAsync(CancellationToken cancellationToken)
+    {
+        Validate();
+
+        return WaitForExitOrKillOnCancellationAsyncCore(cancellationToken);
     }
 
     /// <summary>

@@ -194,6 +194,30 @@ public partial class SafeChildProcessHandle
 
     private async Task<ProcessExitStatus> WaitForExitAsyncCore(CancellationToken cancellationToken)
     {
+        // Treat the exit pipe fd as a socket and perform async read
+        // When the child process exits, all its file descriptors are closed,
+        // including the write end of the exit pipe. This will cause the read
+        // to return 0 bytes (orderly shutdown).
+        using SafeSocketHandle safeSocket = new(_exitPipeFd, ownsHandle: false);
+        using Socket socket = new(safeSocket);
+
+        // Returns number of bytes read, 0 means orderly shutdown by peer (pipe closed).
+        int bytesRead = await socket.ReceiveAsync(s_exitPipeBuffer, SocketFlags.None, cancellationToken).ConfigureAwait(false);
+        
+        // When the child process exits, the write end of the pipe is closed,
+        // which should result in 0 bytes read (orderly shutdown).
+        if (bytesRead != 0)
+        {
+            throw new InvalidOperationException($"Unexpected data read from exit pipe: {bytesRead} byte(s). Expected 0 bytes (pipe closure).");
+        }
+
+        // The process has exited, now retrieve the exit status
+        ProcessExitStatus status = WaitForExitCore();
+        return new(status.ExitCode, false, status.Signal);
+    }
+
+    private async Task<ProcessExitStatus> WaitForExitOrKillOnCancellationAsyncCore(CancellationToken cancellationToken)
+    {
         StrongBox<bool> wasKilledBox = new(false);
         
         // Register cancellation to kill the process
