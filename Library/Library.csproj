@@ -7,32 +7,53 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>System.TBA</RootNamespace>
     <LangVersion>preview</LangVersion>
+    
+    <!-- NuGet Package Properties -->
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageId>ProcessPlayground.Library</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Adam Sitnik</Authors>
+    <Company>Adam Sitnik</Company>
+    <Description>A playground for exploring new APIs for running command-line processes in .NET with cross-platform support.</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/adamsitnik/ProcessPlayground</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/adamsitnik/ProcessPlayground</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>process;command-line;cross-platform</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+  
+  <!-- Package README -->
+  <ItemGroup>
+    <None Include="../README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 
-  <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
+  <!-- Define constants based on RuntimeIdentifier or build OS -->
+  <PropertyGroup Condition="('$(RuntimeIdentifier)' != '' AND $(RuntimeIdentifier.StartsWith('win'))) OR ('$(RuntimeIdentifier)' == '' AND '$(OS)' == 'Windows_NT')">
     <DefineConstants>$(DefineConstants);WINDOWS</DefineConstants>
   </PropertyGroup>
 
-  <PropertyGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+  <PropertyGroup Condition="('$(RuntimeIdentifier)' != '' AND $(RuntimeIdentifier.StartsWith('linux'))) OR ('$(RuntimeIdentifier)' == '' AND $([MSBuild]::IsOSPlatform('Linux')))">
     <DefineConstants>$(DefineConstants);LINUX</DefineConstants>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+  <!-- Conditional compilation based on RuntimeIdentifier or build OS -->
+  <ItemGroup Condition="('$(RuntimeIdentifier)' != '' AND $(RuntimeIdentifier.StartsWith('win'))) OR ('$(RuntimeIdentifier)' == '' AND '$(OS)' == 'Windows_NT')">
     <Compile Remove="Copied/Unix/*.cs" />
     <Compile Remove="**/*.Unix.cs" />
+    <Compile Remove="Multiplexing.Darwin.cs" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
+  <ItemGroup Condition="('$(RuntimeIdentifier)' != '' AND $(RuntimeIdentifier.StartsWith('linux'))) OR ('$(RuntimeIdentifier)' == '' AND $([MSBuild]::IsOSPlatform('Linux')))">
     <Compile Remove="Copied/Windows/*.cs" />
     <Compile Remove="**/*.Windows.cs" />
-  </ItemGroup>
-
-  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
-    <Compile Remove="Multiplexing.Unix.cs" />
-  </ItemGroup>
-
-  <ItemGroup Condition="!$([MSBuild]::IsOSPlatform('OSX'))">
     <Compile Remove="Multiplexing.Darwin.cs" />
+  </ItemGroup>
+
+  <ItemGroup Condition="('$(RuntimeIdentifier)' != '' AND $(RuntimeIdentifier.StartsWith('osx'))) OR ('$(RuntimeIdentifier)' == '' AND $([MSBuild]::IsOSPlatform('OSX')))">
+    <Compile Remove="Copied/Windows/*.cs" />
+    <Compile Remove="**/*.Windows.cs" />
+    <Compile Remove="Multiplexing.Unix.cs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,30 +63,84 @@
     <None Include="*.cs" />
   </ItemGroup>
 
-  <!-- Build native library on non-Windows platforms before C# compilation -->
-  <Target Name="BuildNativeLibrary" BeforeTargets="BeforeBuild" Condition="'$(OS)' != 'Windows_NT'">
-    <Message Text="Building native PAL library with CMake..." Importance="high" />
+  <!-- Build native library on Unix platforms before C# compilation -->
+  <Target Name="BuildNativeLibrary" BeforeTargets="BeforeBuild" Condition="'$(OS)' != 'Windows_NT' AND '$(SkipNativeBuild)' != 'true'">
+    <Message Text="Building native PAL library with CMake for $(RuntimeIdentifier)..." Importance="high" />
     <Exec Command="cmake -S native -B native/build" WorkingDirectory="$(MSBuildProjectDirectory)" />
     <Exec Command="cmake --build native/build" WorkingDirectory="$(MSBuildProjectDirectory)" />
   </Target>
 
-  <!-- Copy native library to output directory on non-Windows platforms -->
-  <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
-    <Content Include="native\build\libpal_process.so" Condition="Exists('native\build\libpal_process.so')">
+  <!-- Include native libraries in NuGet package for Linux -->
+  <ItemGroup Condition="'$(RuntimeIdentifier)' != '' AND $(RuntimeIdentifier.StartsWith('linux'))">
+    <Content Include="native/build/libpal_process.so" Condition="Exists('native/build/libpal_process.so')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>libpal_process.so</Link>
+      <PackagePath>runtimes/linux-x64/native</PackagePath>
+      <Pack>true</Pack>
     </Content>
-    <Content Include="native\build\libpal_process.dylib" Condition="Exists('native\build\libpal_process.dylib')">
+  </ItemGroup>
+
+  <!-- Include native libraries in NuGet package for macOS -->
+  <ItemGroup Condition="'$(RuntimeIdentifier)' != '' AND $(RuntimeIdentifier.StartsWith('osx'))">
+    <Content Include="native/build/libpal_process.dylib" Condition="Exists('native/build/libpal_process.dylib')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>libpal_process.dylib</Link>
+      <PackagePath>runtimes/osx-x64/native</PackagePath>
+      <Pack>true</Pack>
     </Content>
   </ItemGroup>
 
   <!-- Clean native library -->
-  <Target Name="CleanNativeLibrary" AfterTargets="Clean" Condition="'$(OS)' != 'Windows_NT'">
+  <Target Name="CleanNativeLibrary" AfterTargets="Clean" Condition="'$(OS)' != 'Windows_NT' AND '$(SkipNativeBuild)' != 'true'">
     <Message Text="Cleaning native PAL library..." Importance="high" />
     <RemoveDir Directories="native/build" />
     <Delete Files="native/libpal_process.so;native/libpal_process.dylib" />
+  </Target>
+
+  <!-- Include runtime-specific assemblies and native libraries in the NuGet package -->
+  <Target Name="IncludeRuntimeSpecificFiles" BeforeTargets="_GetPackageFiles" Condition="'$(NoBuild)' == 'true'">
+    <Message Text="Including runtime-specific files in NuGet package..." Importance="high" />
+    
+    <!-- Create items for runtime-specific assemblies and native libraries -->
+    <ItemGroup>
+      <!-- Windows assemblies -->
+      <None Include="bin\$(Configuration)\$(TargetFramework)\win-x64\$(AssemblyName).dll" 
+            Pack="true" 
+            PackagePath="runtimes/win-x64/lib/$(TargetFramework)/"
+            Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-x64\$(AssemblyName).dll')" />
+      <None Include="bin\$(Configuration)\$(TargetFramework)\win-x64\$(AssemblyName).pdb" 
+            Pack="true" 
+            PackagePath="runtimes/win-x64/lib/$(TargetFramework)/"
+            Condition="Exists('bin\$(Configuration)\$(TargetFramework)\win-x64\$(AssemblyName).pdb')" />
+      
+      <!-- Linux assemblies -->
+      <None Include="bin\$(Configuration)\$(TargetFramework)\linux-x64\$(AssemblyName).dll" 
+            Pack="true" 
+            PackagePath="runtimes/linux-x64/lib/$(TargetFramework)/"
+            Condition="Exists('bin\$(Configuration)\$(TargetFramework)\linux-x64\$(AssemblyName).dll')" />
+      <None Include="bin\$(Configuration)\$(TargetFramework)\linux-x64\$(AssemblyName).pdb" 
+            Pack="true" 
+            PackagePath="runtimes/linux-x64/lib/$(TargetFramework)/"
+            Condition="Exists('bin\$(Configuration)\$(TargetFramework)\linux-x64\$(AssemblyName).pdb')" />
+      <None Include="native\build\libpal_process.so" 
+            Pack="true" 
+            PackagePath="runtimes/linux-x64/native/"
+            Condition="Exists('native\build\libpal_process.so')" />
+      
+      <!-- macOS assemblies -->
+      <None Include="bin\$(Configuration)\$(TargetFramework)\osx-x64\$(AssemblyName).dll" 
+            Pack="true" 
+            PackagePath="runtimes/osx-x64/lib/$(TargetFramework)/"
+            Condition="Exists('bin\$(Configuration)\$(TargetFramework)\osx-x64\$(AssemblyName).dll')" />
+      <None Include="bin\$(Configuration)\$(TargetFramework)\osx-x64\$(AssemblyName).pdb" 
+            Pack="true" 
+            PackagePath="runtimes/osx-x64/lib/$(TargetFramework)/"
+            Condition="Exists('bin\$(Configuration)\$(TargetFramework)\osx-x64\$(AssemblyName).pdb')" />
+      <None Include="native\build\libpal_process.dylib" 
+            Pack="true" 
+            PackagePath="runtimes/osx-x64/native/"
+            Condition="Exists('native\build\libpal_process.dylib')" />
+    </ItemGroup>
   </Target>
 
 </Project>
