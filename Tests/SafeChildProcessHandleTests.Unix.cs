@@ -21,7 +21,7 @@ public partial class SafeChildProcessHandleTests
         processHandle.SendSignal(ProcessSignal.SIGTERM);
 
         // Process should exit after receiving SIGTERM
-        var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
 
         Assert.Equal(ProcessSignal.SIGTERM, exitStatus.Signal);
         Assert.Equal(128 + (int)ProcessSignal.SIGTERM, exitStatus.ExitCode);
@@ -39,7 +39,7 @@ public partial class SafeChildProcessHandleTests
         processHandle.SendSignal(ProcessSignal.SIGINT);
 
         // Process should exit after receiving SIGINT
-        var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
 
         Assert.Equal(ProcessSignal.SIGINT, exitStatus.Signal);
         Assert.Equal(128 + (int)ProcessSignal.SIGINT, exitStatus.ExitCode);

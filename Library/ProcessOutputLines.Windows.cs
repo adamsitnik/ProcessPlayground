@@ -182,7 +182,10 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             // We optimize for hot path: process already exited and exit code is available.
             if (!processHandle.TryGetExitStatus(canceled: false, out ProcessExitStatus exitStatus))
             {
-                exitStatus = processHandle.WaitForExit(timeoutHelper.GetRemainingOrThrow());
+                TimeSpan remaining = timeoutHelper.GetRemainingOrThrow();
+                exitStatus = remaining == Timeout.InfiniteTimeSpan
+                    ? processHandle.WaitForExit()
+                    : processHandle.WaitForExitOrKillOnTimeout(remaining);
             }
             _exitStatus = exitStatus;
             yield break;

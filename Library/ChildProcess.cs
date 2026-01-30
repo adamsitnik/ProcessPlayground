@@ -26,7 +26,9 @@ public static partial class ChildProcess
         using SafeFileHandle errorHandle = Console.OpenStandardErrorHandle();
 
         using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return procHandle.WaitForExit(timeout);
+        return timeout.HasValue 
+            ? procHandle.WaitForExitOrKillOnTimeout(timeout.Value)
+            : procHandle.WaitForExit();
     }
 
     /// <summary>
@@ -82,7 +84,9 @@ public static partial class ChildProcess
         using SafeFileHandle nullHandle = File.OpenNullFileHandle();
 
         using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, nullHandle, nullHandle, nullHandle);
-        return procHandle.WaitForExit(timeout);
+        return timeout.HasValue 
+            ? procHandle.WaitForExitOrKillOnTimeout(timeout.Value)
+            : procHandle.WaitForExit();
     }
 
     /// <summary>
@@ -123,7 +127,9 @@ public static partial class ChildProcess
         using SafeFileHandle inputHandle = handles.input, outputHandle = handles.output, errorHandle = handles.error;
 
         using SafeChildProcessHandle procHandle = SafeChildProcessHandle.Start(options, inputHandle, outputHandle, errorHandle);
-        return procHandle.WaitForExit(timeout);
+        return timeout.HasValue 
+            ? procHandle.WaitForExitOrKillOnTimeout(timeout.Value)
+            : procHandle.WaitForExit();
     }
 
     /// <summary>
@@ -197,7 +203,10 @@ public static partial class ChildProcess
                 Multiplexing.ReadProcessOutputCore(processHandle, readStdOut, readStdErr, timeoutHelper,
                     ref outputBytesRead, ref errorBytesRead, ref outputBuffer, ref errorBuffer);
 
-                var exitStatus = processHandle.WaitForExit(timeoutHelper.GetRemaining());
+                TimeSpan remaining = timeoutHelper.GetRemaining();
+                var exitStatus = remaining == Timeout.InfiniteTimeSpan
+                    ? processHandle.WaitForExit()
+                    : processHandle.WaitForExitOrKillOnTimeout(remaining);
 
                 // Instead of decoding on the fly, we decode once at the end.
                 encoding ??= Encoding.UTF8;
@@ -346,7 +355,10 @@ public static partial class ChildProcess
             {
                 Multiplexing.ReadCombinedOutputCore(read, processHandle, timeoutHelper, ref totalBytesRead, ref buffer);
 
-                var exitStatus = processHandle.WaitForExit(timeoutHelper.GetRemaining());
+                TimeSpan remaining = timeoutHelper.GetRemaining();
+                var exitStatus = remaining == Timeout.InfiniteTimeSpan
+                    ? processHandle.WaitForExit()
+                    : processHandle.WaitForExitOrKillOnTimeout(remaining);
 
                 byte[] resultBuffer = BufferHelper.CreateCopy(buffer, totalBytesRead);
                 return new(exitStatus, resultBuffer, processHandle.ProcessId);

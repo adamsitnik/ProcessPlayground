@@ -112,7 +112,7 @@ public class CreateSuspendedTests
         processHandle.Kill();
 
         // Wait for it to be killed
-        var exitStatus = processHandle.WaitForExit(TimeSpan.FromSeconds(5));
+        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
 
         Assert.False(exitStatus.Canceled);
 
@@ -131,7 +131,9 @@ public class CreateSuspendedTests
 
     private static void EnsureProcessCompletedSuccessfully(SafeChildProcessHandle processHandle, TimeSpan? timeout = default)
     {
-        var exitStatus = processHandle.WaitForExit(timeout);
+        var exitStatus = timeout.HasValue
+            ? processHandle.WaitForExitOrKillOnTimeout(timeout.Value)
+            : processHandle.WaitForExit();
 
         Assert.Equal(0, exitStatus.ExitCode);
         Assert.False(exitStatus.Canceled);
