@@ -863,12 +863,26 @@ int try_wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* o
 // -1 is a valid exit code, so to distinguish between a normal exit code and an error, we return 0 on success and -1 on error
 int wait_for_exit_or_kill_on_timeout(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_exitCode, int* out_signal, int* out_timeout) {
     int ret = try_wait_for_exit(pidfd, pid, exitPipeFd, timeout_ms, out_exitCode, out_signal);
-
-    if (ret == 1) {
-        *out_timeout = 1;
-        send_signal(pidfd, pid, map_native_signal_to_managed(SIGKILL));
-        return wait_for_exit_and_reap(pidfd, pid, out_exitCode, out_signal);
+    if (ret != 1) {
+        return ret; // Either process exited (0) or error occurred (-1)
     }
 
-    return ret;
+    *out_timeout = 1;
+    // In the future, we could implement a graceful termination attempt here (e.g., send SIGTERM first)
+    // Followed, if still running, by SIGKILL after a short delay.
+    ret = send_signal(pidfd, pid, map_native_signal_to_managed(SIGKILL));
+
+    if (ret == -1)
+    {
+        if (errno == ESRCH) // Process does not exist (same for kill and pidfd_send_signal)
+        {
+            *out_timeout = 0; // Process already exited between the timeout and the kill attempt
+        }
+        else
+        {
+            return -1; // Error sending kill signal
+        }
+    }
+
+    return wait_for_exit_and_reap(pidfd, pid, out_exitCode, out_signal);
 }
