@@ -148,11 +148,33 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
         return WaitForExitOrKillOnTimeoutCore(GetTimeoutInMilliseconds(timeout));
     }
 
+    /// <summary>
+    /// Waits asynchronously for the process to exit and reports the exit status.
+    /// </summary>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the wait operation.</param>
+    /// <returns>A task that represents the asynchronous wait operation. The task result contains the exit status of the process.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
+    /// <exception cref="OperationCanceledException">Thrown when the cancellation token is canceled.</exception>
     public Task<ProcessExitStatus> WaitForExitAsync(CancellationToken cancellationToken = default)
     {
         Validate();
 
         return WaitForExitAsyncCore(cancellationToken);
+    }
+
+    /// <summary>
+    /// Waits asynchronously for the process to exit and reports the exit status.
+    /// When cancelled, kills the process and then waits for exit without timeout.
+    /// </summary>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the wait operation and kill the process.</param>
+    /// <returns>A task that represents the asynchronous wait operation. The task result contains the exit status of the process.
+    /// If the process was killed due to cancellation, the Canceled property will be true.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
+    public Task<ProcessExitStatus> WaitForExitOrKillOnCancellationAsync(CancellationToken cancellationToken)
+    {
+        Validate();
+
+        return WaitForExitOrKillOnCancellationAsyncCore(cancellationToken);
     }
 
     /// <summary>
