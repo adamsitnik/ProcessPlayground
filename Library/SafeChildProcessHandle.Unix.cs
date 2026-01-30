@@ -154,47 +154,42 @@ public partial class SafeChildProcessHandle
 
     private ProcessExitStatus WaitForExitCore()
     {
-        if (wait_for_exit(this, ProcessId, _exitPipeFd, Timeout.Infinite, out int exitCode, out int rawSignal, out int hasTimedout) != -1)
+        switch (wait_for_exit_and_reap(this, ProcessId, out int exitCode, out int rawSignal))
         {
-            ProcessSignal? signal = rawSignal != 0 ? (ProcessSignal)rawSignal : null;
-            return new(exitCode, false, signal);
+            case -1:
+                int errno = Marshal.GetLastPInvokeError();
+                throw new Win32Exception(errno, $"wait_for_exit_and_reap() failed with (errno={errno})");
+            default:
+                return new(exitCode, false, rawSignal != 0 ? (ProcessSignal)rawSignal : null);
         }
-
-        int errno = Marshal.GetLastPInvokeError();
-        throw new Win32Exception(errno, $"wait_for_exit() failed with (errno={errno})");
     }
 
     private bool TryWaitForExitCore(int milliseconds, out ProcessExitStatus exitStatus)
     {
-        if (try_wait_for_exit_no_kill(this, ProcessId, _exitPipeFd, milliseconds, out int exitCode, out int rawSignal, out int hasTimedout) != -1)
+        switch (try_wait_for_exit(this, ProcessId, _exitPipeFd, milliseconds, out int exitCode, out int rawSignal, out int hasTimedout))
         {
-            ProcessSignal? signal = rawSignal != 0 ? (ProcessSignal)rawSignal : null;
-            exitStatus = new(exitCode, false, signal);
-            return true;
+            case -1:
+                int errno = Marshal.GetLastPInvokeError();
+                throw new Win32Exception(errno, $"try_wait_for_exit() failed with (errno={errno})");
+            case 1: // timeout
+                exitStatus = default;
+                return false;
+            default:
+                exitStatus = new(exitCode, false, rawSignal != 0 ? (ProcessSignal)rawSignal : null);
+                return true;
         }
-
-        int errno = Marshal.GetLastPInvokeError();
-        
-        // Check if it was just a timeout (not a real error)
-        if (hasTimedout == 1)
-        {
-            exitStatus = default;
-            return false;
-        }
-        
-        throw new Win32Exception(errno, $"try_wait_for_exit_no_kill() failed with (errno={errno})");
     }
 
     private ProcessExitStatus WaitForExitOrKillOnTimeoutCore(int milliseconds)
     {
-        if (wait_for_exit(this, ProcessId, _exitPipeFd, milliseconds, out int exitCode, out int rawSignal, out int hasTimedout) != -1)
+        switch (wait_for_exit_or_kill_on_timeout(this, ProcessId, _exitPipeFd, milliseconds, out int exitCode, out int rawSignal, out int hasTimedout))
         {
-            ProcessSignal? signal = rawSignal != 0 ? (ProcessSignal)rawSignal : null;
-            return new(exitCode, hasTimedout == 1, signal);
+            case -1:
+                int errno = Marshal.GetLastPInvokeError();
+                throw new Win32Exception(errno, $"wait_for_exit_or_kill_on_timeout() failed with (errno={errno})");
+            default:
+                return new(exitCode, hasTimedout == 1, rawSignal != 0 ? (ProcessSignal)rawSignal : null);
         }
-
-        int errno = Marshal.GetLastPInvokeError();
-        throw new Win32Exception(errno, $"wait_for_exit() failed with (errno={errno})");
     }
 
     private async Task<ProcessExitStatus> WaitForExitAsyncCore(CancellationToken cancellationToken)
@@ -318,10 +313,13 @@ public partial class SafeChildProcessHandle
     private static partial int send_signal(SafeChildProcessHandle pidfd, int pid, ProcessSignal managed_signal);
 
     [LibraryImport("pal_process", SetLastError = true)]
-    private static partial int wait_for_exit(SafeChildProcessHandle pidfd, int pid, int exitPipeFd, int timeout_ms, out int exitCode, out int signal, out int hasTimedout);
+    private static partial int wait_for_exit_and_reap(SafeChildProcessHandle pidfd, int pid, out int exitCode, out int signal);
 
     [LibraryImport("pal_process", SetLastError = true)]
-    private static partial int try_wait_for_exit_no_kill(SafeChildProcessHandle pidfd, int pid, int exitPipeFd, int timeout_ms, out int exitCode, out int signal, out int hasTimedout);
+    private static partial int try_wait_for_exit(SafeChildProcessHandle pidfd, int pid, int exitPipeFd, int timeout_ms, out int exitCode, out int signal, out int hasTimedout);
+
+    [LibraryImport("pal_process", SetLastError = true)]
+    private static partial int wait_for_exit_or_kill_on_timeout(SafeChildProcessHandle pidfd, int pid, int exitPipeFd, int timeout_ms, out int exitCode, out int signal, out int hasTimedout);
 
     [LibraryImport("pal_process", SetLastError = true)]
     private static partial int try_get_exit_code(SafeChildProcessHandle pidfd, int pid, out int exitCode, out int signal);

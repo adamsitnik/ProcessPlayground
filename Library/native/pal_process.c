@@ -696,7 +696,8 @@ int send_signal(int pidfd, int pid, int managed_signal) {
         errno = EINVAL;
         return -1;
     }
-    
+
+    // EINTR is not listed for both kill and __NR_pidfd_send_signal.
 #ifdef HAVE_PIDFD_SEND_SIGNAL
     // On systems with pidfd_send_signal, prefer it if we have a valid pidfd
     if (pidfd >= 0) {
@@ -770,70 +771,8 @@ int try_get_exit_code(int pidfd, int pid, int* out_exitCode, int* out_signal) {
 }
 
 // -1 is a valid exit code, so to distinguish between a normal exit code and an error, we return 0 on success and -1 on error
-int wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_exitCode, int* out_signal, int* out_timeout) {
+int wait_for_exit_and_reap(int pidfd, int pid, int* out_exitCode, int* out_signal) {
     int ret;
-    if (timeout_ms >= 0) {
-#if defined(HAVE_KQUEUE) || defined(HAVE_KQUEUEX)
-        // macOS and FreeBSD have kqueue which can monitor process exit
-        int queue = create_kqueue_cloexec();
-        if (queue == -1) {
-            return -1;
-        }
-
-        struct kevent change_list = { 0 };
-        change_list.ident = pid;
-        change_list.filter = EVFILT_PROC;
-        change_list.fflags = NOTE_EXIT;
-        change_list.flags = EV_ADD | EV_CLEAR;
-
-        struct kevent event_list = { 0 };
-
-        struct timespec timeout = { 0 };
-        timeout.tv_sec = timeout_ms / 1000;
-        timeout.tv_nsec = (timeout_ms % 1000) * 1000 * 1000;
-
-        while ((ret = kevent(queue, &change_list, 1, &event_list, 1, &timeout)) < 0 && errno == EINTR);
-
-        if (ret < 0) {
-            int saved_errno = errno;
-            close(queue);
-
-            // If the target process does not exist at registration time kevent() returns -1 and errno == ESRCH.
-            if (errno == ESRCH && try_get_exit_code(pidfd, pid, out_exitCode, out_signal) != -1)
-            {
-                return 0;
-            }
-            errno = saved_errno;
-            return -1;
-        }
-
-        close(queue);
-#else
-        struct pollfd pfd = { 0 };
-#ifdef HAVE_PIDFD
-        //  Wait on the process descriptor with poll
-        pfd.fd = pidfd;
-#else
-        // Wait for the child to finish with a timeout by monitoring exit pipe for EOF.
-        pfd.fd = exitPipeFd;
-#endif
-        // To poll a process descriptor, Linux needs POLLIN and FreeBSD needs POLLHUP.
-        // There are no side-effects to use both
-        pfd.events = POLLHUP | POLLIN;
-
-        while ((ret = poll(&pfd, 1, timeout_ms)) < 0 && errno == EINTR);
-
-        if (ret == -1) { // Error
-            return -1;
-        }
-#endif
-        // Both poll implementations fall through here on timeout with 0
-        if (ret == 0) {
-            *out_timeout = 1;
-            send_signal(pidfd, pid, map_native_signal_to_managed(SIGKILL));
-        }
-    }
-
 #ifdef HAVE_PIDFD
     siginfo_t info;
     memset(&info, 0, sizeof(info));
@@ -854,12 +793,9 @@ int wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_e
 }
 
 // Try to wait for exit with timeout, but don't kill the process if timeout occurs
-// Returns 0 on success (process exited), -1 on error or timeout
-// On timeout, errno is not modified and out_timeout is set to 1
-int try_wait_for_exit_no_kill(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_exitCode, int* out_signal, int* out_timeout) {
-    *out_timeout = 0;
+// Returns -1 on error, 1 on timeout, or 0 if process exited.
+int try_wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_exitCode, int* out_signal) {
     int ret;
-    
 #if defined(HAVE_KQUEUE) || defined(HAVE_KQUEUEX)
     // macOS and FreeBSD have kqueue which can monitor process exit
     int queue = create_kqueue_cloexec();
@@ -915,28 +851,24 @@ int try_wait_for_exit_no_kill(int pidfd, int pid, int exitPipeFd, int timeout_ms
     }
 #endif
 
-    // Check if timeout occurred
     if (ret == 0) {
-        *out_timeout = 1;
-        return -1; // Indicate timeout (not an error, but process didn't exit)
+        return 1; // Indicate timeout (not an error, but process didn't exit)
     }
 
     // Process exited - collect exit status
-#ifdef HAVE_PIDFD
-    siginfo_t info;
-    memset(&info, 0, sizeof(info));
-    while ((ret = waitid(P_PIDFD, pidfd, &info, WEXITED)) < 0 && errno == EINTR);
+    return wait_for_exit_and_reap(pidfd, pid, out_exitCode, out_signal);
+}
 
-    if (ret != -1) {
-        return map_status(&info, out_exitCode, out_signal);
-    }
-#else
-    int status;
-    while ((ret = waitpid(pid, &status, 0)) < 0 && errno == EINTR);
 
-    if (ret != -1) {
-        return map_status(status, out_exitCode, out_signal);
+// -1 is a valid exit code, so to distinguish between a normal exit code and an error, we return 0 on success and -1 on error
+int wait_for_exit_or_kill_on_timeout(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_exitCode, int* out_signal, int* out_timeout) {
+    int ret = try_wait_for_exit(pidfd, pid, exitPipeFd, timeout_ms, out_exitCode, out_signal);
+
+    if (ret == 1) {
+        *out_timeout = 1;
+        send_signal(pidfd, pid, map_native_signal_to_managed(SIGKILL));
+        return wait_for_exit_and_reap(pidfd, pid, out_exitCode, out_signal);
     }
-#endif
-    return -1;
+
+    return ret;
 }
