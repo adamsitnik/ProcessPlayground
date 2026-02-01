@@ -290,7 +290,7 @@ public partial class SafeChildProcessHandle
             // When entireProcessGroup is true, pass an invalid pidfd (-1) and negative pid
             // The native send_signal will skip pidfd_send_signal and use kill(-ProcessId, signal)
             // which sends the signal to all processes in the process group
-            result = send_signal_to_process_group(-1, -ProcessId, signal);
+            result = send_signal_raw(-1, -ProcessId, signal);
         }
         else
         {
@@ -347,8 +347,10 @@ public partial class SafeChildProcessHandle
     [LibraryImport("pal_process", SetLastError = true)]
     private static partial int send_signal(SafeChildProcessHandle pidfd, int pid, ProcessSignal managed_signal);
 
+    // Alternative entry point for send_signal that accepts raw int parameters instead of SafeChildProcessHandle
+    // Used when sending signals to process groups by passing -1 as pidfd and negative pid
     [LibraryImport("pal_process", EntryPoint = "send_signal", SetLastError = true)]
-    private static partial int send_signal_to_process_group(int pidfd, int pid, ProcessSignal managed_signal);
+    private static partial int send_signal_raw(int pidfd, int pid, ProcessSignal managed_signal);
 
     [LibraryImport("pal_process", SetLastError = true)]
     private static partial int wait_for_exit_and_reap(SafeChildProcessHandle pidfd, int pid, out int exitCode, out int signal);

@@ -118,6 +118,8 @@ public partial class SafeChildProcessHandleTests
         // 1. When false, only the parent process receives the signal (child continues running)
         // 2. When true, all processes in the process group receive the signal
         
+        const int MaxExpectedTerminationTimeMs = 300;
+        
         // Create a pipe to detect when the grandchild process exits
         File.CreatePipe(out SafeFileHandle pipeReadHandle, out SafeFileHandle pipeWriteHandle);
 
@@ -177,7 +179,8 @@ public partial class SafeChildProcessHandleTests
             
             // Verify the read completed (pipe closed due to grandchild termination)
             Assert.Equal(0, bytesRead);
-            Assert.True(stopwatch.ElapsedMilliseconds < 300, $"Grandchild should have been killed quickly, took {stopwatch.ElapsedMilliseconds}ms");
+            Assert.True(stopwatch.ElapsedMilliseconds < MaxExpectedTerminationTimeMs, 
+                $"Grandchild should have been killed quickly, took {stopwatch.ElapsedMilliseconds}ms");
         }
     }
 }
