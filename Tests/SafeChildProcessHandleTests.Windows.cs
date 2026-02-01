@@ -55,7 +55,7 @@ public partial class SafeChildProcessHandleTests
         processHandle.SendSignal(ProcessSignal.SIGQUIT);
 
         // Process should exit after receiving SIGQUIT
-        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
+        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(1));
 
         // On Windows, the process will be terminated
         Assert.NotEqual(0, exitStatus.ExitCode);
@@ -107,5 +107,6 @@ public partial class SafeChildProcessHandleTests
 
         ProcessOutput output = ChildProcess.CaptureOutput(options);
         Assert.Equal(0, output.ExitStatus.ExitCode);
+        Assert.Equal("test", output.StandardOutput.Trim());
     }
 }

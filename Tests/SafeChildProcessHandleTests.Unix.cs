@@ -104,9 +104,8 @@ public partial class SafeChildProcessHandleTests
 
         Assert.True(options.CreateNewProcessGroup);
 
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
-
-        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
-        Assert.Equal(0, exitStatus.ExitCode);
+        ProcessOutput output = ChildProcess.CaptureOutput(options);
+        Assert.Equal(0, output.ExitStatus.ExitCode);
+        Assert.Equal("test", output.StandardOutput.Trim());
     }
 }
