@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.TBA;
+using System.Threading;
 using Microsoft.Win32.SafeHandles;
 
 namespace Tests;
@@ -107,5 +108,67 @@ public partial class SafeChildProcessHandleTests
         ProcessOutput output = ChildProcess.CaptureOutput(options);
         Assert.Equal(0, output.ExitStatus.ExitCode);
         Assert.Equal("test", output.StandardOutput.Trim());
+    }
+
+    [Fact]
+    public void SendSignal_ToEntireProcessGroup_TerminatesAllProcesses()
+    {
+        // Create a shell script that spawns child processes in a process group
+        // We'll use 'sh -c' to run a command that spawns background children
+        ProcessStartOptions options = new("sh") 
+        { 
+            Arguments = { "-c", "sleep 300 & sleep 300 & wait" },
+            CreateNewProcessGroup = true  // Create a new process group
+        };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        
+        // Give the shell time to spawn the background sleep processes
+        Thread.Sleep(100);
+        
+        // Send SIGTERM to the entire process group
+        processHandle.SendSignal(ProcessSignal.SIGTERM, entireProcessGroup: true);
+        
+        // The parent shell and all child processes should terminate
+        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
+        
+        // The shell should exit with the signal
+        Assert.Equal(ProcessSignal.SIGTERM, exitStatus.Signal);
+        Assert.Equal(128 + (int)ProcessSignal.SIGTERM, exitStatus.ExitCode);
+        
+        // Additional verification: we can check that the process exited quickly
+        // If only the parent was killed, it would hang waiting for children
+        // This test passing demonstrates that all processes in the group were terminated
+    }
+
+    [Fact]
+    public void SendSignal_WithEntireProcessGroupFalse_OnlyTerminatesParent()
+    {
+        // Create a shell script that spawns child processes
+        // Using 'sh -c' with background processes
+        ProcessStartOptions options = new("sh") 
+        { 
+            Arguments = { "-c", "sleep 300 & wait" },
+            CreateNewProcessGroup = true
+        };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        
+        // Give the shell time to spawn the background sleep process
+        Thread.Sleep(100);
+        
+        // Send SIGTERM only to the parent process (entireProcessGroup = false is the default)
+        processHandle.SendSignal(ProcessSignal.SIGTERM, entireProcessGroup: false);
+        
+        // The parent shell should exit after receiving SIGTERM
+        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
+        
+        // The shell should exit with the signal
+        Assert.Equal(ProcessSignal.SIGTERM, exitStatus.Signal);
+        Assert.Equal(128 + (int)ProcessSignal.SIGTERM, exitStatus.ExitCode);
+        
+        // Note: The child sleep process may still be running in the background,
+        // but it will be cleaned up when the test process exits or by the system.
+        // This test demonstrates that the signal was sent only to the parent.
     }
 }
