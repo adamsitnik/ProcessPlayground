@@ -48,6 +48,21 @@ public sealed class ProcessStartOptions
     // New: User very often implement it on their own.
     public bool KillOnParentDeath { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether to create the process in a new process group.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Creating a new process group enables sending signals to the process (e.g., SIGINT, SIGQUIT) 
+    /// on Windows and provides process group isolation on all platforms.
+    /// </para>
+    /// <para>
+    /// On Unix systems, child processes in a new process group won't receive signals sent to the parent's 
+    /// process group, which can be useful for background processes that should continue running independently.
+    /// </para>
+    /// </remarks>
+    public bool CreateNewProcessGroup { get; set; }
+
     // Internal property to check if environment was explicitly set
     internal bool HasEnvironmentBeenAccessed => _envVars != null;
 

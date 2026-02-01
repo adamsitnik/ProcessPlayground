@@ -220,10 +220,14 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// </summary>
     /// <param name="signal">The signal to send.</param>
     /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
-    /// <exception cref="PlatformNotSupportedException">Thrown on Windows.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the signal value is not supported.</exception>
+    /// <exception cref="ArgumentException">Thrown when the signal is not supported on the current platform.</exception>
     /// <exception cref="Win32Exception">Thrown when the signal operation fails.</exception>
-    [UnsupportedOSPlatform("windows")]
+    /// <remarks>
+    /// On Windows, only SIGINT (mapped to CTRL_C_EVENT), SIGQUIT (mapped to CTRL_BREAK_EVENT), and SIGKILL are supported.
+    /// The process must have been started with <see cref="ProcessStartOptions.CreateNewProcessGroup"/> set to true for signals to work properly.
+    /// On Unix/Linux, all signals defined in ProcessSignal are supported.
+    /// </remarks>
     public void SendSignal(ProcessSignal signal)
     {
         if (!Enum.IsDefined(signal))

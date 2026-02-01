@@ -85,4 +85,27 @@ public partial class SafeChildProcessHandleTests
         // ESRCH error code is 3 on Unix systems
         Assert.Equal(3, exception.NativeErrorCode);
     }
+
+    [Fact]
+    public void CreateNewProcessGroup_DefaultsToFalse()
+    {
+        ProcessStartOptions options = new("test");
+        Assert.False(options.CreateNewProcessGroup);
+    }
+
+    [Fact]
+    public void CreateNewProcessGroup_CanBeSetToTrue()
+    {
+        ProcessStartOptions options = new("echo") 
+        { 
+            Arguments = { "test" },
+            CreateNewProcessGroup = true
+        };
+
+        Assert.True(options.CreateNewProcessGroup);
+
+        ProcessOutput output = ChildProcess.CaptureOutput(options);
+        Assert.Equal(0, output.ExitStatus.ExitCode);
+        Assert.Equal("test", output.StandardOutput.Trim());
+    }
 }

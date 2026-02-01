@@ -202,6 +202,7 @@ public partial class SafeChildProcessHandle
             int creationFlags = Interop.Kernel32.EXTENDED_STARTUPINFO_PRESENT;
             if (options.CreateNoWindow) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NO_WINDOW;
             if (createSuspended) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_SUSPENDED;
+            if (options.CreateNewProcessGroup) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NEW_PROCESS_GROUP;
 
             string? environmentBlock = null;
             if (options.HasEnvironmentBeenAccessed)
@@ -504,6 +505,41 @@ public partial class SafeChildProcessHandle
 
     private void SendSignalCore(ProcessSignal signal)
     {
-        throw new PlatformNotSupportedException("Sending signals is not supported on Windows.");
+        // SIGKILL is handled by calling KillCore directly
+        if (signal == ProcessSignal.SIGKILL)
+        {
+            KillCore(throwOnError: true);
+            return;
+        }
+
+        // Map ProcessSignal to Windows console control event
+        int ctrlEvent = signal switch
+        {
+            ProcessSignal.SIGINT => Interop.Kernel32.CTRL_C_EVENT,
+            ProcessSignal.SIGQUIT => Interop.Kernel32.CTRL_BREAK_EVENT,
+            _ => throw new ArgumentException($"Signal {signal} is not supported on Windows. Only SIGINT, SIGQUIT, and SIGKILL are supported.", nameof(signal))
+        };
+
+        // NOTE: GenerateConsoleCtrlEvent sends the event to all processes in the specified process group.
+        // For this to work properly, the process MUST have been started with CreateNewProcessGroup=true.
+        // If the process was not started with CREATE_NEW_PROCESS_GROUP, this will fail with ERROR_INVALID_PARAMETER
+        // or may send the signal to unintended processes.
+        // 
+        // When dwProcessGroupId is the ProcessId and the process was created with CREATE_NEW_PROCESS_GROUP,
+        // the signal is sent to all processes in that group (with the process as the group leader).
+        if (!Interop.Kernel32.GenerateConsoleCtrlEvent(ctrlEvent, ProcessId))
+        {
+            int error = Marshal.GetLastPInvokeError();
+            
+            // ERROR_INVALID_PARAMETER (87) typically means the process group doesn't exist or is invalid
+            if (error == Interop.Errors.ERROR_INVALID_PARAMETER)
+            {
+                throw new Win32Exception(error, 
+                    $"Failed to send signal {signal}. The process may not have been started with CreateNewProcessGroup=true. " +
+                    $"GenerateConsoleCtrlEvent requires the target process to be in a separate process group.");
+            }
+            
+            throw new Win32Exception(error, $"Failed to send signal {signal} (GenerateConsoleCtrlEvent failed with error {error})");
+        }
     }
 }

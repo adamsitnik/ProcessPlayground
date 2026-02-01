@@ -143,6 +143,7 @@ int create_kqueue_cloexec(void) {
 // If kill_on_parent_death is non-zero, the child process will be killed when the parent dies
 //   Note: On macOS with posix_spawn, kill_on_parent_death is not supported and will be ignored
 // If create_suspended is non-zero, the child process will be created in a suspended state (stopped)
+// If create_new_process_group is non-zero, the child process will be created in a new process group
 // If inherited_handles is not NULL and inherited_handles_count > 0, the specified file descriptors will be inherited
 int spawn_process(
     const char* path,
@@ -157,6 +158,7 @@ int spawn_process(
     int* out_exit_pipe_fd,
     int kill_on_parent_death,
     int create_suspended,
+    int create_new_process_group,
     const int* inherited_handles,
     int inherited_handles_count)
 {
@@ -200,6 +202,10 @@ int spawn_process(
         flags |= POSIX_SPAWN_START_SUSPENDED;
     }
 #endif
+    // If create_new_process_group is requested, add the POSIX_SPAWN_SETPGROUP flag
+    if (create_new_process_group) {
+        flags |= POSIX_SPAWN_SETPGROUP;
+    }
     if ((result = posix_spawnattr_setflags(&attr, flags)) != 0) {
         int saved_errno = result;
         posix_spawnattr_destroy(&attr);
@@ -207,6 +213,20 @@ int spawn_process(
         close(exit_pipe[1]);
         errno = saved_errno;
         return -1;
+    }
+    
+    // If create_new_process_group is set, configure the process group ID to 0
+    // which means the child will become the leader of a new process group
+    if (create_new_process_group) {
+        // posix_spawnattr_setpgroup with pgid=0 makes the child the leader of a new process group
+        if ((result = posix_spawnattr_setpgroup(&attr, 0)) != 0) {
+            int saved_errno = result;
+            posix_spawnattr_destroy(&attr);
+            close(exit_pipe[0]);
+            close(exit_pipe[1]);
+            errno = saved_errno;
+            return -1;
+        }
     }
     
     // Reset all signal handlers to default
@@ -424,6 +444,15 @@ int spawn_process(
         
         // Restore signal mask immediately
         pthread_sigmask(SIG_SETMASK, &old_signals, NULL);
+        
+        // If create_new_process_group is enabled, create a new process group
+        // setpgid(0, 0) sets the process group ID of the calling process to its own PID
+        // making it the leader of a new process group
+        if (create_new_process_group) {
+            if (setpgid(0, 0) == -1) {
+                write_errno_and_exit(wait_pipe[1], errno);
+            }
+        }
         
         // If kill_on_parent_death is enabled, set up parent death signal
         if (kill_on_parent_death) {
