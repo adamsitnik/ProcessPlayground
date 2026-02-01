@@ -70,5 +70,11 @@ internal static partial class Interop
         internal static
         partial
         bool SetInformationJobObject(IntPtr hJob, JOBOBJECTINFOCLASS JobObjectInfoClass, ref JOBOBJECT_EXTENDED_LIMIT_INFORMATION lpJobObjectInfo, uint cbJobObjectInfoLength);
+
+        [LibraryImport(Libraries.Kernel32, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static
+        partial
+        bool TerminateJobObject(IntPtr hJob, uint uExitCode);
     }
 }

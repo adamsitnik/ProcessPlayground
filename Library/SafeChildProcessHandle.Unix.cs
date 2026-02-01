@@ -258,9 +258,12 @@ public partial class SafeChildProcessHandle
         return new(status.ExitCode, wasKilledBox.Value, status.Signal);
     }
 
-    internal bool KillCore(bool throwOnError)
+    internal bool KillCore(bool throwOnError, bool entireProcessGroup = false)
     {
-        int result = send_signal((int)this.handle, ProcessId, ProcessSignal.SIGKILL);
+        // If entireProcessGroup is true, send to -pid (negative pid), don't use pidfd.
+        int pidfd = entireProcessGroup ? -1 : (int)this.handle;
+        int pid = entireProcessGroup ? -ProcessId : ProcessId;
+        int result = send_signal(pidfd, pid, ProcessSignal.SIGKILL);
         if (result == 0)
         {
             return true;
