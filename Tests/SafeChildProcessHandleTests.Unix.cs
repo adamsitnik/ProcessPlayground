@@ -192,6 +192,7 @@ public partial class SafeChildProcessHandleTests
         // 2. When true, all processes in the process group are killed
         
         const int MaxExpectedTerminationTimeMs = 300;
+        const int ProcessStartupDelayMs = 100; // Time to allow shell to spawn background process
         
         // Create a pipe to detect when the grandchild process exits
         File.CreatePipe(out SafeFileHandle pipeReadHandle, out SafeFileHandle pipeWriteHandle);
@@ -214,7 +215,7 @@ public partial class SafeChildProcessHandleTests
             using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
             
             // Give the shell time to spawn the background sleep process
-            Thread.Sleep(100);
+            Thread.Sleep(ProcessStartupDelayMs);
             
             // Close the parent's write handle - now only the shell and grandchild hold it
             pipeWriteHandle.Dispose();

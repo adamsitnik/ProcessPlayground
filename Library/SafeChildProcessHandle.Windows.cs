@@ -259,7 +259,7 @@ public partial class SafeChildProcessHandle
                         Interop.Kernel32.CloseHandle(processInfo.hProcess);
                         if (processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
                             Interop.Kernel32.CloseHandle(processInfo.hThread);
-                        throw new Win32Exception(error, "Failed to create job object for CreateNewProcessGroup");
+                        throw new Win32Exception(error, "Failed to create job object for process group: the system may have reached its job object limit or insufficient permissions");
                     }
 
                     // Assign the process to the job
@@ -270,7 +270,7 @@ public partial class SafeChildProcessHandle
                         Interop.Kernel32.CloseHandle(processInfo.hProcess);
                         if (processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
                             Interop.Kernel32.CloseHandle(processInfo.hThread);
-                        throw new Win32Exception(error, "Failed to assign process to job object");
+                        throw new Win32Exception(error, "Failed to assign process to job object: the process may already be assigned to another job or lacks sufficient permissions");
                     }
                 }
 
@@ -535,13 +535,13 @@ public partial class SafeChildProcessHandle
             return true;
         }
 
-        int error2 = Marshal.GetLastPInvokeError();
-        return error2 switch
+        int terminateProcessError = Marshal.GetLastPInvokeError();
+        return terminateProcessError switch
         {
             Interop.Errors.ERROR_SUCCESS => true,
             Interop.Errors.ERROR_ACCESS_DENIED => false, // Process has already exited
             _ when !throwOnError => false, // TODO
-            _ => throw new Win32Exception(error2, "Failed to terminate process"),
+            _ => throw new Win32Exception(terminateProcessError, "Failed to terminate process"),
         };
     }
 
