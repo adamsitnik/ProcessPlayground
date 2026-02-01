@@ -183,4 +183,88 @@ public partial class SafeChildProcessHandleTests
                 $"Grandchild should have been killed quickly, took {stopwatch.ElapsedMilliseconds}ms");
         }
     }
+
+    [Fact]
+    public async Task Kill_EntireProcessGroup_TerminatesAllProcesses()
+    {
+        // This test verifies that Kill with entireProcessGroup parameter works correctly:
+        // 1. When false, only the parent process is killed (child continues running)
+        // 2. When true, all processes in the process group are killed
+        
+        const int MaxExpectedTerminationTimeMs = 300;
+        
+        // Create a pipe to detect when the grandchild process exits
+        File.CreatePipe(out SafeFileHandle pipeReadHandle, out SafeFileHandle pipeWriteHandle);
+
+        using (pipeReadHandle)
+        using (pipeWriteHandle)
+        {
+            // Start a shell that spawns a background child process
+            // The grandchild will inherit the pipe write handle and keep it open
+            ProcessStartOptions options = new("sh")
+            {
+                // Spawn a grandchild sleep process in the background, then wait for it
+                Arguments = { "-c", "sleep 300 & wait" },
+                CreateNewProcessGroup = true
+            };
+            
+            // Add the pipe write handle to inherited handles so the grandchild inherits it
+            options.InheritedHandles.Add(pipeWriteHandle);
+
+            using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+            
+            // Give the shell time to spawn the background sleep process
+            Thread.Sleep(100);
+            
+            // Close the parent's write handle - now only the shell and grandchild hold it
+            pipeWriteHandle.Dispose();
+            
+            // Create a FileStream from the read handle
+            using FileStream readStream = new(pipeReadHandle, FileAccess.Read, bufferSize: 1, isAsync: false);
+            
+            // Start an async read from the pipe in a background task
+            // This will block until all write ends are closed
+            byte[] buffer = new byte[1];
+            Task<int> readTask = Task.Run(() => readStream.Read(buffer, 0, 1));
+            
+            // Verify the task hasn't completed (shell and grandchild still have pipe open)
+            await Task.Delay(50);
+            Assert.False(readTask.IsCompleted, "Grandchild should still be running");
+            
+            // Kill the entire process group
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            processHandle.Kill(entireProcessGroup: true);
+            
+            // The grandchild should be terminated, closing the pipe write end
+            int bytesRead = await readTask;
+            stopwatch.Stop();
+            
+            // Verify the read completed (pipe closed due to grandchild termination)
+            Assert.Equal(0, bytesRead);
+            Assert.True(stopwatch.ElapsedMilliseconds < MaxExpectedTerminationTimeMs, 
+                $"Grandchild should have been killed quickly, took {stopwatch.ElapsedMilliseconds}ms");
+            
+            // Wait for parent shell to exit
+            var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(1));
+            Assert.Equal(ProcessSignal.SIGKILL, exitStatus.Signal);
+        }
+    }
+
+    [Fact]
+    public void Kill_WithoutEntireProcessGroup_OnlyKillsSingleProcess()
+    {
+        // This test verifies that Kill() without entireProcessGroup only kills the parent process
+        ProcessStartOptions options = new("sleep") { Arguments = { "60" }, CreateNewProcessGroup = true };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        
+        // Kill only the single process (default behavior)
+        bool wasKilled = processHandle.Kill(entireProcessGroup: false);
+        Assert.True(wasKilled);
+
+        // Process should exit after being killed
+        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
+        Assert.Equal(ProcessSignal.SIGKILL, exitStatus.Signal);
+        Assert.Equal(128 + (int)ProcessSignal.SIGKILL, exitStatus.ExitCode);
+    }
 }

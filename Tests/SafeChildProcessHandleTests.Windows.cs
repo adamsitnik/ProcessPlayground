@@ -109,4 +109,78 @@ public partial class SafeChildProcessHandleTests
         Assert.Equal(0, output.ExitStatus.ExitCode);
         Assert.Equal("test", output.StandardOutput.Trim());
     }
+
+    [Fact]
+    public void Kill_EntireProcessGroup_TerminatesAllProcesses()
+    {
+        // This test verifies that Kill with entireProcessGroup=true terminates all processes in the job
+        // Start a cmd.exe that starts a nested timeout command
+        ProcessStartOptions options = new("cmd.exe") 
+        { 
+            Arguments = { "/c", "start", "/B", "timeout", "/t", "60", "/nobreak", "&&", "timeout", "/t", "60", "/nobreak" },
+            CreateNewProcessGroup = true
+        };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        
+        // Give the process time to start the nested timeout command
+        System.Threading.Thread.Sleep(500);
+
+        // Kill the entire process group
+        bool wasKilled = processHandle.Kill(entireProcessGroup: true);
+        Assert.True(wasKilled);
+
+        // Process should exit after being killed
+        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
+        
+        // On Windows, TerminateJobObject sets exit code to -1
+        Assert.Equal(-1, exitStatus.ExitCode);
+    }
+
+    [Fact]
+    public void Kill_WithoutEntireProcessGroup_OnlyKillsSingleProcess()
+    {
+        // This test verifies that Kill() without entireProcessGroup only kills the parent process
+        ProcessStartOptions options = new("timeout") 
+        { 
+            Arguments = { "/t", "60", "/nobreak" },
+            CreateNewProcessGroup = true
+        };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        
+        // Kill only the single process (default behavior)
+        bool wasKilled = processHandle.Kill(entireProcessGroup: false);
+        Assert.True(wasKilled);
+
+        // Process should exit after being killed
+        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
+        
+        // On Windows, TerminateProcess sets exit code to -1
+        Assert.Equal(-1, exitStatus.ExitCode);
+    }
+
+    [Fact]
+    public void Kill_EntireProcessGroup_WithoutCreateNewProcessGroup_KillsSingleProcess()
+    {
+        // This test verifies that entireProcessGroup has no effect when the process
+        // was not started with CreateNewProcessGroup=true
+        ProcessStartOptions options = new("timeout") 
+        { 
+            Arguments = { "/t", "60", "/nobreak" },
+            CreateNewProcessGroup = false  // No job object will be created
+        };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        
+        // Try to kill the entire process group (should only kill single process since no job exists)
+        bool wasKilled = processHandle.Kill(entireProcessGroup: true);
+        Assert.True(wasKilled);
+
+        // Process should exit after being killed
+        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
+        
+        // On Windows, TerminateProcess sets exit code to -1
+        Assert.Equal(-1, exitStatus.ExitCode);
+    }
 }
