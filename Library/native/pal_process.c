@@ -218,6 +218,7 @@ int spawn_process(
     // If create_new_process_group is set, configure the process group ID to 0
     // which means the child will become the leader of a new process group
     if (create_new_process_group) {
+        // posix_spawnattr_setpgroup with pgid=0 makes the child the leader of a new process group
         if ((result = posix_spawnattr_setpgroup(&attr, 0)) != 0) {
             int saved_errno = result;
             posix_spawnattr_destroy(&attr);

@@ -513,13 +513,25 @@ public partial class SafeChildProcessHandle
             _ => throw new ArgumentException($"Signal {signal} is not supported on Windows. Only SIGINT and SIGQUIT are supported.", nameof(signal))
         };
 
-        // GenerateConsoleCtrlEvent sends the event to all processes in the specified process group.
-        // When dwProcessGroupId is 0, it sends to all processes sharing the console of the calling process.
-        // To send to a specific process group, we need the process group ID, which is the ProcessId
-        // when CREATE_NEW_PROCESS_GROUP was used.
+        // NOTE: GenerateConsoleCtrlEvent sends the event to all processes in the specified process group.
+        // For this to work properly, the process MUST have been started with CreateNewProcessGroup=true.
+        // If the process was not started with CREATE_NEW_PROCESS_GROUP, this will fail with ERROR_INVALID_PARAMETER
+        // or may send the signal to unintended processes.
+        // 
+        // When dwProcessGroupId is the ProcessId and the process was created with CREATE_NEW_PROCESS_GROUP,
+        // the signal is sent to all processes in that group (with the process as the group leader).
         if (!Interop.Kernel32.GenerateConsoleCtrlEvent(ctrlEvent, ProcessId))
         {
             int error = Marshal.GetLastPInvokeError();
+            
+            // ERROR_INVALID_PARAMETER (87) typically means the process group doesn't exist or is invalid
+            if (error == Interop.Errors.ERROR_INVALID_PARAMETER)
+            {
+                throw new Win32Exception(error, 
+                    $"Failed to send signal {signal}. The process may not have been started with CreateNewProcessGroup=true. " +
+                    $"GenerateConsoleCtrlEvent requires the target process to be in a separate process group.");
+            }
+            
             throw new Win32Exception(error, $"Failed to send signal {signal} (GenerateConsoleCtrlEvent failed with error {error})");
         }
     }
