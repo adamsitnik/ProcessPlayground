@@ -718,7 +718,7 @@ static int map_native_signal_to_managed(int native_signal) {
     }
 }
 
-int send_signal(int pidfd, int pid, int managed_signal) {
+int send_signal(int pidfd, int pid, int managed_signal, int entire_process_group) {
     // Map managed signal to native signal number
     int native_signal = map_managed_signal_to_native(managed_signal);
     if (native_signal == -1) {
@@ -736,7 +736,12 @@ int send_signal(int pidfd, int pid, int managed_signal) {
     (void)pidfd;
 #endif
 
-    return kill(pid, native_signal);
+    // When entire_process_group is true, use -pid to send signal to the entire process group
+    // See kill(2): "If pid is less than -1, then sig is sent to every process in the process group whose ID is -pid"
+    // However, when pid is the process group leader, we want to send to the process group,
+    // so we use -pid to target the process group ID (which equals the leader's PID)
+    int target_pid = entire_process_group ? -pid : pid;
+    return kill(target_pid, native_signal);
 }
 
 #ifndef HAVE_PIDFD
@@ -899,7 +904,7 @@ int wait_for_exit_or_kill_on_timeout(int pidfd, int pid, int exitPipeFd, int tim
     *out_timeout = 1;
     // In the future, we could implement a graceful termination attempt here (e.g., send SIGTERM first)
     // Followed, if still running, by SIGKILL after a short delay.
-    ret = send_signal(pidfd, pid, map_native_signal_to_managed(SIGKILL));
+    ret = send_signal(pidfd, pid, map_native_signal_to_managed(SIGKILL), 0);
 
     if (ret == -1)
     {
