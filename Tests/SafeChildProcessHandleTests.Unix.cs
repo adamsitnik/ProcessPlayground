@@ -124,7 +124,8 @@ public partial class SafeChildProcessHandleTests
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
         // Give the shell time to spawn the background sleep processes
-        Thread.Sleep(100);
+        // Using a conservative sleep duration to avoid flakiness on slower systems
+        Thread.Sleep(500);
         
         // Send SIGTERM to the entire process group
         processHandle.SendSignal(ProcessSignal.SIGTERM, entireProcessGroup: true);
@@ -155,7 +156,8 @@ public partial class SafeChildProcessHandleTests
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
         // Give the shell time to spawn the background sleep process
-        Thread.Sleep(100);
+        // Using a conservative sleep duration to avoid flakiness on slower systems
+        Thread.Sleep(500);
         
         // Send SIGTERM only to the parent process (entireProcessGroup = false is the default)
         processHandle.SendSignal(ProcessSignal.SIGTERM, entireProcessGroup: false);

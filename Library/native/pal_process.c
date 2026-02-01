@@ -737,9 +737,9 @@ int send_signal(int pidfd, int pid, int managed_signal, int entire_process_group
 #endif
 
     // When entire_process_group is true, use -pid to send signal to the entire process group
-    // See kill(2): "If pid is less than -1, then sig is sent to every process in the process group whose ID is -pid"
-    // However, when pid is the process group leader, we want to send to the process group,
-    // so we use -pid to target the process group ID (which equals the leader's PID)
+    // See kill(2): "If pid is negative and not equal to -1, sig is sent to every process in the 
+    // process group whose ID is -pid." When a process is a process group leader, its PID equals 
+    // the process group ID (PGID), so using -pid sends the signal to all processes in that group.
     int target_pid = entire_process_group ? -pid : pid;
     return kill(target_pid, native_signal);
 }
