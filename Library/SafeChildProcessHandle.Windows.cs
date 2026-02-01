@@ -503,7 +503,7 @@ public partial class SafeChildProcessHandle
         }
     }
 
-    private void SendSignalCore(ProcessSignal signal)
+    private void SendSignalCore(ProcessSignal signal, bool entireProcessGroup)
     {
         // SIGKILL is handled by calling KillCore directly
         if (signal == ProcessSignal.SIGKILL)
@@ -527,6 +527,7 @@ public partial class SafeChildProcessHandle
         // 
         // When dwProcessGroupId is the ProcessId and the process was created with CREATE_NEW_PROCESS_GROUP,
         // the signal is sent to all processes in that group (with the process as the group leader).
+        // The entireProcessGroup parameter is ignored on Windows because signals are always sent to the entire process group.
         if (!Interop.Kernel32.GenerateConsoleCtrlEvent(ctrlEvent, ProcessId))
         {
             int error = Marshal.GetLastPInvokeError();

@@ -219,6 +219,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// Sends a signal to the process.
     /// </summary>
     /// <param name="signal">The signal to send.</param>
+    /// <param name="entireProcessGroup">When true, sends the signal to the entire process group (Unix only). Default is false.</param>
     /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the signal value is not supported.</exception>
     /// <exception cref="ArgumentException">Thrown when the signal is not supported on the current platform.</exception>
@@ -226,9 +227,11 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// <remarks>
     /// On Windows, only SIGINT (mapped to CTRL_C_EVENT), SIGQUIT (mapped to CTRL_BREAK_EVENT), and SIGKILL are supported.
     /// The process must have been started with <see cref="ProcessStartOptions.CreateNewProcessGroup"/> set to true for signals to work properly.
-    /// On Unix/Linux, all signals defined in ProcessSignal are supported.
+    /// Windows always sends signals to the entire process group, so the <paramref name="entireProcessGroup"/> parameter has no effect.
+    /// On Unix/Linux, all signals defined in ProcessSignal are supported. When <paramref name="entireProcessGroup"/> is true,
+    /// the signal is sent to all processes in the process group.
     /// </remarks>
-    public void SendSignal(ProcessSignal signal)
+    public void SendSignal(ProcessSignal signal, bool entireProcessGroup = false)
     {
         if (!Enum.IsDefined(signal))
         {
@@ -237,7 +240,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
 
         Validate();
 
-        SendSignalCore(signal);
+        SendSignalCore(signal, entireProcessGroup);
     }
     
     /// <summary>
