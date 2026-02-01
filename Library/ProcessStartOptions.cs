@@ -52,9 +52,14 @@ public sealed class ProcessStartOptions
     /// Gets or sets a value indicating whether to create the process in a new process group.
     /// </summary>
     /// <remarks>
-    /// <para>On Windows, this flag creates the process with CREATE_NEW_PROCESS_GROUP.</para>
-    /// <para>On Linux, this calls setpgid(0, 0) before exec.</para>
-    /// <para>On macOS, this uses POSIX_SPAWN_SETPGROUP with posix_spawnattr_setpgroup.</para>
+    /// <para>
+    /// Creating a new process group enables sending signals to the process (e.g., SIGINT, SIGQUIT) 
+    /// on Windows and provides process group isolation on all platforms.
+    /// </para>
+    /// <para>
+    /// On Unix systems, child processes in a new process group won't receive signals sent to the parent's 
+    /// process group, which can be useful for background processes that should continue running independently.
+    /// </para>
     /// </remarks>
     public bool CreateNewProcessGroup { get; set; }
 

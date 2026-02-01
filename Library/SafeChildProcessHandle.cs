@@ -225,7 +225,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// <exception cref="Win32Exception">Thrown when the signal operation fails.</exception>
     /// <remarks>
     /// On Windows, only SIGINT (mapped to CTRL_C_EVENT) and SIGQUIT (mapped to CTRL_BREAK_EVENT) are supported.
-    /// The process must have been started with CreateNewProcessGroup=true for signals to work properly.
+    /// The process must have been started with <see cref="ProcessStartOptions.CreateNewProcessGroup"/> set to true for signals to work properly.
     /// On Unix/Linux, all signals defined in ProcessSignal are supported.
     /// </remarks>
     public void SendSignal(ProcessSignal signal)

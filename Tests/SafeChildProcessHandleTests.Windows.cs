@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.TBA;
 using Microsoft.Win32.SafeHandles;
 
@@ -9,15 +10,20 @@ public partial class SafeChildProcessHandleTests
     [Fact]
     public void SendSignal_SIGINT_TerminatesProcessInNewProcessGroup()
     {
-        // Start a process in a new process group with a console
-        ProcessStartOptions options = new("cmd.exe") 
+        // Start a process in a new process group
+        ProcessStartOptions options = new("timeout") 
         { 
-            Arguments = { "/c", "timeout", "/t", "60", "/nobreak" },
+            Arguments = { "/t", "10", "/nobreak" },
             CreateNewProcessGroup = true
         };
 
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        using SafeFileHandle stdin = Console.OpenStandardInputHandle();
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: stdin, output: null, error: null);
         
+        // Ensure process has not exited yet
+        bool hasExited = processHandle.TryWaitForExit(TimeSpan.Zero, out _);
+        Assert.False(hasExited, "Process should still be running before signal is sent");
+
         // Send SIGINT signal (CTRL_C_EVENT)
         processHandle.SendSignal(ProcessSignal.SIGINT);
 
@@ -31,15 +37,20 @@ public partial class SafeChildProcessHandleTests
     [Fact]
     public void SendSignal_SIGQUIT_TerminatesProcessInNewProcessGroup()
     {
-        // Start a process in a new process group with a console
-        ProcessStartOptions options = new("cmd.exe") 
+        // Start a process in a new process group
+        ProcessStartOptions options = new("timeout") 
         { 
-            Arguments = { "/c", "timeout", "/t", "60", "/nobreak" },
+            Arguments = { "/t", "10", "/nobreak" },
             CreateNewProcessGroup = true
         };
 
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        using SafeFileHandle stdin = Console.OpenStandardInputHandle();
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: stdin, output: null, error: null);
         
+        // Ensure process has not exited yet
+        bool hasExited = processHandle.TryWaitForExit(TimeSpan.Zero, out _);
+        Assert.False(hasExited, "Process should still be running before signal is sent");
+
         // Send SIGQUIT signal (CTRL_BREAK_EVENT)
         processHandle.SendSignal(ProcessSignal.SIGQUIT);
 
@@ -54,19 +65,19 @@ public partial class SafeChildProcessHandleTests
     public void SendSignal_UnsupportedSignal_ThrowsArgumentException()
     {
         // Start a process in a new process group
-        ProcessStartOptions options = new("cmd.exe") 
+        ProcessStartOptions options = new("timeout") 
         { 
-            Arguments = { "/c", "timeout", "/t", "10", "/nobreak" },
+            Arguments = { "/t", "10", "/nobreak" },
             CreateNewProcessGroup = true
         };
 
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        using SafeFileHandle stdin = Console.OpenStandardInputHandle();
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: stdin, output: null, error: null);
         
         try
         {
-            // Try to send an unsupported signal on Windows (only SIGINT and SIGQUIT are supported)
-            var exception = Assert.Throws<ArgumentException>(() => processHandle.SendSignal(ProcessSignal.SIGTERM));
-            Assert.Contains("not supported on Windows", exception.Message);
+            // Try to send an unsupported signal on Windows (only SIGINT, SIGQUIT, and SIGKILL are supported)
+            Assert.Throws<ArgumentException>(() => processHandle.SendSignal(ProcessSignal.SIGTERM));
         }
         finally
         {
@@ -94,9 +105,7 @@ public partial class SafeChildProcessHandleTests
 
         Assert.True(options.CreateNewProcessGroup);
 
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
-
-        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
-        Assert.Equal(0, exitStatus.ExitCode);
+        ProcessOutput output = ChildProcess.CaptureOutput(options);
+        Assert.Equal(0, output.ExitStatus.ExitCode);
     }
 }

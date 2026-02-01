@@ -505,12 +505,19 @@ public partial class SafeChildProcessHandle
 
     private void SendSignalCore(ProcessSignal signal)
     {
+        // SIGKILL is handled by calling KillCore directly
+        if (signal == ProcessSignal.SIGKILL)
+        {
+            KillCore(throwOnError: true);
+            return;
+        }
+
         // Map ProcessSignal to Windows console control event
         int ctrlEvent = signal switch
         {
             ProcessSignal.SIGINT => Interop.Kernel32.CTRL_C_EVENT,
             ProcessSignal.SIGQUIT => Interop.Kernel32.CTRL_BREAK_EVENT,
-            _ => throw new ArgumentException($"Signal {signal} is not supported on Windows. Only SIGINT and SIGQUIT are supported.", nameof(signal))
+            _ => throw new ArgumentException($"Signal {signal} is not supported on Windows. Only SIGINT, SIGQUIT, and SIGKILL are supported.", nameof(signal))
         };
 
         // NOTE: GenerateConsoleCtrlEvent sends the event to all processes in the specified process group.
