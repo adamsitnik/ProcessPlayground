@@ -260,7 +260,7 @@ public partial class SafeChildProcessHandle
 
     internal bool KillCore(bool throwOnError)
     {
-        int result = send_signal(this, ProcessId, ProcessSignal.SIGKILL, entireProcessGroup: 0);
+        int result = send_signal(this, ProcessId, ProcessSignal.SIGKILL);
         if (result == 0)
         {
             return true;
@@ -284,7 +284,20 @@ public partial class SafeChildProcessHandle
 
     private void SendSignalCore(ProcessSignal signal, bool entireProcessGroup)
     {
-        int result = send_signal(this, ProcessId, signal, entireProcessGroup: entireProcessGroup ? 1 : 0);
+        int result;
+        if (entireProcessGroup)
+        {
+            // When entireProcessGroup is true, pass an invalid pidfd (-1) and negative pid
+            // The native send_signal will skip pidfd_send_signal and use kill(-ProcessId, signal)
+            // which sends the signal to all processes in the process group
+            result = send_signal_to_process_group(-1, -ProcessId, signal);
+        }
+        else
+        {
+            // Normal case: send signal to just this process
+            result = send_signal(this, ProcessId, signal);
+        }
+        
         if (result == 0)
         {
             return;
@@ -298,7 +311,7 @@ public partial class SafeChildProcessHandle
     private void ResumeCore()
     {
         // Resume a suspended process by sending SIGCONT
-        int result = send_signal(this, ProcessId, ProcessSignal.SIGCONT, entireProcessGroup: 0);
+        int result = send_signal(this, ProcessId, ProcessSignal.SIGCONT);
         if (result == 0)
         {
             return;
@@ -332,7 +345,10 @@ public partial class SafeChildProcessHandle
         int inherited_handles_count);
 
     [LibraryImport("pal_process", SetLastError = true)]
-    private static partial int send_signal(SafeChildProcessHandle pidfd, int pid, ProcessSignal managed_signal, int entireProcessGroup);
+    private static partial int send_signal(SafeChildProcessHandle pidfd, int pid, ProcessSignal managed_signal);
+
+    [LibraryImport("pal_process", EntryPoint = "send_signal", SetLastError = true)]
+    private static partial int send_signal_to_process_group(int pidfd, int pid, ProcessSignal managed_signal);
 
     [LibraryImport("pal_process", SetLastError = true)]
     private static partial int wait_for_exit_and_reap(SafeChildProcessHandle pidfd, int pid, out int exitCode, out int signal);
