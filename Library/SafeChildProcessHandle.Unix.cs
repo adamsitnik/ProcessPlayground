@@ -116,6 +116,7 @@ public partial class SafeChildProcessHandle
                 out int exitPipeFd,
                 options.KillOnParentDeath ? 1 : 0,
                 createSuspended ? 1 : 0,
+                options.CreateNewProcessGroup ? 1 : 0,
                 inheritedHandlesPtr,
                 inheritedHandlesCount);
 
@@ -326,6 +327,7 @@ public partial class SafeChildProcessHandle
         out int exit_pipe_fd,
         int kill_on_parent_death,
         int create_suspended,
+        int create_new_process_group,
         int* inherited_handles,
         int inherited_handles_count);
 

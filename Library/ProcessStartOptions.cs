@@ -48,6 +48,16 @@ public sealed class ProcessStartOptions
     // New: User very often implement it on their own.
     public bool KillOnParentDeath { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether to create the process in a new process group.
+    /// </summary>
+    /// <remarks>
+    /// <para>On Windows, this flag creates the process with CREATE_NEW_PROCESS_GROUP.</para>
+    /// <para>On Linux, this calls setpgid(0, 0) before exec.</para>
+    /// <para>On macOS, this uses POSIX_SPAWN_SETPGROUP with posix_spawnattr_setpgroup.</para>
+    /// </remarks>
+    public bool CreateNewProcessGroup { get; set; }
+
     // Internal property to check if environment was explicitly set
     internal bool HasEnvironmentBeenAccessed => _envVars != null;
 

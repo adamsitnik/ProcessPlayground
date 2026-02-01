@@ -202,6 +202,7 @@ public partial class SafeChildProcessHandle
             int creationFlags = Interop.Kernel32.EXTENDED_STARTUPINFO_PRESENT;
             if (options.CreateNoWindow) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NO_WINDOW;
             if (createSuspended) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_SUSPENDED;
+            if (options.CreateNewProcessGroup) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NEW_PROCESS_GROUP;
 
             string? environmentBlock = null;
             if (options.HasEnvironmentBeenAccessed)
@@ -504,6 +505,22 @@ public partial class SafeChildProcessHandle
 
     private void SendSignalCore(ProcessSignal signal)
     {
-        throw new PlatformNotSupportedException("Sending signals is not supported on Windows.");
+        // Map ProcessSignal to Windows console control event
+        int ctrlEvent = signal switch
+        {
+            ProcessSignal.SIGINT => Interop.Kernel32.CTRL_C_EVENT,
+            ProcessSignal.SIGQUIT => Interop.Kernel32.CTRL_BREAK_EVENT,
+            _ => throw new ArgumentException($"Signal {signal} is not supported on Windows. Only SIGINT and SIGQUIT are supported.", nameof(signal))
+        };
+
+        // GenerateConsoleCtrlEvent sends the event to all processes in the specified process group.
+        // When dwProcessGroupId is 0, it sends to all processes sharing the console of the calling process.
+        // To send to a specific process group, we need the process group ID, which is the ProcessId
+        // when CREATE_NEW_PROCESS_GROUP was used.
+        if (!Interop.Kernel32.GenerateConsoleCtrlEvent(ctrlEvent, ProcessId))
+        {
+            int error = Marshal.GetLastPInvokeError();
+            throw new Win32Exception(error, $"Failed to send signal {signal} (GenerateConsoleCtrlEvent failed with error {error})");
+        }
     }
 }
