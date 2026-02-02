@@ -396,13 +396,23 @@ public static partial class ChildProcess
             int processId = processHandle.ProcessId;
 
             byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
+            Task<ProcessExitStatus> exitTask = processHandle.WaitForExitOrKillOnCancellationAsync(cancellationToken);
+            Task<int> readTask = outputStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
+            Task[] tasks = [exitTask, readTask];
             int totalBytesRead = 0;
 
             try
             {
                 while (true)
                 {
-                    int bytesRead = await outputStream.ReadAsync(buffer.AsMemory(totalBytesRead), cancellationToken);
+                    Task completedTask = await Task.WhenAny(tasks);
+
+                    if (completedTask == exitTask)
+                    {
+                        break; // Process exited, we can stop reading.
+                    }
+
+                    int bytesRead = await readTask;
                     if (bytesRead <= 0)
                     {
                         break;
@@ -413,15 +423,12 @@ public static partial class ChildProcess
                     {
                         BufferHelper.RentLargerBuffer(ref buffer);
                     }
+
+                    tasks[1] = readTask = outputStream.ReadAsync(buffer, totalBytesRead, buffer.Length - totalBytesRead, cancellationToken);
                 }
 
+                var exitStatus = await exitTask;
                 byte[] resultBuffer = BufferHelper.CreateCopy(buffer, totalBytesRead);
-                // It's possible for the process to close STD OUT and ERR keep running.
-                // We optimize for hot path: process already exited and exit code is available.
-                if (!processHandle.TryGetExitStatus(canceled: false, out ProcessExitStatus exitStatus))
-                {
-                    exitStatus = await processHandle.WaitForExitAsync(cancellationToken);
-                }
 
                 return new(exitStatus, resultBuffer, processId);
             }
