@@ -158,8 +158,7 @@ public partial class SafeChildProcessHandleTests
             Assert.True(wasKilled);
 
             // The child should be terminated, closing the pipe write end
-            readTask.Wait(System.TimeSpan.FromSeconds(2));
-            int bytesRead = readTask.Result;
+            int bytesRead = readTask.GetAwaiter().GetResult();
             
             // Verify the read completed (pipe closed due to child termination)
             Assert.Equal(0, bytesRead);

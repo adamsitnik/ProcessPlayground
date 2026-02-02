@@ -325,11 +325,19 @@ public partial class SafeChildProcessHandleTests
                 await Task.Delay(50);
                 Assert.False(readTask.IsCompleted, "Grandchild should still be running after parent was killed");
                 
-                // Clean up: kill the grandchild process group to complete the test
-                processHandle.SendSignal(ProcessSignal.SIGKILL, entireProcessGroup: true);
+                // Clean up: We need to kill the orphaned grandchild process
+                // The grandchild is now a child of init/systemd, so we kill it by sending signal to its process group
+                // We use the process ID from the original shell to target the process group
+                int processId = processHandle.ProcessId;
+                int killResult = kill(-processId, (int)ProcessSignal.SIGKILL);
+                
+                // Wait for the grandchild to be killed and pipe to close
                 int bytesRead = await readTask;
                 Assert.Equal(0, bytesRead);
             }
         }
     }
+
+    [System.Runtime.InteropServices.LibraryImport("libc", SetLastError = true)]
+    private static partial int kill(int pid, int sig);
 }
