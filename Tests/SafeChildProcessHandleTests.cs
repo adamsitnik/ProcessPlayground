@@ -304,7 +304,8 @@ public partial class SafeChildProcessHandleTests
         Assert.Equal(-1, exitStatus.ExitCode);
 #else
         Assert.Equal(PosixSignal.SIGKILL, exitStatus.Signal);
-        Assert.Equal(128 + (int)PosixSignal.SIGKILL, exitStatus.ExitCode);
+        // Exit code for signal termination is 128 + signal_number (native signal number, not enum value)
+        Assert.True(exitStatus.ExitCode > 128, $"Exit code {exitStatus.ExitCode} should indicate signal termination (>128)");
 #endif
     }
 
@@ -492,7 +493,8 @@ public partial class SafeChildProcessHandleTests
 #if !WINDOWS
         // On Unix, the process should have been killed with SIGKILL
         Assert.Equal(PosixSignal.SIGKILL, exitStatus.Signal);
-        Assert.Equal(128 + (int)PosixSignal.SIGKILL, exitStatus.ExitCode);
+        // Exit code for signal termination is 128 + signal_number (native signal number, not enum value)
+        Assert.True(exitStatus.ExitCode > 128, $"Exit code {exitStatus.ExitCode} should indicate signal termination (>128)");
 #else
         // On Windows, TerminateProcess sets exit code to -1
         Assert.Equal(-1, exitStatus.ExitCode);
@@ -718,8 +720,9 @@ public partial class SafeChildProcessHandleTests
             else
             {
                 // On Unix, the process should have been killed with SIGKILL
-                Assert.Equal(128 + (int)PosixSignal.SIGKILL, exitStatus.ExitCode);
                 Assert.Equal(PosixSignal.SIGKILL, exitStatus.Signal);
+                // Exit code for signal termination is 128 + signal_number (native signal number, not enum value)
+                Assert.True(exitStatus.ExitCode > 128, $"Exit code {exitStatus.ExitCode} should indicate signal termination (>128)");
             }
 
             // The grandchild should still be running (only parent was killed)

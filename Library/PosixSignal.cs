@@ -3,7 +3,7 @@
 
 using System.Runtime.Versioning;
 
-namespace System.Runtime.InteropServices;
+namespace System.TBA;
 
 /// <summary>Specifies a POSIX signal number.</summary>
 public enum PosixSignal

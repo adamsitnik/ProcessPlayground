@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.TBA;
+using PosixSignal = System.TBA.PosixSignal;
 
 namespace Microsoft.Win32.SafeHandles;
 

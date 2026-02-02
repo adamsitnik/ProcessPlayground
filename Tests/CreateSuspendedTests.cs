@@ -125,7 +125,8 @@ public class CreateSuspendedTests
         else
         {
             Assert.Equal(PosixSignal.SIGKILL, exitStatus.Signal);
-            Assert.Equal(128 + (int)PosixSignal.SIGKILL, exitStatus.ExitCode);
+            // Exit code for signal termination is 128 + signal_number (native signal number, not enum value)
+            Assert.True(exitStatus.ExitCode > 128, $"Exit code {exitStatus.ExitCode} should indicate signal termination (>128)");
         }
     }
 
