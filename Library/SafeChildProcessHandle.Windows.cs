@@ -526,37 +526,25 @@ public partial class SafeChildProcessHandle
     /// </summary>
     internal bool KillCore(bool throwOnError, bool entireProcessGroup = false)
     {
-        // If entireProcessGroup is true and we have a job handle, terminate the entire job
-        if (entireProcessGroup && _processGroupJobHandle != IntPtr.Zero)
+        if (entireProcessGroup && _processGroupJobHandle == IntPtr.Zero)
         {
-            if (Interop.Kernel32.TerminateJobObject(_processGroupJobHandle, unchecked((uint)-1)))
-            {
-                return true;
-            }
-
-            int error = Marshal.GetLastPInvokeError();
-            return error switch
-            {
-                Interop.Errors.ERROR_SUCCESS => true,
-                Interop.Errors.ERROR_ACCESS_DENIED => false, // Job/Process has already exited
-                _ when !throwOnError => false,
-                _ => throw new Win32Exception(error, "Failed to terminate job object"),
-            };
+            throw new InvalidOperationException("Cannot terminate entire process group because the process was not started with CreateNewProcessGroup=true.");
         }
 
-        // Otherwise, just terminate the single process
-        if (Interop.Kernel32.TerminateProcess(this, exitCode: -1))
+        if(entireProcessGroup
+            ? Interop.Kernel32.TerminateJobObject(_processGroupJobHandle, unchecked((uint)-1))
+            : Interop.Kernel32.TerminateProcess(this, exitCode: -1))
         {
             return true;
         }
 
-        int terminateProcessError = Marshal.GetLastPInvokeError();
-        return terminateProcessError switch
+        int error = Marshal.GetLastPInvokeError();
+        return error switch
         {
             Interop.Errors.ERROR_SUCCESS => true,
             Interop.Errors.ERROR_ACCESS_DENIED => false, // Process has already exited
-            _ when !throwOnError => false, // TODO
-            _ => throw new Win32Exception(terminateProcessError, "Failed to terminate process"),
+            _ when !throwOnError => false,
+            _ => throw new Win32Exception(error, "Failed to terminate process"),
         };
     }
 
