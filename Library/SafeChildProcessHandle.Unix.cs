@@ -230,43 +230,37 @@ public partial class SafeChildProcessHandle
 
     private async Task<ProcessExitStatus> WaitForExitOrKillOnCancellationAsyncCore(CancellationToken cancellationToken)
     {
-        StrongBox<bool> wasKilledBox = new(false);
-        
-        // Register cancellation to kill the process
-        using CancellationTokenRegistration registration = !cancellationToken.CanBeCanceled ? default : cancellationToken.Register(static state =>
+        if (!cancellationToken.CanBeCanceled)
         {
-            var (handle, wasCancelled) = ((SafeChildProcessHandle, StrongBox<bool>))state!;
-            wasCancelled.Value = handle.KillCore(throwOnError: false);
-        }, (this, wasKilledBox));
+            return await Task.Run(() => WaitForExitCore(), cancellationToken).ConfigureAwait(false);
+        }
 
-        try
+        File.CreatePipe(out SafeFileHandle readHandle, out SafeFileHandle writeHandle);
+
+        using (readHandle)
+        using (writeHandle)
         {
-            // Treat the exit pipe fd as a socket and perform async read
-            // When the child process exits, all its file descriptors are closed,
-            // including the write end of the exit pipe. This will cause the read
-            // to return 0 bytes (orderly shutdown).
-            using SafeSocketHandle safeSocket = new(_exitPipeFd, ownsHandle: false);
-            using Socket socket = new(safeSocket);
-
-            // Returns number of bytes read, 0 means orderly shutdown by peer (pipe closed).
-            int bytesRead = await socket.ReceiveAsync(s_exitPipeBuffer, SocketFlags.None, cancellationToken).ConfigureAwait(false);
-            
-            // When the child process exits, the write end of the pipe is closed,
-            // which should result in 0 bytes read (orderly shutdown).
-            if (bytesRead != 0)
+            using CancellationTokenRegistration registration = cancellationToken.Register(static state =>
             {
-                throw new InvalidOperationException($"Unexpected data read from exit pipe: {bytesRead} byte(s). Expected 0 bytes (pipe closure).");
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Cancellation was requested - wait for the process to actually exit
-            // The cancellation callback should have killed it
-        }
+                ((SafeFileHandle)state!).Close(); // Close the write end of the pipe to signal cancellation
+            }, writeHandle);
 
-        // The process has exited (or been killed), now retrieve the exit status
-        ProcessExitStatus status = WaitForExitCore();
-        return new(status.ExitCode, wasKilledBox.Value, status.Signal);
+            return await Task.Run(() =>
+            {
+                switch (try_wait_for_exit_cancellable(this, ProcessId, _exitPipeFd, (int)readHandle.DangerousGetHandle(), out int exitCode, out int rawSignal))
+                {
+                    case -1:
+                        int errno = Marshal.GetLastPInvokeError();
+                        throw new Win32Exception(errno, $"try_wait_for_exit_cancellable() failed with (errno={errno})");
+                    case 1: // canceled
+                        bool wasKilled = KillCore(throwOnError: false);
+                        ProcessExitStatus status = WaitForExitCore();
+                        return new ProcessExitStatus(status.ExitCode, wasKilled, status.Signal);
+                    default:
+                        return new ProcessExitStatus(exitCode, false, rawSignal != 0 ? (PosixSignal)rawSignal : null);
+                }
+            }, cancellationToken);
+        }
     }
 
     internal bool KillCore(bool throwOnError, bool entireProcessGroup = false)
