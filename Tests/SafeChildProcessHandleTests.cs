@@ -650,7 +650,7 @@ public partial class SafeChildProcessHandleTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public async Task Kill_EntireProcessGroup_ParameterControlsScope(bool entireProcessGroup)
+    public static async Task Kill_EntireProcessGroup_ParameterControlsScope(bool entireProcessGroup)
     {
         // This test verifies that the entireProcessGroup parameter controls whether
         // only the parent process is killed (false) or the entire process group (true)
@@ -660,7 +660,6 @@ public partial class SafeChildProcessHandleTests
         // Create a pipe to detect when the grandchild process exits
         File.CreatePipe(out SafeFileHandle pipeReadHandle, out SafeFileHandle pipeWriteHandle);
 
-        // Create a FileStream from the read handle
         using (FileStream readStream = new(pipeReadHandle, FileAccess.Read, bufferSize: 1, isAsync: false))
         using (pipeWriteHandle)
         {
@@ -730,6 +729,60 @@ public partial class SafeChildProcessHandleTests
             Assert.Equal(0, bytesRead);
             Assert.True(stopwatch.ElapsedMilliseconds < MaxExpectedTerminationTimeMs,
                 $"Grandchild should have been killed quickly, took {stopwatch.ElapsedMilliseconds}ms");
+        }
+    }
+
+    [Fact]
+    public static async Task Kill_EntireProcessGroup_CanBeCombinedWithKillOnParentDeath()
+    {
+        // Create a pipe to detect when the grandchild process exits
+        File.CreatePipe(out SafeFileHandle pipeReadHandle, out SafeFileHandle pipeWriteHandle);
+
+        using (FileStream readStream = new(pipeReadHandle, FileAccess.Read, bufferSize: 1, isAsync: false))
+        using (pipeWriteHandle)
+        {
+            // Start a shell that spawns a background child process
+            // The grandchild will inherit the pipe write handle and keep it open
+            ProcessStartOptions options = OperatingSystem.IsWindows()
+                ? new("cmd.exe")
+                {
+                    Arguments = { "/c", "timeout", "/t", "5", "/nobreak" },
+                }
+                : new("sh")
+                {
+                    Arguments = { "-c", "sleep 5 & wait" },
+                };
+
+            options.KillOnParentDeath = true; // Enable KillOnParentDeath
+            options.CreateNewProcessGroup = true;
+            // Add the pipe write handle to inherited handles so the grandchild inherits it
+            options.InheritedHandles.Add(pipeWriteHandle);
+
+            using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: Console.OpenStandardInputHandle(), output: null, error: null);
+
+            // Close the parent's write handle - now only the shell and grandchild hold it
+            pipeWriteHandle.Dispose();
+
+            // Start an async read from the pipe in a background task
+            // This will block until all write ends are closed
+            byte[] buffer = new byte[1];
+            Task<int> readTask = Task.Run(() => readStream.Read(buffer, 0, 1));
+
+            // Verify the task hasn't completed (shell and grandchild still have pipe open)
+            await Task.Delay(50);
+            Assert.False(readTask.IsCompleted, "Grandchild should still be running");
+
+            // Kill with the specified parameter
+            processHandle.Kill(entireProcessGroup: true);
+            // Wait for parent shell to exit
+            Assert.True(processHandle.TryWaitForExit(TimeSpan.FromMilliseconds(300), out ProcessExitStatus exitStatus), "Parent process should exit after being killed");
+
+            Assert.NotEqual(0, exitStatus.ExitCode);
+
+            // The grandchild should be terminated, closing the pipe write end
+            Stopwatch watch = Stopwatch.StartNew();
+            Assert.Equal(0, await readTask); // EOF
+            Assert.InRange(watch.ElapsedMilliseconds, 0, 300); // Should complete quickly
         }
     }
 
