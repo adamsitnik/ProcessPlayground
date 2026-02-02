@@ -329,7 +329,7 @@ public partial class SafeChildProcessHandleTests
                 // The grandchild is now a child of init/systemd, so we kill it by sending signal to its process group
                 // We use the process ID from the original shell to target the process group
                 int processId = processHandle.ProcessId;
-                int killResult = kill(-processId, (int)ProcessSignal.SIGKILL);
+                kill(-processId, (int)ProcessSignal.SIGKILL);
                 
                 // Wait for the grandchild to be killed and pipe to close
                 int bytesRead = await readTask;
