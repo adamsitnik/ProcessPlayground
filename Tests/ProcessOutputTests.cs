@@ -2,6 +2,7 @@ using System.Threading;
 using System;
 using System.Threading.Tasks;
 using System.TBA;
+using PosixSignal = System.TBA.PosixSignal;
 using System.Text;
 using System.Diagnostics;
 using System.Linq;
@@ -183,7 +184,7 @@ public class ProcessOutputTests
         Stopwatch started = Stopwatch.StartNew();
         ProcessOutput processOutput = ChildProcess.CaptureOutput(options, timeout: TimeSpan.FromMilliseconds(500));
         Assert.InRange(started.Elapsed, TimeSpan.FromMilliseconds(490), TimeSpan.FromSeconds(1));
-        Assert.Equal(OperatingSystem.IsWindows() ? null : ProcessSignal.SIGKILL, processOutput.ExitStatus.Signal);
+        Assert.Equal(OperatingSystem.IsWindows() ? null : PosixSignal.SIGKILL, processOutput.ExitStatus.Signal);
         Assert.True(processOutput.ExitStatus.Canceled);
         Assert.Empty(processOutput.StandardError);
     }

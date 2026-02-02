@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 
 namespace System.TBA;
 
@@ -6,7 +6,7 @@ namespace System.TBA;
 // example: an app may fail with exit code 0 but produce invalid output
 public readonly struct ProcessExitStatus : IEquatable<ProcessExitStatus>
 {
-    internal ProcessExitStatus(int exitCode, bool cancelled, ProcessSignal? signal = null)
+    internal ProcessExitStatus(int exitCode, bool cancelled, PosixSignal? signal = null)
     {
         ExitCode = exitCode;
         Signal = signal;
@@ -32,7 +32,7 @@ public readonly struct ProcessExitStatus : IEquatable<ProcessExitStatus>
     /// <remarks>
     /// This property is always null on Windows.
     /// </remarks>
-    public ProcessSignal? Signal { get; }
+    public PosixSignal? Signal { get; }
 
     /// <summary>
     /// Gets a value indicating whether the process has been terminated due to timeout or cancellation.

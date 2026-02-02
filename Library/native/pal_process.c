@@ -675,53 +675,50 @@ int spawn_process(
 #endif
 }
 
-// Map managed ProcessSignal enum values to native signal numbers
-// This function converts ProcessSignal enum values to the actual platform-specific signal numbers
+// Map managed PosixSignal enum values to native signal numbers
+// This function converts PosixSignal enum values to the actual platform-specific signal numbers
+// PosixSignal uses negative values: SIGHUP=-1, SIGINT=-2, etc.
 static int map_managed_signal_to_native(int managed_signal) {
-    // Map from ProcessSignal enum values (defined in ProcessSignal.cs)
+    // Map from PosixSignal enum values (defined in PosixSignal.cs)
     switch (managed_signal) {
-        case 1: return SIGHUP;    // SIGHUP
-        case 2: return SIGINT;    // SIGINT
-        case 3: return SIGQUIT;   // SIGQUIT
-        case 6: return SIGABRT;   // SIGABRT
-        case 9: return SIGKILL;   // SIGKILL
-        case 10: return SIGUSR1;  // SIGUSR1
-        case 12: return SIGUSR2;  // SIGUSR2
-        case 13: return SIGPIPE;  // SIGPIPE
-        case 14: return SIGALRM;  // SIGALRM
-        case 15: return SIGTERM;  // SIGTERM
-        case 17: return SIGCHLD;  // SIGCHLD
-        case 18: return SIGCONT;  // SIGCONT
-        case 19: return SIGSTOP;  // SIGSTOP
-        case 20: return SIGTSTP;  // SIGTSTP
-        default: return -1;       // Invalid signal
+        case -1: return SIGHUP;     // SIGHUP
+        case -2: return SIGINT;     // SIGINT
+        case -3: return SIGQUIT;    // SIGQUIT
+        case -4: return SIGTERM;    // SIGTERM
+        case -5: return SIGCHLD;    // SIGCHLD
+        case -6: return SIGCONT;    // SIGCONT
+        case -7: return SIGWINCH;   // SIGWINCH
+        case -8: return SIGTTIN;    // SIGTTIN
+        case -9: return SIGTTOU;    // SIGTTOU
+        case -10: return SIGTSTP;   // SIGTSTP
+        case -11: return SIGKILL;   // SIGKILL
+        case -12: return SIGSTOP;   // SIGSTOP
+        default: return 0;          // Invalid signal (0 is not a valid signal number)
     }
 }
 
 static int map_native_signal_to_managed(int native_signal) {
     switch (native_signal) {
-        case SIGHUP: return 1;    // SIGHUP
-        case SIGINT: return 2;    // SIGINT
-        case SIGQUIT: return 3;   // SIGQUIT
-        case SIGABRT: return 6;   // SIGABRT
-        case SIGKILL: return 9;   // SIGKILL
-        case SIGUSR1: return 10;  // SIGUSR1
-        case SIGUSR2: return 12;  // SIGUSR2
-        case SIGPIPE: return 13;  // SIGPIPE
-        case SIGALRM: return 14;  // SIGALRM
-        case SIGTERM: return 15;  // SIGTERM
-        case SIGCHLD: return 17;  // SIGCHLD
-        case SIGCONT: return 18;  // SIGCONT
-        case SIGSTOP: return 19;  // SIGSTOP
-        case SIGTSTP: return 20;  // SIGTSTP
-        default: return -1;       // Invalid signal
+        case SIGHUP: return -1;     // SIGHUP
+        case SIGINT: return -2;     // SIGINT
+        case SIGQUIT: return -3;    // SIGQUIT
+        case SIGTERM: return -4;    // SIGTERM
+        case SIGCHLD: return -5;    // SIGCHLD
+        case SIGCONT: return -6;    // SIGCONT
+        case SIGWINCH: return -7;   // SIGWINCH
+        case SIGTTIN: return -8;    // SIGTTIN
+        case SIGTTOU: return -9;    // SIGTTOU
+        case SIGTSTP: return -10;   // SIGTSTP
+        case SIGKILL: return -11;   // SIGKILL
+        case SIGSTOP: return -12;   // SIGSTOP
+        default: return 0;          // Invalid signal (0 is not a valid signal number and not a valid PosixSignal enum value)
     }
 }
 
 int send_signal(int pidfd, int pid, int managed_signal) {
     // Map managed signal to native signal number
     int native_signal = map_managed_signal_to_native(managed_signal);
-    if (native_signal == -1) {
+    if (native_signal == 0) {
         errno = EINVAL;
         return -1;
     }

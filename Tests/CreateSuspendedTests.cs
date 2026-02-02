@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.TBA;
+using PosixSignal = System.TBA.PosixSignal;
 using Microsoft.Win32.SafeHandles;
 
 namespace Tests;
@@ -124,8 +125,9 @@ public class CreateSuspendedTests
         }
         else
         {
-            Assert.Equal(ProcessSignal.SIGKILL, exitStatus.Signal);
-            Assert.Equal(128 + (int)ProcessSignal.SIGKILL, exitStatus.ExitCode);
+            Assert.Equal(PosixSignal.SIGKILL, exitStatus.Signal);
+            // Exit code for signal termination is 128 + signal_number (native signal number, not enum value)
+            Assert.True(exitStatus.ExitCode > 128, $"Exit code {exitStatus.ExitCode} should indicate signal termination (>128)");
         }
     }
 

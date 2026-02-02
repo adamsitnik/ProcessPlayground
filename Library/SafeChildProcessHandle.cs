@@ -5,6 +5,7 @@ using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 using System.TBA;
+using PosixSignal = System.TBA.PosixSignal;
 
 namespace Microsoft.Win32.SafeHandles;
 
@@ -235,10 +236,10 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// On Windows, only SIGINT (mapped to CTRL_C_EVENT), SIGQUIT (mapped to CTRL_BREAK_EVENT), and SIGKILL are supported.
     /// The process must have been started with <see cref="ProcessStartOptions.CreateNewProcessGroup"/> set to true for signals to work properly.
     /// Windows always sends signals to the entire process group, so the <paramref name="entireProcessGroup"/> parameter has no effect.
-    /// On Unix/Linux, all signals defined in ProcessSignal are supported. When <paramref name="entireProcessGroup"/> is true,
+    /// On Unix/Linux, all signals defined in PosixSignal are supported. When <paramref name="entireProcessGroup"/> is true,
     /// the signal is sent to all processes in the process group.
     /// </remarks>
-    public void SendSignal(ProcessSignal signal, bool entireProcessGroup = false)
+    public void SendSignal(PosixSignal signal, bool entireProcessGroup = false)
     {
         if (!Enum.IsDefined(signal))
         {
@@ -257,7 +258,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// So instead of creating expensive async machinery to wait for process exit,
     /// this method attempts to get the exit code directly.
     /// </summary>
-    internal bool TryGetExitCode(out int exitCode, out ProcessSignal? signal)
+    internal bool TryGetExitCode(out int exitCode, out PosixSignal? signal)
     {
         Validate();
 
@@ -266,7 +267,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
 
     internal bool TryGetExitStatus(bool canceled, out ProcessExitStatus exitStatus)
     {
-        if (TryGetExitCodeCore(out int exitCode, out ProcessSignal? signal))
+        if (TryGetExitCodeCore(out int exitCode, out PosixSignal? signal))
         {
             exitStatus = new ProcessExitStatus(exitCode, canceled, signal);
             return true;
