@@ -818,6 +818,91 @@ int wait_for_exit_and_reap(int pidfd, int pid, int* out_exitCode, int* out_signa
     return -1;
 }
 
+// Try to wait for exit with cancellation support
+// Returns -1 on error, 1 on cancellation (data in cancelPipeFd), or 0 if process exited.
+int try_wait_for_exit_cancellable(int pidfd, int pid, int exitPipeFd, int cancelPipeFd, int* out_exitCode, int* out_signal) {
+    int ret;
+#if defined(HAVE_KQUEUE) || defined(HAVE_KQUEUEX)
+    // macOS and FreeBSD have kqueue which can monitor process exit
+    int queue = create_kqueue_cloexec();
+    if (queue == -1) {
+        return -1;
+    }
+
+    struct kevent change_list[2] = { 0 };
+    
+    // Monitor process exit
+    change_list[0].ident = pid;
+    change_list[0].filter = EVFILT_PROC;
+    change_list[0].fflags = NOTE_EXIT;
+    change_list[0].flags = EV_ADD | EV_CLEAR;
+
+    // Monitor cancelPipeFd for read events (cancellation)
+    change_list[1].ident = cancelPipeFd;
+    change_list[1].filter = EVFILT_READ;
+    change_list[1].flags = EV_ADD | EV_CLEAR;
+
+    struct kevent event_list = { 0 };
+
+    // Blocking wait (NULL timeout means wait indefinitely)
+    while ((ret = kevent(queue, change_list, 2, &event_list, 1, NULL)) < 0 && errno == EINTR);
+
+    if (ret < 0) {
+        int saved_errno = errno;
+        close(queue);
+
+        // If the target process does not exist at registration time kevent() returns -1 and errno == ESRCH.
+        if (saved_errno == ESRCH && try_get_exit_code(pidfd, pid, out_exitCode, out_signal) != -1)
+        {
+            return 0;
+        }
+        errno = saved_errno;
+        return -1;
+    }
+
+    close(queue);
+
+    // Check which event triggered
+    if (event_list.filter == EVFILT_READ && event_list.ident == (uintptr_t)cancelPipeFd) {
+        // Cancellation requested
+        return 1;
+    }
+#else
+    struct pollfd pfds[2] = { 0 };
+    
+#ifdef HAVE_PIDFD
+    // Wait on the process descriptor with poll
+    pfds[0].fd = pidfd;
+#else
+    // Wait for the child to finish by monitoring exit pipe for EOF
+    pfds[0].fd = exitPipeFd;
+#endif
+    // To poll a process descriptor, Linux needs POLLIN and FreeBSD needs POLLHUP.
+    // There are no side-effects to use both
+    pfds[0].events = POLLHUP | POLLIN;
+
+    // Monitor cancelPipeFd for cancellation
+    pfds[1].fd = cancelPipeFd;
+    pfds[1].events = POLLIN;
+
+    // Blocking wait (timeout = -1 means wait indefinitely)
+    while ((ret = poll(pfds, 2, -1)) < 0 && errno == EINTR);
+
+    if (ret == -1) { // Error
+        return -1;
+    }
+
+    // Check which event triggered
+    if (pfds[1].revents & POLLIN) {
+        // Cancellation requested (data available in cancelPipeFd)
+        return 1;
+    }
+#endif
+
+    // Process exited - collect exit status
+    return wait_for_exit_and_reap(pidfd, pid, out_exitCode, out_signal);
+}
+
 // Try to wait for exit with timeout, but don't kill the process if timeout occurs
 // Returns -1 on error, 1 on timeout, or 0 if process exited.
 int try_wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_exitCode, int* out_signal) {
