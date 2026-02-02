@@ -644,13 +644,20 @@ public partial class SafeChildProcessHandleTests
 
         // WaitForExitAsync should return quickly because the child exits immediately
         // (even though the grandchild is still running for 5 seconds)
-        int exitCode = useAsync
-            ? (await processHandle.WaitForExitOrKillOnCancellationAsync(cts.Token)).ExitCode
-            : processHandle.WaitForExitOrKillOnTimeout(timeout).ExitCode;
+        ProcessExitStatus exitStatus;
+        if (useAsync)
+        {
+            exitStatus = await processHandle.WaitForExitAsync(cts.Token);
+        }
+        else
+        {
+            Assert.True(processHandle.TryWaitForExit(timeout, out exitStatus), "Process did not exit within expected time");
+        }
 
         // The child should have exited successfully (exit code 0)
-        Assert.Equal(0, exitCode);
-
+        Assert.Equal(0, exitStatus.ExitCode);
+        Assert.Null(exitStatus.Signal);
+        Assert.False(exitStatus.Canceled);
         Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(3));
     }
 
