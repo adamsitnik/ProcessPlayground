@@ -1,4 +1,5 @@
-﻿using System.IO;
+using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
@@ -302,7 +303,7 @@ public static partial class ChildProcess
                 }
 
                 ProcessExitStatus exitStatus;
-                if (!processHandle.TryGetExitCode(out int exitCode, out ProcessSignal? signal))
+                if (!processHandle.TryGetExitCode(out int exitCode, out PosixSignal? signal))
                 {
                     exitStatus = await processHandle.WaitForExitAsync(cancellationToken);
                 }

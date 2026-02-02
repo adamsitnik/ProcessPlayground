@@ -95,7 +95,7 @@ public partial class SafeChildProcessHandle
         return exitCode;
     }
 
-    private bool TryGetExitCodeCore(out int exitCode, out ProcessSignal? signal)
+    private bool TryGetExitCodeCore(out int exitCode, out PosixSignal? signal)
     {
         signal = default;
 
@@ -544,20 +544,20 @@ public partial class SafeChildProcessHandle
         }
     }
 
-    private void SendSignalCore(ProcessSignal signal, bool entireProcessGroup)
+    private void SendSignalCore(PosixSignal signal, bool entireProcessGroup)
     {
         // SIGKILL is handled by calling KillCore directly
-        if (signal == ProcessSignal.SIGKILL)
+        if (signal == PosixSignal.SIGKILL)
         {
             KillCore(throwOnError: true, entireProcessGroup);
             return;
         }
 
-        // Map ProcessSignal to Windows console control event
+        // Map PosixSignal to Windows console control event
         int ctrlEvent = signal switch
         {
-            ProcessSignal.SIGINT => Interop.Kernel32.CTRL_C_EVENT,
-            ProcessSignal.SIGQUIT => Interop.Kernel32.CTRL_BREAK_EVENT,
+            PosixSignal.SIGINT => Interop.Kernel32.CTRL_C_EVENT,
+            PosixSignal.SIGQUIT => Interop.Kernel32.CTRL_BREAK_EVENT,
             _ => throw new ArgumentException($"Signal {signal} is not supported on Windows. Only SIGINT, SIGQUIT, and SIGKILL are supported.", nameof(signal))
         };
 

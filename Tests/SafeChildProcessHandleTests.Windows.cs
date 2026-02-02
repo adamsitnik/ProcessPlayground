@@ -30,7 +30,7 @@ public partial class SafeChildProcessHandleTests
         Assert.False(hasExited, "Process should still be running before signal is sent");
 
         // Send SIGINT signal (CTRL_C_EVENT)
-        processHandle.SendSignal(ProcessSignal.SIGINT);
+        processHandle.SendSignal(PosixSignal.SIGINT);
 
         // Process should exit after receiving SIGINT
         var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromMilliseconds(300));
@@ -63,7 +63,7 @@ public partial class SafeChildProcessHandleTests
         Assert.False(hasExited, "Process should still be running before signal is sent");
 
         // Send SIGQUIT signal (CTRL_BREAK_EVENT)
-        processHandle.SendSignal(ProcessSignal.SIGQUIT);
+        processHandle.SendSignal(PosixSignal.SIGQUIT);
 
         // Process should exit after receiving SIGQUIT
         var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromMilliseconds(300));
@@ -94,7 +94,7 @@ public partial class SafeChildProcessHandleTests
         try
         {
             // Try to send an unsupported signal on Windows (only SIGINT, SIGQUIT, and SIGKILL are supported)
-            Assert.Throws<ArgumentException>(() => processHandle.SendSignal(ProcessSignal.SIGTERM));
+            Assert.Throws<ArgumentException>(() => processHandle.SendSignal(PosixSignal.SIGTERM));
         }
         finally
         {

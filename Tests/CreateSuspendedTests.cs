@@ -124,8 +124,8 @@ public class CreateSuspendedTests
         }
         else
         {
-            Assert.Equal(ProcessSignal.SIGKILL, exitStatus.Signal);
-            Assert.Equal(128 + (int)ProcessSignal.SIGKILL, exitStatus.ExitCode);
+            Assert.Equal(PosixSignal.SIGKILL, exitStatus.Signal);
+            Assert.Equal(128 + (int)PosixSignal.SIGKILL, exitStatus.ExitCode);
         }
     }
 

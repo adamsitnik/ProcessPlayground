@@ -139,14 +139,14 @@ public partial class SafeChildProcessHandle
         }
     }
 
-    private bool TryGetExitCodeCore(out int exitCode, out ProcessSignal? signal)
+    private bool TryGetExitCodeCore(out int exitCode, out PosixSignal? signal)
     {
         signal = null;
         if (try_get_exit_code(this, ProcessId, out exitCode, out int rawSignal) != -1)
         {
             if (rawSignal != 0)
             {
-                signal = (ProcessSignal)rawSignal;
+                signal = (PosixSignal)rawSignal;
             }
             return true;
         }
@@ -161,7 +161,7 @@ public partial class SafeChildProcessHandle
                 int errno = Marshal.GetLastPInvokeError();
                 throw new Win32Exception(errno, $"wait_for_exit_and_reap() failed with (errno={errno})");
             default:
-                return new(exitCode, false, rawSignal != 0 ? (ProcessSignal)rawSignal : null);
+                return new(exitCode, false, rawSignal != 0 ? (PosixSignal)rawSignal : null);
         }
     }
 
@@ -176,7 +176,7 @@ public partial class SafeChildProcessHandle
                 exitStatus = default;
                 return false;
             default:
-                exitStatus = new(exitCode, false, rawSignal != 0 ? (ProcessSignal)rawSignal : null);
+                exitStatus = new(exitCode, false, rawSignal != 0 ? (PosixSignal)rawSignal : null);
                 return true;
         }
     }
@@ -189,7 +189,7 @@ public partial class SafeChildProcessHandle
                 int errno = Marshal.GetLastPInvokeError();
                 throw new Win32Exception(errno, $"wait_for_exit_or_kill_on_timeout() failed with (errno={errno})");
             default:
-                return new(exitCode, hasTimedout == 1, rawSignal != 0 ? (ProcessSignal)rawSignal : null);
+                return new(exitCode, hasTimedout == 1, rawSignal != 0 ? (PosixSignal)rawSignal : null);
         }
     }
 
@@ -263,7 +263,7 @@ public partial class SafeChildProcessHandle
         // If entireProcessGroup is true, send to -pid (negative pid), don't use pidfd.
         int pidfd = entireProcessGroup ? -1 : (int)this.handle;
         int pid = entireProcessGroup ? -ProcessId : ProcessId;
-        int result = send_signal(pidfd, pid, ProcessSignal.SIGKILL);
+        int result = send_signal(pidfd, pid, PosixSignal.SIGKILL);
         if (result == 0)
         {
             return true;
@@ -285,7 +285,7 @@ public partial class SafeChildProcessHandle
         throw new Win32Exception(errno, $"Failed to terminate process (errno={errno})");
     }
 
-    private void SendSignalCore(ProcessSignal signal, bool entireProcessGroup)
+    private void SendSignalCore(PosixSignal signal, bool entireProcessGroup)
     {
         // If entireProcessGroup is true, send to -pid (negative pid), dont't use pidfd.
         int pidfd = entireProcessGroup ? -1 : (int)this.handle;
@@ -305,7 +305,7 @@ public partial class SafeChildProcessHandle
     private void ResumeCore()
     {
         // Resume a suspended process by sending SIGCONT
-        int result = send_signal((int)this.handle, ProcessId, ProcessSignal.SIGCONT);
+        int result = send_signal((int)this.handle, ProcessId, PosixSignal.SIGCONT);
         if (result == 0)
         {
             return;
@@ -339,7 +339,7 @@ public partial class SafeChildProcessHandle
         int inherited_handles_count);
 
     [LibraryImport("pal_process", SetLastError = true)]
-    private static partial int send_signal(int pidfd, int pid, ProcessSignal managed_signal);
+    private static partial int send_signal(int pidfd, int pid, PosixSignal managed_signal);
 
     [LibraryImport("pal_process", SetLastError = true)]
     private static partial int wait_for_exit_and_reap(SafeChildProcessHandle pidfd, int pid, out int exitCode, out int signal);

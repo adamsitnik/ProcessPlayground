@@ -303,8 +303,8 @@ public partial class SafeChildProcessHandleTests
 #if WINDOWS
         Assert.Equal(-1, exitStatus.ExitCode);
 #else
-        Assert.Equal(ProcessSignal.SIGKILL, exitStatus.Signal);
-        Assert.Equal(128 + (int)ProcessSignal.SIGKILL, exitStatus.ExitCode);
+        Assert.Equal(PosixSignal.SIGKILL, exitStatus.Signal);
+        Assert.Equal(128 + (int)PosixSignal.SIGKILL, exitStatus.ExitCode);
 #endif
     }
 
@@ -491,8 +491,8 @@ public partial class SafeChildProcessHandleTests
 
 #if !WINDOWS
         // On Unix, the process should have been killed with SIGKILL
-        Assert.Equal(ProcessSignal.SIGKILL, exitStatus.Signal);
-        Assert.Equal(128 + (int)ProcessSignal.SIGKILL, exitStatus.ExitCode);
+        Assert.Equal(PosixSignal.SIGKILL, exitStatus.Signal);
+        Assert.Equal(128 + (int)PosixSignal.SIGKILL, exitStatus.ExitCode);
 #else
         // On Windows, TerminateProcess sets exit code to -1
         Assert.Equal(-1, exitStatus.ExitCode);
@@ -718,8 +718,8 @@ public partial class SafeChildProcessHandleTests
             else
             {
                 // On Unix, the process should have been killed with SIGKILL
-                Assert.Equal(128 + (int)ProcessSignal.SIGKILL, exitStatus.ExitCode);
-                Assert.Equal(ProcessSignal.SIGKILL, exitStatus.Signal);
+                Assert.Equal(128 + (int)PosixSignal.SIGKILL, exitStatus.ExitCode);
+                Assert.Equal(PosixSignal.SIGKILL, exitStatus.Signal);
             }
 
             // The grandchild should still be running (only parent was killed)
