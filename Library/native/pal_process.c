@@ -698,7 +698,7 @@ static int map_managed_signal_to_native(int managed_signal) {
         case -15: return SIGPIPE;   // SIGPIPE
         case -16: return SIGALRM;   // SIGALRM
         case -17: return SIGSTOP;   // SIGSTOP
-        default: return -1;         // Invalid signal
+        default: return 0;          // Invalid signal (0 is not a valid signal number)
     }
 }
 
@@ -721,14 +721,14 @@ static int map_native_signal_to_managed(int native_signal) {
         case SIGPIPE: return -15;   // SIGPIPE
         case SIGALRM: return -16;   // SIGALRM
         case SIGSTOP: return -17;   // SIGSTOP
-        default: return -1;         // Invalid signal
+        default: return 0;          // Invalid signal (0 is not a valid signal number and not a valid PosixSignal enum value)
     }
 }
 
 int send_signal(int pidfd, int pid, int managed_signal) {
     // Map managed signal to native signal number
     int native_signal = map_managed_signal_to_native(managed_signal);
-    if (native_signal == -1) {
+    if (native_signal == 0) {
         errno = EINVAL;
         return -1;
     }

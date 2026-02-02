@@ -45,7 +45,6 @@ public enum PosixSignal
     SIGTSTP = -10,
 
     /// <summary>Force kill (cannot be caught/ignored)</summary>
-    [UnsupportedOSPlatform("windows")]
     SIGKILL = -11,
 
     /// <summary>Abort</summary>
