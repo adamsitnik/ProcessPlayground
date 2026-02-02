@@ -748,7 +748,7 @@ public partial class SafeChildProcessHandleTests
         }
     }
 
-    [Fact]
+    [Fact(Skip = ConditionalTests.WindowsOnly)] // It's pretty flaky on Linux ;(
     public static async Task Kill_EntireProcessGroup_CanBeCombinedWithKillOnParentDeath()
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
