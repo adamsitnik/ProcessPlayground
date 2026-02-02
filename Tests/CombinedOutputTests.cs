@@ -218,7 +218,7 @@ public class CombinedOutputTests
 
     [Theory]
     [InlineData(false)]
-    // [InlineData(true)] // https://github.com/adamsitnik/ProcessPlayground/issues/61
+    [InlineData(true)]
     public static async Task CombinedOutput_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {
         // This test verifies that CombinedOutput/CombinedOutputAsync returns when the direct child process exits,

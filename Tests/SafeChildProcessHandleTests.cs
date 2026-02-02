@@ -609,9 +609,7 @@ public partial class SafeChildProcessHandleTests
 
     [Theory]
     [InlineData(false)]
-#if WINDOWS // https://github.com/adamsitnik/ProcessPlayground/issues/61
     [InlineData(true)]
-#endif
     public static async Task WaitForExit_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
