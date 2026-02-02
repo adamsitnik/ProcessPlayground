@@ -21,11 +21,16 @@ public partial class SafeChildProcessHandle
     // Thread handle for suspended processes (only used on Windows)
     private readonly IntPtr _threadHandle;
 
+    // Job handle for CreateNewProcessGroup functionality (only used on Windows)
+    // This is specific to each process and is used to terminate the entire process group
+    private readonly IntPtr _processGroupJobHandle;
+
     // Windows-specific constructor for suspended processes that need to keep the thread handle
-    private SafeChildProcessHandle(IntPtr processHandle, IntPtr threadHandle, int processId, bool ownsHandle)
-        : base(processHandle, ownsHandle)
+    private SafeChildProcessHandle(IntPtr processHandle, IntPtr threadHandle, IntPtr processGroupJobHandle, int processId)
+        : base(processHandle, ownsHandle: true)
     {
         _threadHandle = threadHandle;
+        _processGroupJobHandle = processGroupJobHandle;
         ProcessId = processId;
     }
 
@@ -63,6 +68,12 @@ public partial class SafeChildProcessHandle
         if (_threadHandle != IntPtr.Zero)
         {
             Interop.Kernel32.CloseHandle(_threadHandle);
+        }
+        
+        // Close the process group job handle if it exists
+        if (_processGroupJobHandle != IntPtr.Zero)
+        {
+            Interop.Kernel32.CloseHandle(_processGroupJobHandle);
         }
         
         return Interop.Kernel32.CloseHandle(handle);
@@ -127,6 +138,7 @@ public partial class SafeChildProcessHandle
         // Allocate handles array on heap (simpler for .NET Framework compatibility)
         IntPtr heapHandlesPtr = Marshal.AllocHGlobal(maxHandleCount * sizeof(IntPtr));
         IntPtr* handlesToInherit = (IntPtr*)heapHandlesPtr;
+        IntPtr processGroupJobHandle = IntPtr.Zero;
 
         try
         {
@@ -138,10 +150,21 @@ public partial class SafeChildProcessHandle
 
             PrepareHandleAllowList(options, handlesToInherit, ref handleCount, inputPtr, outputPtr, errorPtr);
 
+            // Create a job object if CreateNewProcessGroup is requested
+            // This must happen before starting the process to ensure atomicity
+            if (options.CreateNewProcessGroup)
+            {
+                processGroupJobHandle = Interop.Kernel32.CreateJobObjectW(IntPtr.Zero, IntPtr.Zero);
+                if (processGroupJobHandle == IntPtr.Zero)
+                {
+                    throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to create job object for process group: the system may have reached its job object limit or insufficient permissions");
+                }
+            }
+
             // Determine number of attributes we need
             int attributeCount = 1; // Always need handle list
-            if (options.KillOnParentDeath)
-                attributeCount++; // Also need job list
+            if (options.KillOnParentDeath || options.CreateNewProcessGroup)
+                attributeCount++; // Required for PROC_THREAD_ATTRIBUTE_JOB_LIST
 
             // Initialize the attribute list
             IntPtr size = IntPtr.Zero;
@@ -172,19 +195,23 @@ public partial class SafeChildProcessHandle
                 throw new Win32Exception();
             }
 
-            // Add job list if KillOnParentDeath is enabled
-            if (options.KillOnParentDeath)
+            if (options.KillOnParentDeath || options.CreateNewProcessGroup)
             {
-                IntPtr jobHandle = s_killOnParentDeathJob.Value;
-                IntPtr* pJobHandle = stackalloc IntPtr[1];
-                pJobHandle[0] = jobHandle;
+                IntPtr* pJobHandle = stackalloc IntPtr[2];
+                int jobsCount = 0;
+
+                // The parent job must be added first!
+                if (options.KillOnParentDeath)
+                    pJobHandle[jobsCount++] = s_killOnParentDeathJob.Value;
+                if (options.CreateNewProcessGroup)
+                    pJobHandle[jobsCount++] = processGroupJobHandle;
 
                 if (!Interop.Kernel32.UpdateProcThreadAttribute(
                     attributeList,
                     0,
-                    (IntPtr)Interop.Kernel32.PROC_THREAD_ATTRIBUTE_JOB_LIST,
+                    Interop.Kernel32.PROC_THREAD_ATTRIBUTE_JOB_LIST,
                     pJobHandle,
-                    (IntPtr)IntPtr.Size,
+                    jobsCount * sizeof(IntPtr),
                     null,
                     IntPtr.Zero))
                 {
@@ -239,11 +266,11 @@ public partial class SafeChildProcessHandle
                 // If the process was created suspended, keep the thread handle for later resumption
                 if (createSuspended && processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
                 {
-                    procSH = new(processInfo.hProcess, processInfo.hThread, processInfo.dwProcessId, true);
+                    procSH = new(processInfo.hProcess, processInfo.hThread, processGroupJobHandle, processInfo.dwProcessId);
                 }
                 else
                 {
-                    procSH = new(processInfo.hProcess, IntPtr.Zero, processInfo.dwProcessId, true);
+                    procSH = new(processInfo.hProcess, IntPtr.Zero, processGroupJobHandle, processInfo.dwProcessId);
                     // Close the thread handle if we don't need it
                     if (processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
                         Interop.Kernel32.CloseHandle(processInfo.hThread);
@@ -262,6 +289,13 @@ public partial class SafeChildProcessHandle
         catch
         {
             procSH?.Dispose();
+            
+            // Clean up job handle if process creation failed
+            if (processGroupJobHandle != IntPtr.Zero)
+            {
+                Interop.Kernel32.CloseHandle(processGroupJobHandle);
+            }
+            
             throw;
         }
         finally
@@ -471,9 +505,16 @@ public partial class SafeChildProcessHandle
     /// <summary>
     /// Returns true when process was killed, false when it was already exited.
     /// </summary>
-    internal bool KillCore(bool throwOnError)
+    internal bool KillCore(bool throwOnError, bool entireProcessGroup = false)
     {
-        if (Interop.Kernel32.TerminateProcess(this, exitCode: -1))
+        if (entireProcessGroup && _processGroupJobHandle == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("Cannot terminate entire process group because the process was not started with CreateNewProcessGroup=true.");
+        }
+
+        if(entireProcessGroup
+            ? Interop.Kernel32.TerminateJobObject(_processGroupJobHandle, unchecked((uint)-1))
+            : Interop.Kernel32.TerminateProcess(this, exitCode: -1))
         {
             return true;
         }
@@ -483,7 +524,7 @@ public partial class SafeChildProcessHandle
         {
             Interop.Errors.ERROR_SUCCESS => true,
             Interop.Errors.ERROR_ACCESS_DENIED => false, // Process has already exited
-            _ when !throwOnError => false, // TODO
+            _ when !throwOnError => false,
             _ => throw new Win32Exception(error, "Failed to terminate process"),
         };
     }
@@ -508,7 +549,7 @@ public partial class SafeChildProcessHandle
         // SIGKILL is handled by calling KillCore directly
         if (signal == ProcessSignal.SIGKILL)
         {
-            KillCore(throwOnError: true);
+            KillCore(throwOnError: true, entireProcessGroup);
             return;
         }
 

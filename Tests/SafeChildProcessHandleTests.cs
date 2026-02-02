@@ -611,6 +611,12 @@ public partial class SafeChildProcessHandleTests
 #endif
     public static async Task WaitForExit_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {
+        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
+        {
+            // timeout utility requires valid STD IN as it signs up for Ctrl+C handling
+            return;
+        }
+
         // This test verifies that WaitForExitAsync returns when the direct child process exits,
         // even if that child has spawned a grandchild process that is still running.
         // This is important because:
@@ -630,7 +636,7 @@ public partial class SafeChildProcessHandleTests
             };
 
         Stopwatch started = Stopwatch.StartNew();
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: Console.OpenStandardInputHandle(), output: null, error: null);
 
         TimeSpan timeout = TimeSpan.FromSeconds(3);
         using CancellationTokenSource cts = new(timeout);
@@ -645,6 +651,157 @@ public partial class SafeChildProcessHandleTests
         Assert.Equal(0, exitCode);
 
         Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(3));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public static async Task Kill_EntireProcessGroup_ParameterControlsScope(bool entireProcessGroup)
+    {
+        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
+        {
+            // timeout utility requires valid STD IN as it signs up for Ctrl+C handling
+            return;
+        }
+
+        // This test verifies that the entireProcessGroup parameter controls whether
+        // only the parent process is killed (false) or the entire process group (true)
+
+        const int MaxExpectedTerminationTimeMs = 300;
+
+        // Create a pipe to detect when the grandchild process exits
+        File.CreatePipe(out SafeFileHandle pipeReadHandle, out SafeFileHandle pipeWriteHandle);
+
+        using (FileStream readStream = new(pipeReadHandle, FileAccess.Read, bufferSize: 1, isAsync: false))
+        using (pipeWriteHandle)
+        {
+            // Start a shell that spawns a background child process
+            // The grandchild will inherit the pipe write handle and keep it open
+            ProcessStartOptions options = OperatingSystem.IsWindows()
+                ? new("cmd.exe")
+                {
+                    Arguments = { "/c", "timeout", "/t", "5", "/nobreak" },
+                }
+                : new("sh")
+                {
+                    Arguments = { "-c", "sleep 5 & wait" },
+                };
+
+            options.CreateNewProcessGroup = true;
+            // Add the pipe write handle to inherited handles so the grandchild inherits it
+            options.InheritedHandles.Add(pipeWriteHandle);
+
+            using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: Console.OpenStandardInputHandle(), output: null, error: null);
+
+            // Close the parent's write handle - now only the shell and grandchild hold it
+            pipeWriteHandle.Dispose();
+
+            // Start an async read from the pipe in a background task
+            // This will block until all write ends are closed
+            byte[] buffer = new byte[1];
+            Task<int> readTask = Task.Run(() => readStream.Read(buffer, 0, 1));
+
+            // Verify the task hasn't completed (shell and grandchild still have pipe open)
+            await Task.Delay(50);
+            Assert.False(readTask.IsCompleted, "Grandchild should still be running");
+
+            // Kill with the specified parameter
+            processHandle.Kill(entireProcessGroup: entireProcessGroup);
+
+            // Wait for parent shell to exit
+            Assert.True(processHandle.TryWaitForExit(TimeSpan.FromMilliseconds(MaxExpectedTerminationTimeMs), out ProcessExitStatus exitStatus), "Parent process should exit after being killed");
+
+            if (OperatingSystem.IsWindows())
+            {
+                Assert.Equal(-1, exitStatus.ExitCode);
+            }
+            else
+            {
+                // On Unix, the process should have been killed with SIGKILL
+                Assert.Equal(128 + (int)ProcessSignal.SIGKILL, exitStatus.ExitCode);
+                Assert.Equal(ProcessSignal.SIGKILL, exitStatus.Signal);
+            }
+
+            // The grandchild should still be running (only parent was killed)
+            if (!entireProcessGroup)
+            {
+                await Task.Delay(50);
+                Assert.False(readTask.IsCompleted, "Grandchild should still be running after parent was killed");
+
+                processHandle.Kill(entireProcessGroup: true);
+            }
+
+            // The grandchild should be terminated, closing the pipe write end
+            Stopwatch stopwatch = Stopwatch.StartNew();
+            int bytesRead = await readTask;
+            Assert.Equal(0, bytesRead); // EOF
+            stopwatch.Stop();
+
+            // Verify the read completed (pipe closed due to grandchild termination)
+            Assert.Equal(0, bytesRead);
+            Assert.True(stopwatch.ElapsedMilliseconds < MaxExpectedTerminationTimeMs,
+                $"Grandchild should have been killed quickly, took {stopwatch.ElapsedMilliseconds}ms");
+        }
+    }
+
+    [Fact]
+    public static async Task Kill_EntireProcessGroup_CanBeCombinedWithKillOnParentDeath()
+    {
+        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
+        {
+            // timeout utility requires valid STD IN as it signs up for Ctrl+C handling
+            return;
+        }
+
+        // Create a pipe to detect when the grandchild process exits
+        File.CreatePipe(out SafeFileHandle pipeReadHandle, out SafeFileHandle pipeWriteHandle);
+
+        using (FileStream readStream = new(pipeReadHandle, FileAccess.Read, bufferSize: 1, isAsync: false))
+        using (pipeWriteHandle)
+        {
+            // Start a shell that spawns a background child process
+            // The grandchild will inherit the pipe write handle and keep it open
+            ProcessStartOptions options = OperatingSystem.IsWindows()
+                ? new("cmd.exe")
+                {
+                    Arguments = { "/c", "timeout", "/t", "5", "/nobreak" },
+                }
+                : new("sh")
+                {
+                    Arguments = { "-c", "sleep 5 & wait" },
+                };
+
+            options.KillOnParentDeath = true; // Enable KillOnParentDeath
+            options.CreateNewProcessGroup = true;
+            // Add the pipe write handle to inherited handles so the grandchild inherits it
+            options.InheritedHandles.Add(pipeWriteHandle);
+
+            using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: Console.OpenStandardInputHandle(), output: null, error: null);
+
+            // Close the parent's write handle - now only the shell and grandchild hold it
+            pipeWriteHandle.Dispose();
+
+            // Start an async read from the pipe in a background task
+            // This will block until all write ends are closed
+            byte[] buffer = new byte[1];
+            Task<int> readTask = Task.Run(() => readStream.Read(buffer, 0, 1));
+
+            // Verify the task hasn't completed (shell and grandchild still have pipe open)
+            await Task.Delay(50);
+            Assert.False(readTask.IsCompleted, "Grandchild should still be running");
+
+            // Kill with the specified parameter
+            processHandle.Kill(entireProcessGroup: true);
+            // Wait for parent shell to exit
+            Assert.True(processHandle.TryWaitForExit(TimeSpan.FromMilliseconds(300), out ProcessExitStatus exitStatus), "Parent process should exit after being killed");
+
+            Assert.NotEqual(0, exitStatus.ExitCode);
+
+            // The grandchild should be terminated, closing the pipe write end
+            Stopwatch watch = Stopwatch.StartNew();
+            Assert.Equal(0, await readTask); // EOF
+            Assert.InRange(watch.ElapsedMilliseconds, 0, 300); // Should complete quickly
+        }
     }
 
     [Fact]

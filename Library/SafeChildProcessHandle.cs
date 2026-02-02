@@ -191,16 +191,23 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// <summary>
     /// Terminates the process.
     /// </summary>
+    /// <param name="entireProcessGroup">When true, terminates the entire process group (Unix and Windows with <see cref="ProcessStartOptions.CreateNewProcessGroup"/>). Default is false.</param>
     /// <returns>
     /// <c>true</c> if the process was terminated; <c>false</c> if the process had already exited.
     /// </returns>
     /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
     /// <exception cref="Win32Exception">Thrown when the kill operation fails for reasons other than the process having already exited.</exception>
-    public bool Kill()
+    /// <remarks>
+    /// On Unix, when <paramref name="entireProcessGroup"/> is true, sends SIGKILL to all processes in the process group.
+    /// On Windows, when <paramref name="entireProcessGroup"/> is true and the process was started with <see cref="ProcessStartOptions.CreateNewProcessGroup"/>=true,
+    /// terminates all processes in the job object. If the process was not started with <see cref="ProcessStartOptions.CreateNewProcessGroup"/>=true, 
+    /// the parameter has no effect and only the single process is terminated.
+    /// </remarks>
+    public bool Kill(bool entireProcessGroup = false)
     {
         Validate();
 
-        return KillCore(throwOnError: true);
+        return KillCore(throwOnError: true, entireProcessGroup);
     }
 
     /// <summary>
