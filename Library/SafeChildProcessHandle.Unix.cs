@@ -194,28 +194,38 @@ public partial class SafeChildProcessHandle
         }
     }
 
+    // After the code is moved to dotnet/runtime, it's going to use kqeue and epoll and the sockets thread to optimize perf and resources
     private async Task<ProcessExitStatus> WaitForExitAsyncCore(CancellationToken cancellationToken)
     {
-        // Treat the exit pipe fd as a socket and perform async read
-        // When the child process exits, all its file descriptors are closed,
-        // including the write end of the exit pipe. This will cause the read
-        // to return 0 bytes (orderly shutdown).
-        using SafeSocketHandle safeSocket = new(_exitPipeFd, ownsHandle: false);
-        using Socket socket = new(safeSocket);
-
-        // Returns number of bytes read, 0 means orderly shutdown by peer (pipe closed).
-        int bytesRead = await socket.ReceiveAsync(s_exitPipeBuffer, SocketFlags.None, cancellationToken).ConfigureAwait(false);
-        
-        // When the child process exits, the write end of the pipe is closed,
-        // which should result in 0 bytes read (orderly shutdown).
-        if (bytesRead != 0)
+        if (!cancellationToken.CanBeCanceled)
         {
-            throw new InvalidOperationException($"Unexpected data read from exit pipe: {bytesRead} byte(s). Expected 0 bytes (pipe closure).");
+            return await Task.Run(() => WaitForExitCore(), cancellationToken).ConfigureAwait(false);
         }
 
-        // The process has exited, now retrieve the exit status
-        ProcessExitStatus status = WaitForExitCore();
-        return new(status.ExitCode, false, status.Signal);
+        File.CreatePipe(out SafeFileHandle readHandle, out SafeFileHandle writeHandle);
+
+        using (readHandle)
+        using (writeHandle)
+        {
+            using CancellationTokenRegistration registration = cancellationToken.Register(static state =>
+            {
+                ((SafeFileHandle)state!).Close(); // Close the write end of the pipe to signal cancellation
+            }, writeHandle);
+
+            return await Task.Run(() =>
+            {
+                switch (try_wait_for_exit_cancellable(this, ProcessId, _exitPipeFd, (int)readHandle.DangerousGetHandle(), out int exitCode, out int rawSignal))
+                {
+                    case -1:
+                        int errno = Marshal.GetLastPInvokeError();
+                        throw new Win32Exception(errno, $"try_wait_for_exit_cancellable() failed with (errno={errno})");
+                    case 1: // canceled
+                        throw new OperationCanceledException(cancellationToken);
+                    default:
+                        return new ProcessExitStatus(exitCode, false, rawSignal != 0 ? (PosixSignal)rawSignal : null);
+                }
+            }, cancellationToken);
+        }
     }
 
     private async Task<ProcessExitStatus> WaitForExitOrKillOnCancellationAsyncCore(CancellationToken cancellationToken)
@@ -347,6 +357,9 @@ public partial class SafeChildProcessHandle
 
     [LibraryImport("pal_process", SetLastError = true)]
     private static partial int try_wait_for_exit(SafeChildProcessHandle pidfd, int pid, int exitPipeFd, int timeout_ms, out int exitCode, out int signal, out int hasTimedout);
+
+    [LibraryImport("pal_process", SetLastError = true)]
+    private static partial int try_wait_for_exit_cancellable(SafeChildProcessHandle pidfd, int pid, int exitPipeFd, int cancelPipeFd, out int exitCode, out int signal);
 
     [LibraryImport("pal_process", SetLastError = true)]
     private static partial int wait_for_exit_or_kill_on_timeout(SafeChildProcessHandle pidfd, int pid, int exitPipeFd, int timeout_ms, out int exitCode, out int signal, out int hasTimedout);
