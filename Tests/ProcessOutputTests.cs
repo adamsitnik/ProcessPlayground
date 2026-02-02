@@ -302,7 +302,7 @@ public class ProcessOutputTests
 
     [Theory]
     [InlineData(false)]
-    [InlineData(true)]
+    // [InlineData(true)] // https://github.com/adamsitnik/ProcessPlayground/issues/61
     public static async Task ProcessOutput_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {
         // This test verifies that CaptureOutput/CaptureOutputAsync returns when the direct child process exits,

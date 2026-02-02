@@ -172,10 +172,10 @@ public class CombinedOutputTests
         Stopwatch started = Stopwatch.StartNew();
 
         // Accept either OperationCanceledException or TaskCanceledException (which derives from it)
-        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-            await ChildProcess.CaptureCombinedAsync(options, cancellationToken: cts.Token));
+        var combinedOutput = await ChildProcess.CaptureCombinedAsync(options, cancellationToken: cts.Token);
 
         Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(5));
+        Assert.True(combinedOutput.ExitStatus.Canceled);
     }
 
     [Fact]

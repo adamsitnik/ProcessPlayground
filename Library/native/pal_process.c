@@ -893,7 +893,7 @@ int try_wait_for_exit_cancellable(int pidfd, int pid, int exitPipeFd, int cancel
     }
 
     // Check which event triggered
-    if (pfds[1].revents & POLLIN) {
+    if (pfds[1].revents & (POLLIN | POLLHUP | POLLERR)) {
         // Cancellation requested (data available in cancelPipeFd)
         return 1;
     }

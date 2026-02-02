@@ -405,23 +405,39 @@ public static partial class ChildProcess
             {
                 while (true)
                 {
+                    // It's possible that both tasks complete at the same time,
+                    // so we check read task first to drain any remaining output.
+                    // And then exit task to see if we can stop reading.
                     Task completedTask = await Task.WhenAny(tasks);
 
-                    if (completedTask == exitTask)
-                    {
-                        break; // Process exited, we can stop reading.
-                    }
-
-                    int bytesRead = await readTask;
-                    if (bytesRead <= 0)
+                    if (completedTask == exitTask && !readTask.IsCompleted)
                     {
                         break;
                     }
 
-                    totalBytesRead += bytesRead;
-                    if (totalBytesRead == buffer.Length)
+                    try
                     {
-                        BufferHelper.RentLargerBuffer(ref buffer);
+                        int bytesRead = await readTask;
+                        if (bytesRead <= 0)
+                        {
+                            break;
+                        }
+
+                        totalBytesRead += bytesRead;
+                        if (totalBytesRead == buffer.Length)
+                        {
+                            BufferHelper.RentLargerBuffer(ref buffer);
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // We don't throw, but kill the process and report partial output.
+                        break;
+                    }
+
+                    if (completedTask == exitTask)
+                    {
+                        break;
                     }
 
                     tasks[1] = readTask = outputStream.ReadAsync(buffer, totalBytesRead, buffer.Length - totalBytesRead, cancellationToken);
