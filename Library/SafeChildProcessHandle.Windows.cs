@@ -138,6 +138,7 @@ public partial class SafeChildProcessHandle
         // Allocate handles array on heap (simpler for .NET Framework compatibility)
         IntPtr heapHandlesPtr = Marshal.AllocHGlobal(maxHandleCount * sizeof(IntPtr));
         IntPtr* handlesToInherit = (IntPtr*)heapHandlesPtr;
+        IntPtr processGroupJobHandle = IntPtr.Zero;
 
         try
         {
@@ -151,7 +152,6 @@ public partial class SafeChildProcessHandle
 
             // Create a job object if CreateNewProcessGroup is requested
             // This must happen before starting the process to ensure atomicity
-            IntPtr processGroupJobHandle = IntPtr.Zero;
             if (options.CreateNewProcessGroup)
             {
                 processGroupJobHandle = Interop.Kernel32.CreateJobObjectW(IntPtr.Zero, IntPtr.Zero);
