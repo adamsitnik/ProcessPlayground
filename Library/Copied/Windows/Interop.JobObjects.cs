@@ -73,8 +73,6 @@ internal static partial class Interop
 
         [LibraryImport(Libraries.Kernel32, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        internal static
-        partial
-        bool TerminateJobObject(IntPtr hJob, uint uExitCode);
+        internal static partial bool TerminateJobObject(IntPtr hJob, uint uExitCode);
     }
 }

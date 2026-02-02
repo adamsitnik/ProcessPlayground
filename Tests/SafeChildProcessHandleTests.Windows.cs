@@ -114,31 +114,62 @@ public partial class SafeChildProcessHandleTests
     public void Kill_EntireProcessGroup_TerminatesAllProcesses()
     {
         // This test verifies that Kill with entireProcessGroup=true terminates all processes in the job
-        // Note: We use a simple timeout approach here. On slower systems, if the nested process
-        // doesn't start in time, the test will still pass but won't fully exercise the scenario.
-        // This is acceptable for a basic smoke test of the job termination functionality.
+        // We use a pipe to verify that child processes were actually terminated
         
-        // Start a cmd.exe that starts a nested timeout command
-        ProcessStartOptions options = new("cmd.exe") 
-        { 
-            Arguments = { "/c", "start", "/B", "timeout", "/t", "60", "/nobreak", "&&", "timeout", "/t", "60", "/nobreak" },
-            CreateNewProcessGroup = true
-        };
+        // Create a pipe to detect when the child process exits
+        File.CreatePipe(out SafeFileHandle pipeReadHandle, out SafeFileHandle pipeWriteHandle);
 
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
-        
-        // Give the process time to start the nested timeout command (500ms should be sufficient in most cases)
-        System.Threading.Thread.Sleep(500);
+        using (pipeReadHandle)
+        using (pipeWriteHandle)
+        {
+            // Start a cmd.exe that starts a child timeout command
+            // The child will inherit the pipe write handle and keep it open
+            ProcessStartOptions options = new("cmd.exe") 
+            { 
+                Arguments = { "/c", "start", "/B", "timeout", "/t", "60", "/nobreak" },
+                CreateNewProcessGroup = true
+            };
+            
+            // Add the pipe write handle to inherited handles so the child inherits it
+            options.InheritedHandles.Add(pipeWriteHandle);
 
-        // Kill the entire process group
-        bool wasKilled = processHandle.Kill(entireProcessGroup: true);
-        Assert.True(wasKilled);
+            using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+            
+            // Give the process time to start the child timeout command
+            System.Threading.Thread.Sleep(500);
+            
+            // Close the parent's write handle - now only cmd.exe and child timeout hold it
+            pipeWriteHandle.Dispose();
+            
+            // Create a FileStream from the read handle
+            using FileStream readStream = new(pipeReadHandle, FileAccess.Read, bufferSize: 1, isAsync: false);
+            
+            // Start a read from the pipe in a background task
+            // This will block until all write ends are closed
+            byte[] buffer = new byte[1];
+            System.Threading.Tasks.Task<int> readTask = System.Threading.Tasks.Task.Run(() => readStream.Read(buffer, 0, 1));
+            
+            // Verify the task hasn't completed (child still has pipe open)
+            System.Threading.Tasks.Task.Delay(50).Wait();
+            Assert.False(readTask.IsCompleted, "Child process should still be running");
+            
+            // Kill the entire process group
+            bool wasKilled = processHandle.Kill(entireProcessGroup: true);
+            Assert.True(wasKilled);
 
-        // Process should exit after being killed
-        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
-        
-        // On Windows, TerminateJobObject sets exit code to -1
-        Assert.Equal(-1, exitStatus.ExitCode);
+            // The child should be terminated, closing the pipe write end
+            readTask.Wait(System.TimeSpan.FromSeconds(2));
+            int bytesRead = readTask.Result;
+            
+            // Verify the read completed (pipe closed due to child termination)
+            Assert.Equal(0, bytesRead);
+            
+            // Process should exit after being killed
+            var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
+            
+            // On Windows, TerminateJobObject sets exit code to -1
+            Assert.Equal(-1, exitStatus.ExitCode);
+        }
     }
 
     [Fact]
@@ -151,7 +182,8 @@ public partial class SafeChildProcessHandleTests
             CreateNewProcessGroup = true
         };
 
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        using SafeFileHandle stdin = Console.OpenStandardInputHandle();
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: stdin, output: null, error: null);
         
         // Kill only the single process (default behavior)
         bool wasKilled = processHandle.Kill(entireProcessGroup: false);
@@ -175,7 +207,8 @@ public partial class SafeChildProcessHandleTests
             CreateNewProcessGroup = false  // No job object will be created
         };
 
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        using SafeFileHandle stdin = Console.OpenStandardInputHandle();
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: stdin, output: null, error: null);
         
         // Try to kill the entire process group (should only kill single process since no job exists)
         bool wasKilled = processHandle.Kill(entireProcessGroup: true);

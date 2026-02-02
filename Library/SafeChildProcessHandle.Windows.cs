@@ -149,10 +149,24 @@ public partial class SafeChildProcessHandle
 
             PrepareHandleAllowList(options, handlesToInherit, ref handleCount, inputPtr, outputPtr, errorPtr);
 
+            // Create a job object if CreateNewProcessGroup is requested
+            // This must happen before starting the process to ensure atomicity
+            IntPtr processGroupJobHandle = IntPtr.Zero;
+            if (options.CreateNewProcessGroup)
+            {
+                processGroupJobHandle = Interop.Kernel32.CreateJobObjectW(IntPtr.Zero, IntPtr.Zero);
+                if (processGroupJobHandle == IntPtr.Zero)
+                {
+                    throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to create job object for process group: the system may have reached its job object limit or insufficient permissions");
+                }
+            }
+
             // Determine number of attributes we need
             int attributeCount = 1; // Always need handle list
             if (options.KillOnParentDeath)
-                attributeCount++; // Also need job list
+                attributeCount++; // Also need job list for KillOnParentDeath
+            if (options.CreateNewProcessGroup)
+                attributeCount++; // Also need job list for CreateNewProcessGroup
 
             // Initialize the attribute list
             IntPtr size = IntPtr.Zero;
@@ -203,6 +217,27 @@ public partial class SafeChildProcessHandle
                 }
             }
 
+            // Add job list if CreateNewProcessGroup is enabled
+            if (options.CreateNewProcessGroup)
+            {
+                IntPtr* pJobHandle = stackalloc IntPtr[1];
+                pJobHandle[0] = processGroupJobHandle;
+
+                if (!Interop.Kernel32.UpdateProcThreadAttribute(
+                    attributeList,
+                    0,
+                    (IntPtr)Interop.Kernel32.PROC_THREAD_ATTRIBUTE_JOB_LIST,
+                    pJobHandle,
+                    (IntPtr)IntPtr.Size,
+                    null,
+                    IntPtr.Zero))
+                {
+                    int error = Marshal.GetLastPInvokeError();
+                    Interop.Kernel32.CloseHandle(processGroupJobHandle);
+                    throw new Win32Exception(error, "Failed to add process group job list to proc thread attributes");
+                }
+            }
+
             startupInfoEx.lpAttributeList = attributeList;
             startupInfoEx.StartupInfo.cb = sizeof(Interop.Kernel32.STARTUPINFOEX);
             startupInfoEx.StartupInfo.hStdInput = inputPtr;
@@ -247,33 +282,6 @@ public partial class SafeChildProcessHandle
 
             if (processInfo.hProcess != IntPtr.Zero && processInfo.hProcess != new IntPtr(-1))
             {
-                // Create a job object if CreateNewProcessGroup is requested
-                // This allows us to terminate the entire process group later with TerminateJobObject
-                IntPtr processGroupJobHandle = IntPtr.Zero;
-                if (options.CreateNewProcessGroup)
-                {
-                    processGroupJobHandle = Interop.Kernel32.CreateJobObjectW(IntPtr.Zero, IntPtr.Zero);
-                    if (processGroupJobHandle == IntPtr.Zero)
-                    {
-                        int error = Marshal.GetLastPInvokeError();
-                        Interop.Kernel32.CloseHandle(processInfo.hProcess);
-                        if (processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
-                            Interop.Kernel32.CloseHandle(processInfo.hThread);
-                        throw new Win32Exception(error, "Failed to create job object for process group: the system may have reached its job object limit or insufficient permissions");
-                    }
-
-                    // Assign the process to the job
-                    if (!Interop.Kernel32.AssignProcessToJobObject(processGroupJobHandle, processInfo.hProcess))
-                    {
-                        int error = Marshal.GetLastPInvokeError();
-                        Interop.Kernel32.CloseHandle(processGroupJobHandle);
-                        Interop.Kernel32.CloseHandle(processInfo.hProcess);
-                        if (processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
-                            Interop.Kernel32.CloseHandle(processInfo.hThread);
-                        throw new Win32Exception(error, "Failed to assign process to job object: the process may already be assigned to another job or lacks sufficient permissions");
-                    }
-                }
-
                 // If the process was created suspended, keep the thread handle for later resumption
                 if (createSuspended && processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
                 {
@@ -300,6 +308,13 @@ public partial class SafeChildProcessHandle
         catch
         {
             procSH?.Dispose();
+            
+            // Clean up job handle if process creation failed
+            if (processGroupJobHandle != IntPtr.Zero)
+            {
+                Interop.Kernel32.CloseHandle(processGroupJobHandle);
+            }
+            
             throw;
         }
         finally
