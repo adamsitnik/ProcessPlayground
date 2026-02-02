@@ -611,6 +611,12 @@ public partial class SafeChildProcessHandleTests
 #endif
     public static async Task WaitForExit_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {
+        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
+        {
+            // timeout utility requires valid STD IN as it signs up for Ctrl+C handling
+            return;
+        }
+
         // This test verifies that WaitForExitAsync returns when the direct child process exits,
         // even if that child has spawned a grandchild process that is still running.
         // This is important because:
@@ -630,7 +636,7 @@ public partial class SafeChildProcessHandleTests
             };
 
         Stopwatch started = Stopwatch.StartNew();
-        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: Console.OpenStandardInputHandle(), output: null, error: null);
 
         TimeSpan timeout = TimeSpan.FromSeconds(3);
         using CancellationTokenSource cts = new(timeout);
@@ -652,6 +658,12 @@ public partial class SafeChildProcessHandleTests
     [InlineData(false)]
     public static async Task Kill_EntireProcessGroup_ParameterControlsScope(bool entireProcessGroup)
     {
+        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
+        {
+            // timeout utility requires valid STD IN as it signs up for Ctrl+C handling
+            return;
+        }
+
         // This test verifies that the entireProcessGroup parameter controls whether
         // only the parent process is killed (false) or the entire process group (true)
 
@@ -735,6 +747,12 @@ public partial class SafeChildProcessHandleTests
     [Fact]
     public static async Task Kill_EntireProcessGroup_CanBeCombinedWithKillOnParentDeath()
     {
+        if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
+        {
+            // timeout utility requires valid STD IN as it signs up for Ctrl+C handling
+            return;
+        }
+
         // Create a pipe to detect when the grandchild process exits
         File.CreatePipe(out SafeFileHandle pipeReadHandle, out SafeFileHandle pipeWriteHandle);
 

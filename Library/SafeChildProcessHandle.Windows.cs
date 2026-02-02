@@ -186,9 +186,9 @@ public partial class SafeChildProcessHandle
             if (!Interop.Kernel32.UpdateProcThreadAttribute(
                 attributeList,
                 0,
-                (IntPtr)Interop.Kernel32.PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                Interop.Kernel32.PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
                 handlesToInherit,
-                (IntPtr)(handleCount * sizeof(IntPtr)),
+                handleCount * IntPtr.Size,
                 null,
                 IntPtr.Zero))
             {
