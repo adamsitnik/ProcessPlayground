@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.TBA;
+using PosixSignal = System.TBA.PosixSignal;
 using System.Text;
 using System.Diagnostics;
 

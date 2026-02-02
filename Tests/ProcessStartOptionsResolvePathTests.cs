@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.TBA;
+using PosixSignal = System.TBA.PosixSignal;
 
 namespace Tests;
 

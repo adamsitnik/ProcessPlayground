@@ -1,4 +1,5 @@
 using System.TBA;
+using PosixSignal = System.TBA.PosixSignal;
 using Microsoft.Win32.SafeHandles;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;

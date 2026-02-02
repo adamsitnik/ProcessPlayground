@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using Microsoft.Win32.SafeHandles;
 using System.TBA;
+using PosixSignal = System.TBA.PosixSignal;
 
 namespace Tests;
 
