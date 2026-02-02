@@ -47,26 +47,7 @@ public enum PosixSignal
     /// <summary>Force kill (cannot be caught/ignored)</summary>
     SIGKILL = -11,
 
-    /// <summary>Abort</summary>
-    SIGABRT = -12,
-
-    /// <summary>User-defined signal 1</summary>
-    [UnsupportedOSPlatform("windows")]
-    SIGUSR1 = -13,
-
-    /// <summary>User-defined signal 2</summary>
-    [UnsupportedOSPlatform("windows")]
-    SIGUSR2 = -14,
-
-    /// <summary>Broken pipe</summary>
-    [UnsupportedOSPlatform("windows")]
-    SIGPIPE = -15,
-
-    /// <summary>Alarm clock</summary>
-    [UnsupportedOSPlatform("windows")]
-    SIGALRM = -16,
-
     /// <summary>Stop (cannot be caught/ignored)</summary>
     [UnsupportedOSPlatform("windows")]
-    SIGSTOP = -17,
+    SIGSTOP = -12,
 }

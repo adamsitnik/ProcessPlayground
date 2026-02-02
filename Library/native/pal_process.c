@@ -692,12 +692,7 @@ static int map_managed_signal_to_native(int managed_signal) {
         case -9: return SIGTTOU;    // SIGTTOU
         case -10: return SIGTSTP;   // SIGTSTP
         case -11: return SIGKILL;   // SIGKILL
-        case -12: return SIGABRT;   // SIGABRT
-        case -13: return SIGUSR1;   // SIGUSR1
-        case -14: return SIGUSR2;   // SIGUSR2
-        case -15: return SIGPIPE;   // SIGPIPE
-        case -16: return SIGALRM;   // SIGALRM
-        case -17: return SIGSTOP;   // SIGSTOP
+        case -12: return SIGSTOP;   // SIGSTOP
         default: return 0;          // Invalid signal (0 is not a valid signal number)
     }
 }
@@ -715,12 +710,7 @@ static int map_native_signal_to_managed(int native_signal) {
         case SIGTTOU: return -9;    // SIGTTOU
         case SIGTSTP: return -10;   // SIGTSTP
         case SIGKILL: return -11;   // SIGKILL
-        case SIGABRT: return -12;   // SIGABRT
-        case SIGUSR1: return -13;   // SIGUSR1
-        case SIGUSR2: return -14;   // SIGUSR2
-        case SIGPIPE: return -15;   // SIGPIPE
-        case SIGALRM: return -16;   // SIGALRM
-        case SIGSTOP: return -17;   // SIGSTOP
+        case SIGSTOP: return -12;   // SIGSTOP
         default: return 0;          // Invalid signal (0 is not a valid signal number and not a valid PosixSignal enum value)
     }
 }
