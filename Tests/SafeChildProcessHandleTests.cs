@@ -669,11 +669,11 @@ public partial class SafeChildProcessHandleTests
             ProcessStartOptions options = OperatingSystem.IsWindows()
                 ? new("cmd.exe")
                 {
-                    Arguments = { "/c", "start", "/B", "timeout", "/t", "60", "/nobreak" },
+                    Arguments = { "/c", "timeout", "/t", "5", "/nobreak" },
                 }
                 : new("sh")
                 {
-                    Arguments = { "-c", "sleep 300 & wait" },
+                    Arguments = { "-c", "sleep 5 & wait" },
                 };
 
             options.CreateNewProcessGroup = true;
