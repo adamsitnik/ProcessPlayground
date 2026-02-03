@@ -396,55 +396,32 @@ public static partial class ChildProcess
             int processId = processHandle.ProcessId;
 
             byte[] buffer = ArrayPool<byte>.Shared.Rent(BufferHelper.InitialRentedBufferSize);
-            Task<ProcessExitStatus> exitTask = processHandle.WaitForExitOrKillOnCancellationAsync(cancellationToken);
-            Task<int> readTask = outputStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
-            Task[] tasks = [exitTask, readTask];
             int totalBytesRead = 0;
 
             try
             {
                 while (true)
                 {
-                    // It's possible that both tasks complete at the same time,
-                    // so we check read task first to drain any remaining output.
-                    // And then exit task to see if we can stop reading.
-                    Task completedTask = await Task.WhenAny(tasks);
-
-                    if (completedTask == exitTask && !readTask.IsCompleted)
+                    int bytesRead = await outputStream.ReadAsync(buffer.AsMemory(totalBytesRead), cancellationToken);
+                    if (bytesRead <= 0)
                     {
                         break;
                     }
 
-                    try
+                    totalBytesRead += bytesRead;
+                    if (totalBytesRead == buffer.Length)
                     {
-                        int bytesRead = await readTask;
-                        if (bytesRead <= 0)
-                        {
-                            break;
-                        }
-
-                        totalBytesRead += bytesRead;
-                        if (totalBytesRead == buffer.Length)
-                        {
-                            BufferHelper.RentLargerBuffer(ref buffer);
-                        }
+                        BufferHelper.RentLargerBuffer(ref buffer);
                     }
-                    catch (OperationCanceledException)
-                    {
-                        // We don't throw, but kill the process and report partial output.
-                        break;
-                    }
-
-                    if (completedTask == exitTask)
-                    {
-                        break;
-                    }
-
-                    tasks[1] = readTask = outputStream.ReadAsync(buffer, totalBytesRead, buffer.Length - totalBytesRead, cancellationToken);
                 }
 
-                var exitStatus = await exitTask;
                 byte[] resultBuffer = BufferHelper.CreateCopy(buffer, totalBytesRead);
+                // It's possible for the process to close STD OUT and ERR keep running.
+                // We optimize for hot path: process already exited and exit code is available.
+                if (!processHandle.TryGetExitStatus(canceled: false, out ProcessExitStatus exitStatus))
+                {
+                    exitStatus = await processHandle.WaitForExitAsync(cancellationToken);
+                }
 
                 return new(exitStatus, resultBuffer, processId);
             }

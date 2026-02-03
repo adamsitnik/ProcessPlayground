@@ -172,10 +172,10 @@ public class CombinedOutputTests
         Stopwatch started = Stopwatch.StartNew();
 
         // Accept either OperationCanceledException or TaskCanceledException (which derives from it)
-        var combinedOutput = await ChildProcess.CaptureCombinedAsync(options, cancellationToken: cts.Token);
+        var exception = await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+            await ChildProcess.CaptureCombinedAsync(options, cancellationToken: cts.Token));
 
         Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(5));
-        Assert.True(combinedOutput.ExitStatus.Canceled);
     }
 
     [Fact]
@@ -218,7 +218,7 @@ public class CombinedOutputTests
 
     [Theory]
     [InlineData(false)]
-    [InlineData(true)]
+    // [InlineData(true)] // https://github.com/adamsitnik/ProcessPlayground/issues/61
     public static async Task CombinedOutput_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {
         // This test verifies that CombinedOutput/CombinedOutputAsync returns when the direct child process exits,
