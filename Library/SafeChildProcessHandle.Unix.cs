@@ -11,6 +11,8 @@ using PosixSignal = System.TBA.PosixSignal;
 
 namespace Microsoft.Win32.SafeHandles;
 
+#pragma warning disable CA1416
+
 // Unix implementation using process descriptors (pidfd) on Linux and traditional PIDs on other Unix systems
 // Based on dotnet/runtime implementation:
 // https://github.com/dotnet/runtime/blob/main/src/native/libs/System.Native/pal_process.c

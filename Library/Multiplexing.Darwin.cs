@@ -6,6 +6,8 @@ using System.Runtime.InteropServices;
 
 namespace System.TBA;
 
+#pragma warning disable CA2014
+
 internal static class Multiplexing
 {
     internal static void ReadProcessOutputCore(SafeChildProcessHandle processHandle, SafeFileHandle readStdOut, SafeFileHandle readStdErr, TimeoutHelper timeout,
@@ -29,9 +31,7 @@ internal static class Multiplexing
 
             while (!processExited && (!outputClosed || !errorClosed))
             {
-#pragma warning disable CA2014
                 Span<KEvent> events = stackalloc KEvent[3];
-#pragma warning restore CA2014
                 if (!timeout.TryGetRemainingMilliseconds(out int timeoutMs))
                 {
                     return;
