@@ -534,15 +534,15 @@ public partial class SafeChildProcessHandleTests
         {
             Stopwatch stopwatch = Stopwatch.StartNew();
             using CancellationTokenSource cts = new(TimeSpan.FromMilliseconds(300));
-            
+
             await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => 
                 await processHandle.WaitForExitAsync(cts.Token));
-            
+
             stopwatch.Stop();
-            
+
             // Verify the operation timed out around the expected time
             Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(250), TimeSpan.FromMilliseconds(600));
-            
+
             // Verify the process has not exited yet
             bool hasExited = processHandle.TryWaitForExit(TimeSpan.Zero, out _);
             Assert.False(hasExited, "Process should still be running after cancellation");
@@ -551,7 +551,6 @@ public partial class SafeChildProcessHandleTests
         {
             // Clean up - kill the process since it's still running
             processHandle.Kill();
-            processHandle.WaitForExit();
         }
     }
 
@@ -609,9 +608,7 @@ public partial class SafeChildProcessHandleTests
 
     [Theory]
     [InlineData(false)]
-#if WINDOWS // https://github.com/adamsitnik/ProcessPlayground/issues/61
     [InlineData(true)]
-#endif
     public static async Task WaitForExit_ReturnsWhenChildExits_EvenWithRunningGrandchild(bool useAsync)
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
@@ -646,13 +643,20 @@ public partial class SafeChildProcessHandleTests
 
         // WaitForExitAsync should return quickly because the child exits immediately
         // (even though the grandchild is still running for 5 seconds)
-        int exitCode = useAsync
-            ? (await processHandle.WaitForExitOrKillOnCancellationAsync(cts.Token)).ExitCode
-            : processHandle.WaitForExitOrKillOnTimeout(timeout).ExitCode;
+        ProcessExitStatus exitStatus;
+        if (useAsync)
+        {
+            exitStatus = await processHandle.WaitForExitAsync(cts.Token);
+        }
+        else
+        {
+            Assert.True(processHandle.TryWaitForExit(timeout, out exitStatus), "Process did not exit within expected time");
+        }
 
         // The child should have exited successfully (exit code 0)
-        Assert.Equal(0, exitCode);
-
+        Assert.Equal(0, exitStatus.ExitCode);
+        Assert.Null(exitStatus.Signal);
+        Assert.False(exitStatus.Canceled);
         Assert.InRange(started.Elapsed, TimeSpan.Zero, TimeSpan.FromSeconds(3));
     }
 
