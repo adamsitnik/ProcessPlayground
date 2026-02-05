@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 using System.TBA;
@@ -52,7 +51,6 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// <param name="processId">The process ID</param>
     /// <param name="ownsHandle">Whether to control the handle lifetime</param>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when processId is negative or zero.</exception>
-    [UnsupportedOSPlatform("macos")]
     public SafeChildProcessHandle(IntPtr existingHandle, int processId, bool ownsHandle)
         : base(existingHandle, ownsHandle)
     {
