@@ -31,6 +31,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
 
     /// <summary>
     /// Internal constructor for wrapping handles without requiring processId.
+    /// Used by platform-specific implementations where ProcessId will be set separately.
     /// </summary>
     internal SafeChildProcessHandle(IntPtr existingHandle, bool ownsHandle)
         : base(existingHandle, ownsHandle)

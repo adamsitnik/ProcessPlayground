@@ -872,8 +872,8 @@ public partial class SafeChildProcessHandleTests
         bool wasKilled = copy.Kill();
         Assert.True(wasKilled);
 
-        // Wait for the process to exit
-        var exitStatus = source.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
+        // Wait for the process to exit using the copy
+        var exitStatus = copy.WaitForExit();
         Assert.NotEqual(0, exitStatus.ExitCode);
     }
 
@@ -894,8 +894,8 @@ public partial class SafeChildProcessHandleTests
         PosixSignal signal = OperatingSystem.IsWindows() ? PosixSignal.SIGINT : PosixSignal.SIGTERM;
         copy.SendSignal(signal);
 
-        // Wait for the process to exit after receiving the signal
-        var exitStatus = source.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
+        // Wait for the process to exit after receiving the signal using the copy
+        var exitStatus = copy.WaitForExit();
         
 #if !WINDOWS
         Assert.Equal(signal, exitStatus.Signal);
