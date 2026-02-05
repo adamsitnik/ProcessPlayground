@@ -594,15 +594,14 @@ public partial class SafeChildProcessHandle
             | Interop.Advapi32.ProcessOptions.SYNCHRONIZE 
             | Interop.Advapi32.ProcessOptions.PROCESS_TERMINATE;
 
-        SafeChildProcessHandle handle = Interop.Kernel32.OpenProcess(desiredAccess, bInheritHandle: false, processId);
+        IntPtr handle = Interop.Kernel32.OpenProcess(desiredAccess, bInheritHandle: false, processId);
         
-        if (handle.IsInvalid)
+        if (handle == IntPtr.Zero)
         {
             int error = Marshal.GetLastPInvokeError();
             throw new Win32Exception(error, $"Failed to open process {processId}");
         }
 
-        // Create a new handle with the ProcessId set via the constructor
-        return new SafeChildProcessHandle(handle.DangerousGetHandle(), processId, ownsHandle: true);
+        return new SafeChildProcessHandle(handle, processId, ownsHandle: true);
     }
 }

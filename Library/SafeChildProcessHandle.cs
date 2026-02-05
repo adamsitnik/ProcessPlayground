@@ -60,7 +60,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     }
 
     /// <summary>
-    /// Opens an existing process by its process ID.
+    /// Opens an existing child process by its process ID.
     /// </summary>
     /// <param name="processId">The process ID of the process to open.</param>
     /// <returns>A <see cref="SafeChildProcessHandle"/> that represents the opened process.</returns>

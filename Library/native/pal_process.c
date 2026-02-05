@@ -1004,11 +1004,6 @@ int wait_for_exit_or_kill_on_timeout(int pidfd, int pid, int exitPipeFd, int tim
 // to check if the process exists and the caller has permission to signal it.
 // Returns 0 on success, -1 on error (errno is set).
 int open_process(int pid, int* out_pidfd) {
-    if (out_pidfd == NULL) {
-        errno = EINVAL;
-        return -1;
-    }
-
     // Initialize out_pidfd to -1 (no pidfd)
     *out_pidfd = -1;
 

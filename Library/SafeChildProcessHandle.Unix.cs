@@ -363,12 +363,11 @@ public partial class SafeChildProcessHandle
     private static partial int try_get_exit_code(SafeChildProcessHandle pidfd, int pid, out int exitCode, out int signal);
 
     [LibraryImport("pal_process", SetLastError = true)]
-    private static unsafe partial int open_process(int pid, int* out_pidfd);
+    private static partial int open_process(int pid, out int out_pidfd);
 
-    private static unsafe SafeChildProcessHandle OpenCore(int processId)
+    private static SafeChildProcessHandle OpenCore(int processId)
     {
-        int pidfd = NoPidFd;
-        int result = open_process(processId, &pidfd);
+        int result = open_process(processId, out int pidfd);
 
         if (result == -1)
         {
@@ -377,7 +376,7 @@ public partial class SafeChildProcessHandle
         }
 
         // Create a SafeChildProcessHandle with the pidfd (or -1 if not available)
-        // and the process ID. No exit pipe fd is needed for opened processes.
-        return new SafeChildProcessHandle(pidfd, processId, exitPipeFd: 0);
+        // and the process ID. No exit pipe is available, so we use public ctor.
+        return new SafeChildProcessHandle(pidfd, processId, ownsHandle: true);
     }
 }
