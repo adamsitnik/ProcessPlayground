@@ -56,10 +56,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     public SafeChildProcessHandle(IntPtr existingHandle, int processId, bool ownsHandle)
         : base(existingHandle, ownsHandle)
     {
-        if (processId <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(processId), processId, "Process ID must be a positive integer.");
-        }
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(processId, 0);
 
         ProcessId = processId;
     }

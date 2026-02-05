@@ -840,7 +840,6 @@ public partial class SafeChildProcessHandleTests
 #endif
     public static void PublicConstructor_WithProcessId_CreatesValidCopy_WaitForExit()
     {
-        // Start a quick process
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("cmd.exe") { Arguments = { "/c", "echo test" } }
             : new("echo") { Arguments = { "test" } };
@@ -848,7 +847,6 @@ public partial class SafeChildProcessHandleTests
         using SafeChildProcessHandle source = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         using SafeChildProcessHandle copy = new(source.DangerousGetHandle(), source.ProcessId, ownsHandle: false);
 
-        // Use the copy for WaitForExit
         var exitStatus = copy.WaitForExit();
         Assert.Equal(0, exitStatus.ExitCode);
         Assert.Null(exitStatus.Signal);
@@ -860,7 +858,6 @@ public partial class SafeChildProcessHandleTests
 #endif
     public static void PublicConstructor_WithProcessId_CreatesValidCopy_Kill()
     {
-        // Start a long-running process
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" } }
             : new("sleep") { Arguments = { "10" } };
@@ -868,11 +865,9 @@ public partial class SafeChildProcessHandleTests
         using SafeChildProcessHandle source = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         using SafeChildProcessHandle copy = new(source.DangerousGetHandle(), source.ProcessId, ownsHandle: false);
 
-        // Use the copy to kill the process
         bool wasKilled = copy.Kill();
         Assert.True(wasKilled);
 
-        // Wait for the process to exit using the copy
         var exitStatus = copy.WaitForExit();
         Assert.NotEqual(0, exitStatus.ExitCode);
     }
@@ -882,7 +877,6 @@ public partial class SafeChildProcessHandleTests
 #endif
     public static void PublicConstructor_WithProcessId_CreatesValidCopy_SendSignal()
     {
-        // Start a long-running process
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" }, CreateNewProcessGroup = true }
             : new("sleep") { Arguments = { "10" } };
@@ -890,11 +884,9 @@ public partial class SafeChildProcessHandleTests
         using SafeChildProcessHandle source = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         using SafeChildProcessHandle copy = new(source.DangerousGetHandle(), source.ProcessId, ownsHandle: false);
 
-        // Use the copy to send signal
         PosixSignal signal = OperatingSystem.IsWindows() ? PosixSignal.SIGINT : PosixSignal.SIGTERM;
         copy.SendSignal(signal);
 
-        // Wait for the process to exit after receiving the signal using the copy
         var exitStatus = copy.WaitForExit();
         
 #if !WINDOWS
