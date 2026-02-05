@@ -602,8 +602,7 @@ public partial class SafeChildProcessHandle
             throw new Win32Exception(error, $"Failed to open process {processId}");
         }
 
-        // Set the ProcessId property using init accessor via reflection or by creating a new instance
-        // Since ProcessId has init accessor, we need to use a constructor that sets it
+        // Create a new handle with the ProcessId set via the constructor
         return new SafeChildProcessHandle(handle.DangerousGetHandle(), processId, ownsHandle: true);
     }
 }
