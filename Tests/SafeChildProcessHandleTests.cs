@@ -834,4 +834,90 @@ public partial class SafeChildProcessHandleTests
         ProcessStartOptions options = new("test");
         Assert.False(options.KillOnParentDeath);
     }
+
+#if WINDOWS || LINUX
+    [Fact]
+#endif
+    public static void PublicConstructor_WithProcessId_CreatesValidCopy_WaitForExit()
+    {
+        // Start a quick process
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "echo test" } }
+            : new("echo") { Arguments = { "test" } };
+
+        using SafeChildProcessHandle source = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        using SafeChildProcessHandle copy = new(source.DangerousGetHandle(), source.ProcessId, ownsHandle: false);
+
+        // Use the copy for WaitForExit
+        var exitStatus = copy.WaitForExit();
+        Assert.Equal(0, exitStatus.ExitCode);
+        Assert.Null(exitStatus.Signal);
+        Assert.False(exitStatus.Canceled);
+    }
+
+#if WINDOWS || LINUX
+    [Fact]
+#endif
+    public static void PublicConstructor_WithProcessId_CreatesValidCopy_Kill()
+    {
+        // Start a long-running process
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" } }
+            : new("sleep") { Arguments = { "10" } };
+
+        using SafeChildProcessHandle source = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        using SafeChildProcessHandle copy = new(source.DangerousGetHandle(), source.ProcessId, ownsHandle: false);
+
+        // Use the copy to kill the process
+        bool wasKilled = copy.Kill();
+        Assert.True(wasKilled);
+
+        // Wait for the process to exit
+        var exitStatus = source.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
+        Assert.NotEqual(0, exitStatus.ExitCode);
+    }
+
+#if WINDOWS || LINUX
+    [Fact]
+#endif
+    public static void PublicConstructor_WithProcessId_CreatesValidCopy_SendSignal()
+    {
+        // Start a long-running process
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" }, CreateNewProcessGroup = true }
+            : new("sleep") { Arguments = { "10" } };
+
+        using SafeChildProcessHandle source = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
+        using SafeChildProcessHandle copy = new(source.DangerousGetHandle(), source.ProcessId, ownsHandle: false);
+
+        // Use the copy to send signal
+        PosixSignal signal = OperatingSystem.IsWindows() ? PosixSignal.SIGINT : PosixSignal.SIGTERM;
+        copy.SendSignal(signal);
+
+        // Wait for the process to exit after receiving the signal
+        var exitStatus = source.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
+        
+#if !WINDOWS
+        Assert.Equal(signal, exitStatus.Signal);
+#endif
+        Assert.NotEqual(0, exitStatus.ExitCode);
+    }
+
+#if WINDOWS || LINUX
+    [Fact]
+#endif
+    public static void PublicConstructor_NegativeProcessId_ThrowsArgumentOutOfRangeException()
+    {
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new SafeChildProcessHandle(IntPtr.Zero, -1, ownsHandle: false));
+        Assert.Equal("processId", ex.ParamName);
+    }
+
+#if WINDOWS || LINUX
+    [Fact]
+#endif
+    public static void PublicConstructor_ZeroProcessId_ThrowsArgumentOutOfRangeException()
+    {
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new SafeChildProcessHandle(IntPtr.Zero, 0, ownsHandle: false));
+        Assert.Equal("processId", ex.ParamName);
+    }
 }

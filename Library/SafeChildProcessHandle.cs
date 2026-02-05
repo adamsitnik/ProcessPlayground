@@ -25,7 +25,15 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     }
 
     internal SafeChildProcessHandle(IntPtr handle)
-        : this(handle, true)
+        : this(handle, ownsHandle: true)
+    {
+    }
+
+    /// <summary>
+    /// Internal constructor for wrapping handles without requiring processId.
+    /// </summary>
+    internal SafeChildProcessHandle(IntPtr existingHandle, bool ownsHandle)
+        : base(existingHandle, ownsHandle)
     {
     }
 
@@ -40,10 +48,19 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// Creates a <see cref="T:Microsoft.Win32.SafeHandles.SafeChildProcessHandle" /> around a process handle.
     /// </summary>
     /// <param name="existingHandle">Handle to wrap</param>
+    /// <param name="processId">The process ID</param>
     /// <param name="ownsHandle">Whether to control the handle lifetime</param>
-    public SafeChildProcessHandle(IntPtr existingHandle, bool ownsHandle)
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when processId is negative or zero.</exception>
+    [UnsupportedOSPlatform("macos")]
+    public SafeChildProcessHandle(IntPtr existingHandle, int processId, bool ownsHandle)
         : base(existingHandle, ownsHandle)
     {
+        if (processId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(processId), processId, "Process ID must be a positive integer.");
+        }
+
+        ProcessId = processId;
     }
 
     public static SafeChildProcessHandle Start(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error)
