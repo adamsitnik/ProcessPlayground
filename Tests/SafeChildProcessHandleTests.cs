@@ -835,9 +835,7 @@ public partial class SafeChildProcessHandleTests
         Assert.False(options.KillOnParentDeath);
     }
 
-#if WINDOWS || LINUX
     [Fact]
-#endif
     public static void PublicConstructor_WithProcessId_CreatesValidCopy_WaitForExit()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -853,9 +851,7 @@ public partial class SafeChildProcessHandleTests
         Assert.False(exitStatus.Canceled);
     }
 
-#if WINDOWS || LINUX
     [Fact]
-#endif
     public static void PublicConstructor_WithProcessId_CreatesValidCopy_Kill()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -872,9 +868,7 @@ public partial class SafeChildProcessHandleTests
         Assert.NotEqual(0, exitStatus.ExitCode);
     }
 
-#if WINDOWS || LINUX
     [Fact]
-#endif
     public static void PublicConstructor_WithProcessId_CreatesValidCopy_SendSignal()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
@@ -895,18 +889,14 @@ public partial class SafeChildProcessHandleTests
         Assert.NotEqual(0, exitStatus.ExitCode);
     }
 
-#if WINDOWS || LINUX
     [Fact]
-#endif
     public static void PublicConstructor_NegativeProcessId_ThrowsArgumentOutOfRangeException()
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new SafeChildProcessHandle(IntPtr.Zero, -1, ownsHandle: false));
         Assert.Equal("processId", ex.ParamName);
     }
 
-#if WINDOWS || LINUX
     [Fact]
-#endif
     public static void PublicConstructor_ZeroProcessId_ThrowsArgumentOutOfRangeException()
     {
         var ex = Assert.Throws<ArgumentOutOfRangeException>(() => new SafeChildProcessHandle(IntPtr.Zero, 0, ownsHandle: false));
