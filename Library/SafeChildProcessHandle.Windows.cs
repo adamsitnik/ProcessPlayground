@@ -585,4 +585,25 @@ public partial class SafeChildProcessHandle
             throw new Win32Exception(error, $"Failed to send signal {signal} (GenerateConsoleCtrlEvent failed with error {error})");
         }
     }
+
+    private static SafeChildProcessHandle OpenCore(int processId)
+    {
+        // We use PROCESS_TERMINATE because the name "SafeChildProcessHandle" indicates that it's a child process,
+        // so the caller must have this permission to manage it properly (kill, wait, etc.).
+        const int desiredAccess = Interop.Advapi32.ProcessOptions.PROCESS_QUERY_LIMITED_INFORMATION 
+            | Interop.Advapi32.ProcessOptions.SYNCHRONIZE 
+            | Interop.Advapi32.ProcessOptions.PROCESS_TERMINATE;
+
+        SafeChildProcessHandle handle = Interop.Kernel32.OpenProcess(desiredAccess, bInheritHandle: false, processId);
+        
+        if (handle.IsInvalid)
+        {
+            int error = Marshal.GetLastPInvokeError();
+            throw new Win32Exception(error, $"Failed to open process {processId}");
+        }
+
+        // Set the ProcessId property using init accessor via reflection or by creating a new instance
+        // Since ProcessId has init accessor, we need to use a constructor that sets it
+        return new SafeChildProcessHandle(handle.DangerousGetHandle(), processId, ownsHandle: true);
+    }
 }

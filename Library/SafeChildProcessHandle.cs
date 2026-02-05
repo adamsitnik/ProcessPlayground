@@ -59,6 +59,25 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
         ProcessId = processId;
     }
 
+    /// <summary>
+    /// Opens an existing process by its process ID.
+    /// </summary>
+    /// <param name="processId">The process ID of the process to open.</param>
+    /// <returns>A <see cref="SafeChildProcessHandle"/> that represents the opened process.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="processId"/> is negative or zero.</exception>
+    /// <exception cref="Win32Exception">Thrown when the process could not be opened.</exception>
+    /// <remarks>
+    /// On Windows, this method uses OpenProcess with PROCESS_QUERY_LIMITED_INFORMATION, SYNCHRONIZE, and PROCESS_TERMINATE permissions.
+    /// On Linux with pidfd support, this method uses the pidfd_open syscall.
+    /// On other Unix systems, this method uses kill(pid, 0) to verify the process exists and the caller has permission to signal it.
+    /// </remarks>
+    public static SafeChildProcessHandle Open(int processId)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(processId, 0);
+
+        return OpenCore(processId);
+    }
+
     public static SafeChildProcessHandle Start(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error)
     {
         return StartInternal(options, input, output, error, createSuspended: false);
