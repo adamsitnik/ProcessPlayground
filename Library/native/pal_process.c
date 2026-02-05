@@ -997,3 +997,33 @@ int wait_for_exit_or_kill_on_timeout(int pidfd, int pid, int exitPipeFd, int tim
 
     return wait_for_exit_and_reap(pidfd, pid, out_exitCode, out_signal);
 }
+
+// Opens an existing process by its process ID.
+// On Linux with SYS_pidfd_open support, uses pidfd_open syscall to get a pidfd.
+// On other Unix systems (macOS and Linux without SYS_pidfd_open), uses kill(pid, 0) 
+// to check if the process exists and the caller has permission to signal it.
+// Returns 0 on success, -1 on error (errno is set).
+int open_process(int pid, int* out_pidfd) {
+    // Initialize out_pidfd to -1 (no pidfd)
+    *out_pidfd = -1;
+
+#if defined(HAVE_PIDFD) && defined(SYS_pidfd_open)
+    // On Linux with pidfd support, use pidfd_open syscall
+    int pidfd = (int)syscall(SYS_pidfd_open, pid, 0);
+    if (pidfd >= 0) {
+        *out_pidfd = pidfd;
+        return 0;
+    }
+    // If pidfd_open failed, fall through to kill(pid, 0) approach
+    // This handles cases where the kernel doesn't support pidfd_open at runtime
+#endif
+
+    // On other Unix systems (macOS and Linux without SYS_pidfd_open):
+    // Use kill(pid, 0) to check if the process exists and we have permission to signal it.
+    // kill(pid, 0) doesn't actually send a signal, it just performs error checking.
+    // Returns 0 if the process exists and we have permission, -1 with errno set otherwise.
+    // Common errno values:
+    // - ESRCH: No such process
+    // - EPERM: No permission to send signals to the process
+    return kill(pid, 0);
+}

@@ -361,4 +361,22 @@ public partial class SafeChildProcessHandle
 
     [LibraryImport("pal_process", SetLastError = true)]
     private static partial int try_get_exit_code(SafeChildProcessHandle pidfd, int pid, out int exitCode, out int signal);
+
+    [LibraryImport("pal_process", SetLastError = true)]
+    private static partial int open_process(int pid, out int out_pidfd);
+
+    private static SafeChildProcessHandle OpenCore(int processId)
+    {
+        int result = open_process(processId, out int pidfd);
+
+        if (result == -1)
+        {
+            int errno = Marshal.GetLastPInvokeError();
+            throw new Win32Exception(errno, $"Failed to open process {processId} (errno={errno})");
+        }
+
+        // Create a SafeChildProcessHandle with the pidfd (or -1 if not available)
+        // and the process ID. No exit pipe is available, so we use public ctor.
+        return new SafeChildProcessHandle(pidfd, processId, ownsHandle: true);
+    }
 }
