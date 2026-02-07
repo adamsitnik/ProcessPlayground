@@ -999,9 +999,9 @@ int wait_for_exit_or_kill_on_timeout(int pidfd, int pid, int exitPipeFd, int tim
 }
 
 // Opens an existing process by its process ID.
-// On Linux with SYS_pidfd_open support, uses pidfd_open syscall to get a pidfd.
-// On other Unix systems (macOS and Linux without SYS_pidfd_open), uses waitid 
-// to check if the process is a child process that we can wait on.
+// Uses waitid to verify the process is a child we can wait on (and eventually reap).
+// On Linux with SYS_pidfd_open support, also attempts to get a pidfd for better process management.
+// On systems without pidfd support, relies on waitid verification alone.
 // Returns 0 on success, -1 on error (errno is set).
 int open_process(int pid, int* out_pidfd) {
     // Initialize out_pidfd to -1 (no pidfd)
@@ -1030,7 +1030,8 @@ int open_process(int pid, int* out_pidfd) {
         if (waitid_ret == 0) {
             return 0;
         }
-        // If both pidfd_open and waitid failed, use pidfd_open's error
+        // If both pidfd_open and waitid failed with ECHILD, the process doesn't exist or we don't have permission
+        // pidfd_open sets errno appropriately (ESRCH for non-existent, EPERM for no permission)
         return -1;
     }
     // waitid failed with an error other than ECHILD
