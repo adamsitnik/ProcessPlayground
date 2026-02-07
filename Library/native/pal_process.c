@@ -1010,7 +1010,7 @@ int open_process(int pid, int* out_pidfd) {
     // First, check if the process is a child we can wait on using waitid with WNOHANG | WNOWAIT.
     // WNOHANG means don't block if the process hasn't changed state.
     // WNOWAIT means don't reap the process, just check its status.
-    // We check for WEXITED | WSTOPPED | WCONTINUED to check for any state (running or stopped).
+    // We check for WEXITED | WSTOPPED | WCONTINUED to detect any state (exited, stopped, or continued).
     // This properly checks if we have permission to wait on (and eventually reap) the process.
     siginfo_t info;
     memset(&info, 0, sizeof(info));
