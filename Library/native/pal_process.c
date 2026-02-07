@@ -1030,7 +1030,7 @@ int open_process(int pid, int* out_pidfd) {
         if (waitid_ret == 0) {
             return 0;
         }
-        // If both pidfd_open and waitid failed with ECHILD, the process doesn't exist or we don't have permission
+        // If both pidfd_open and waitid (with ECHILD) failed, the process doesn't exist or we don't have permission to open it
         // pidfd_open sets errno appropriately (ESRCH for non-existent, EPERM for no permission)
         return -1;
     }
