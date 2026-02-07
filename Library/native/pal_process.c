@@ -999,31 +999,52 @@ int wait_for_exit_or_kill_on_timeout(int pidfd, int pid, int exitPipeFd, int tim
 }
 
 // Opens an existing process by its process ID.
-// On Linux with SYS_pidfd_open support, uses pidfd_open syscall to get a pidfd.
-// On other Unix systems (macOS and Linux without SYS_pidfd_open), uses kill(pid, 0) 
-// to check if the process exists and the caller has permission to signal it.
+// Uses waitid to verify the process is a child we can wait on (and eventually reap).
+// On Linux with SYS_pidfd_open support, also attempts to get a pidfd for better process management.
+// On systems without pidfd support, relies on waitid verification alone.
 // Returns 0 on success, -1 on error (errno is set).
 int open_process(int pid, int* out_pidfd) {
     // Initialize out_pidfd to -1 (no pidfd)
     *out_pidfd = -1;
 
+    // First, check if the process is a child we can wait on using waitid with WNOHANG | WNOWAIT.
+    // WNOHANG means don't block - waitid returns 0 for valid child processes or -1 with ECHILD for non-child processes.
+    // If no state change has occurred, waitid returns 0 but si_pid will be 0 indicating no state change (still a valid child).
+    // WNOWAIT means don't reap the process, just check its status.
+    // We include WEXITED | WSTOPPED | WCONTINUED to allow waitid to report any type of state change that may have occurred.
+    // We only care if the process is a child, not if it has actually changed state.
+    // This properly checks if we have permission to wait on (and eventually reap) the process.
+    siginfo_t info;
+    memset(&info, 0, sizeof(info));
+    int waitid_ret = waitid(P_PID, pid, &info, WNOHANG | WNOWAIT | WEXITED | WSTOPPED | WCONTINUED);
+
 #if defined(HAVE_PIDFD) && defined(SYS_pidfd_open)
-    // On Linux with pidfd support, use pidfd_open syscall
-    int pidfd = (int)syscall(SYS_pidfd_open, pid, 0);
-    if (pidfd >= 0) {
-        *out_pidfd = pidfd;
+    // On Linux with pidfd support, try pidfd_open if waitid succeeded (process is a child)
+    // or if waitid failed with ECHILD (process exists but isn't a child)
+    if (waitid_ret == 0 || (waitid_ret == -1 && errno == ECHILD)) {
+        int pidfd = (int)syscall(SYS_pidfd_open, pid, 0);
+        if (pidfd >= 0) {
+            *out_pidfd = pidfd;
+            return 0;
+        }
+        // If pidfd_open failed but waitid succeeded (waitid_ret == 0), we can still wait on the process
+        // pidfd is optional; success from waitid is sufficient for process validation
+        if (waitid_ret == 0) {
+            return 0;
+        }
+        // pidfd_open failed for a non-child process (waitid returned ECHILD)
+        // pidfd_open sets errno appropriately (ESRCH for non-existent, EPERM for no permission)
+        return -1;
+    }
+    // waitid failed with an error other than ECHILD - errno is already set
+    return -1;
+#else
+    // On other Unix systems without pidfd support, rely on waitid result
+    if (waitid_ret == 0) {
+        // Process exists and we can wait on it
         return 0;
     }
-    // If pidfd_open failed, fall through to kill(pid, 0) approach
-    // This handles cases where the kernel doesn't support pidfd_open at runtime
+    // waitid failed - errno is already set
+    return -1;
 #endif
-
-    // On other Unix systems (macOS and Linux without SYS_pidfd_open):
-    // Use kill(pid, 0) to check if the process exists and we have permission to signal it.
-    // kill(pid, 0) doesn't actually send a signal, it just performs error checking.
-    // Returns 0 if the process exists and we have permission, -1 with errno set otherwise.
-    // Common errno values:
-    // - ESRCH: No such process
-    // - EPERM: No permission to send signals to the process
-    return kill(pid, 0);
 }
