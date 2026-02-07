@@ -1008,7 +1008,7 @@ int open_process(int pid, int* out_pidfd) {
     *out_pidfd = -1;
 
     // First, check if the process is a child we can wait on using waitid with WNOHANG | WNOWAIT.
-    // WNOHANG means don't block - returns immediately with 0 if no state change, or -1 if not a child (ECHILD).
+    // WNOHANG means don't block - waitid returns 0 for valid child processes, or -1 with ECHILD for non-child processes.
     // WNOWAIT means don't reap the process, just check its status.
     // We check for WEXITED | WSTOPPED | WCONTINUED to detect any state change.
     // This properly checks if we have permission to wait on (and eventually reap) the process.
@@ -1019,7 +1019,7 @@ int open_process(int pid, int* out_pidfd) {
 #if defined(HAVE_PIDFD) && defined(SYS_pidfd_open)
     // On Linux with pidfd support, try pidfd_open if waitid succeeded (process is a child)
     // or if waitid failed with ECHILD (process exists but isn't a child)
-    if (waitid_ret == 0 || errno == ECHILD) {
+    if (waitid_ret == 0 || (waitid_ret == -1 && errno == ECHILD)) {
         int pidfd = (int)syscall(SYS_pidfd_open, pid, 0);
         if (pidfd >= 0) {
             *out_pidfd = pidfd;
@@ -1030,7 +1030,7 @@ int open_process(int pid, int* out_pidfd) {
         if (waitid_ret == 0) {
             return 0;
         }
-        // If both pidfd_open and waitid (with ECHILD) failed, the process doesn't exist or we don't have permission to open it
+        // pidfd_open failed for a non-child process (waitid returned ECHILD)
         // pidfd_open sets errno appropriately (ESRCH for non-existent, EPERM for no permission)
         return -1;
     }
