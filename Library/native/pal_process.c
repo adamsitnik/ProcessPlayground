@@ -1001,23 +1001,24 @@ int wait_for_exit_or_kill_on_timeout(int pidfd, int pid, int exitPipeFd, int tim
 // Opens an existing process by its process ID.
 // On Linux with SYS_pidfd_open support, uses pidfd_open syscall to get a pidfd.
 // On other Unix systems (macOS and Linux without SYS_pidfd_open), uses waitid 
-// to check if the process exists and the caller has permission to reap it.
+// to check if the process is a child process that we can wait on.
 // Returns 0 on success, -1 on error (errno is set).
 int open_process(int pid, int* out_pidfd) {
     // Initialize out_pidfd to -1 (no pidfd)
     *out_pidfd = -1;
 
-    // First, check if we can reap the process using waitid with WNOHANG | WNOWAIT.
-    // WNOHANG means don't block if the process hasn't exited yet.
+    // First, check if the process is a child we can wait on using waitid with WNOHANG | WNOWAIT.
+    // WNOHANG means don't block if the process hasn't changed state.
     // WNOWAIT means don't reap the process, just check its status.
-    // This properly checks if we have permission to reap the process.
+    // We check for WEXITED | WSTOPPED | WCONTINUED to check for any state (running or stopped).
+    // This properly checks if we have permission to wait on (and eventually reap) the process.
     siginfo_t info;
     memset(&info, 0, sizeof(info));
-    int waitid_ret = waitid(P_PID, pid, &info, WNOHANG | WNOWAIT | WEXITED);
+    int waitid_ret = waitid(P_PID, pid, &info, WNOHANG | WNOWAIT | WEXITED | WSTOPPED | WCONTINUED);
     int waitid_errno = errno;
 
 #if defined(HAVE_PIDFD) && defined(SYS_pidfd_open)
-    // On Linux with pidfd support, try pidfd_open if waitid succeeded (process is reapable)
+    // On Linux with pidfd support, try pidfd_open if waitid succeeded (process is a child)
     // or if waitid failed with ECHILD (process exists but isn't a child)
     if (waitid_ret == 0 || waitid_errno == ECHILD) {
         int pidfd = (int)syscall(SYS_pidfd_open, pid, 0);
@@ -1025,7 +1026,7 @@ int open_process(int pid, int* out_pidfd) {
             *out_pidfd = pidfd;
             return 0;
         }
-        // If pidfd_open failed and waitid succeeded, we can still reap the process
+        // If pidfd_open failed and waitid succeeded, we can still wait on the process
         if (waitid_ret == 0) {
             return 0;
         }
@@ -1038,7 +1039,7 @@ int open_process(int pid, int* out_pidfd) {
 #else
     // On other Unix systems without pidfd support, rely on waitid result
     if (waitid_ret == 0) {
-        // Process exists and we can reap it
+        // Process exists and we can wait on it
         return 0;
     }
     // waitid failed - restore errno and return error
