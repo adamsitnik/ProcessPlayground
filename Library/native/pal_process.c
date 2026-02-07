@@ -1016,12 +1016,11 @@ int open_process(int pid, int* out_pidfd) {
     siginfo_t info;
     memset(&info, 0, sizeof(info));
     int waitid_ret = waitid(P_PID, pid, &info, WNOHANG | WNOWAIT | WEXITED | WSTOPPED | WCONTINUED);
-    int waitid_errno = errno;
 
 #if defined(HAVE_PIDFD) && defined(SYS_pidfd_open)
     // On Linux with pidfd support, try pidfd_open if waitid succeeded (process is a child)
     // or if waitid failed with ECHILD (process exists but isn't a child)
-    if (waitid_ret == 0 || (waitid_ret != 0 && waitid_errno == ECHILD)) {
+    if (waitid_ret == 0 || (waitid_ret != 0 && errno == ECHILD)) {
         int pidfd = (int)syscall(SYS_pidfd_open, pid, 0);
         if (pidfd >= 0) {
             *out_pidfd = pidfd;
@@ -1035,8 +1034,7 @@ int open_process(int pid, int* out_pidfd) {
         // pidfd_open sets errno appropriately (ESRCH for non-existent, EPERM for no permission)
         return -1;
     }
-    // waitid failed with an error other than ECHILD
-    errno = waitid_errno;
+    // waitid failed with an error other than ECHILD - errno is already set
     return -1;
 #else
     // On other Unix systems without pidfd support, rely on waitid result
@@ -1044,8 +1042,7 @@ int open_process(int pid, int* out_pidfd) {
         // Process exists and we can wait on it
         return 0;
     }
-    // waitid failed - restore errno and return error
-    errno = waitid_errno;
+    // waitid failed - errno is already set
     return -1;
 #endif
 }
