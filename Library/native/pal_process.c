@@ -1009,7 +1009,7 @@ int open_process(int pid, int* out_pidfd) {
 
     // First, check if the process is a child we can wait on using waitid with WNOHANG | WNOWAIT.
     // WNOHANG means don't block - waitid returns 0 for valid child processes or -1 with ECHILD for non-child processes.
-    // If no state change has occurred, waitid returns 0 but si_pid will be 0 (we don't check si_pid here).
+    // If no state change has occurred, waitid returns 0 but si_pid will be 0 indicating no state change (still a valid child).
     // WNOWAIT means don't reap the process, just check its status.
     // We include WEXITED | WSTOPPED | WCONTINUED to allow waitid to report any type of state change that may have occurred.
     // We only care if the process is a child, not if it has actually changed state.
@@ -1027,7 +1027,7 @@ int open_process(int pid, int* out_pidfd) {
             *out_pidfd = pidfd;
             return 0;
         }
-        // If pidfd_open failed and waitid succeeded, we can still wait on the process
+        // If pidfd_open failed but waitid succeeded (waitid_ret == 0), we can still wait on the process
         // pidfd is optional; success from waitid is sufficient for process validation
         if (waitid_ret == 0) {
             return 0;
