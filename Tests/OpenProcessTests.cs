@@ -145,8 +145,8 @@ public class OpenProcessTests
         }
     }
 
-    [Fact]
-    public void Open_CanOpenOwnProcess()
+    [Fact(Skip = ConditionalTests.WindowsOnly)]
+    public static void Open_CanOpenOwnProcess()
     {
         // Get the current process ID
         int currentPid = Environment.ProcessId;
