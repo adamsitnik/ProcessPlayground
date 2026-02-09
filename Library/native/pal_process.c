@@ -999,31 +999,32 @@ int wait_for_exit_or_kill_on_timeout(int pidfd, int pid, int exitPipeFd, int tim
 }
 
 // Opens an existing process by its process ID.
-// On Linux with SYS_pidfd_open support, uses pidfd_open syscall to get a pidfd.
-// On other Unix systems (macOS and Linux without SYS_pidfd_open), uses kill(pid, 0) 
-// to check if the process exists and the caller has permission to signal it.
+// Uses waitid to verify the process is a child we can wait on (and eventually reap).
+// On Linux with SYS_pidfd_open support, also attempts to get a pidfd for better process management.
+// On systems without pidfd support, relies on waitid verification alone.
 // Returns 0 on success, -1 on error (errno is set).
+// IMPORTANT: This function only works for child processes. If waitid fails (including ECHILD for non-child processes),
+// the function fails because we cannot guarantee the ability to wait for exit and get exit status.
 int open_process(int pid, int* out_pidfd) {
     // Initialize out_pidfd to -1 (no pidfd)
     *out_pidfd = -1;
 
-#if defined(HAVE_PIDFD) && defined(SYS_pidfd_open)
-    // On Linux with pidfd support, use pidfd_open syscall
-    int pidfd = (int)syscall(SYS_pidfd_open, pid, 0);
-    if (pidfd >= 0) {
-        *out_pidfd = pidfd;
-        return 0;
+    // This properly checks if we have permission to wait on (and eventually reap) the process.
+    siginfo_t info;
+    memset(&info, 0, sizeof(info));
+    int waitid_ret = waitid(P_PID, pid, &info, WNOHANG | WNOWAIT | WEXITED | WSTOPPED | WCONTINUED);
+
+    if (waitid_ret != 0) {
+        return -1;
     }
-    // If pidfd_open failed, fall through to kill(pid, 0) approach
-    // This handles cases where the kernel doesn't support pidfd_open at runtime
+
+#if defined(HAVE_PIDFD) && defined(SYS_pidfd_open)
+    int pidfd = (int)syscall(SYS_pidfd_open, pid, 0);
+    if (pidfd < 0) {
+        return -1;
+    }
+    *out_pidfd = pidfd;
 #endif
 
-    // On other Unix systems (macOS and Linux without SYS_pidfd_open):
-    // Use kill(pid, 0) to check if the process exists and we have permission to signal it.
-    // kill(pid, 0) doesn't actually send a signal, it just performs error checking.
-    // Returns 0 if the process exists and we have permission, -1 with errno set otherwise.
-    // Common errno values:
-    // - ESRCH: No such process
-    // - EPERM: No permission to send signals to the process
-    return kill(pid, 0);
+    return 0;
 }

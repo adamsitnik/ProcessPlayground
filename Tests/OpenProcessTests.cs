@@ -146,16 +146,22 @@ public class OpenProcessTests
     }
 
     [Fact]
-    public void Open_CanOpenOwnProcess()
+    public static void Open_FailsForNonChildProcess()
     {
-        // Get the current process ID
+        // Try to open the current process (which is not a child of itself)
         int currentPid = Environment.ProcessId;
 
-        // Open the current process
-        using SafeChildProcessHandle handle = SafeChildProcessHandle.Open(currentPid);
-
-        // Verify the handle is valid
-        Assert.False(handle.IsInvalid);
-        Assert.Equal(currentPid, handle.ProcessId);
+        if (OperatingSystem.IsWindows())
+        {
+            // On Windows, OpenProcess can open any process with appropriate permissions
+            using SafeChildProcessHandle handle = SafeChildProcessHandle.Open(currentPid);
+            Assert.False(handle.IsInvalid);
+            Assert.Equal(currentPid, handle.ProcessId);
+        }
+        else
+        {
+            // On Unix, Open should fail for non-child processes (ECHILD error)
+            Assert.Throws<Win32Exception>(() => SafeChildProcessHandle.Open(currentPid));
+        }
     }
 }
