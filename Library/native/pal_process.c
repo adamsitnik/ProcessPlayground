@@ -1009,30 +1009,21 @@ int open_process(int pid, int* out_pidfd) {
     // Initialize out_pidfd to -1 (no pidfd)
     *out_pidfd = -1;
 
-    // First, check if the process is a child we can wait on using waitid with WNOHANG | WNOWAIT.
-    // WNOHANG means don't block - waitid returns 0 for valid child processes or -1 for errors (including ECHILD).
-    // If no state change has occurred, waitid returns 0 but si_pid will be 0 indicating no state change (still a valid child).
-    // WNOWAIT means don't reap the process, just check its status.
-    // We include WEXITED | WSTOPPED | WCONTINUED to allow waitid to report any type of state change that may have occurred.
-    // We only care if the process is a child, not if it has actually changed state.
     // This properly checks if we have permission to wait on (and eventually reap) the process.
     siginfo_t info;
     memset(&info, 0, sizeof(info));
     int waitid_ret = waitid(P_PID, pid, &info, WNOHANG | WNOWAIT | WEXITED | WSTOPPED | WCONTINUED);
 
-    // If waitid failed, the process is not a child we can wait on, so we must fail
     if (waitid_ret != 0) {
-        // errno is already set by waitid (e.g., ECHILD if not a child, EINVAL for invalid args, etc.)
         return -1;
     }
 
 #if defined(HAVE_PIDFD) && defined(SYS_pidfd_open)
-    // waitid succeeded, so this is a child process. Try to get a pidfd for better process management.
     int pidfd = (int)syscall(SYS_pidfd_open, pid, 0);
-    if (pidfd >= 0) {
-        *out_pidfd = pidfd;
+    if (pidfd < 0) {
+        return -1;
     }
-    // pidfd is optional; we already verified this is a child process via waitid
+    *out_pidfd = pidfd;
 #endif
 
     return 0;
