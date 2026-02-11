@@ -302,7 +302,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     {
         if (TryGetExitCodeCore(out int exitCode, out PosixSignal? signal))
         {
-            exitStatus = new ProcessExitStatus(exitCode, canceled, signal);
+            exitStatus = new(exitCode, canceled, signal);
             return true;
         }
 

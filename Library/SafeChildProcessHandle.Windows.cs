@@ -394,7 +394,7 @@ public partial class SafeChildProcessHandle
         using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(this);
         processWaitHandle.WaitOne(Timeout.Infinite);
 
-        return new ProcessExitStatus(GetExitCode(), false);
+        return new(GetExitCode(), false);
     }
 
     private bool TryWaitForExitCore(int milliseconds, [NotNullWhen(true)] out ProcessExitStatus? exitStatus)
@@ -406,7 +406,7 @@ public partial class SafeChildProcessHandle
             return false;
         }
 
-        exitStatus = new ProcessExitStatus(GetExitCode(), false);
+        exitStatus = new(GetExitCode(), false);
         return true;
     }
 
@@ -419,7 +419,7 @@ public partial class SafeChildProcessHandle
             wasKilledOnTimeout = KillCore(throwOnError: false);
         }
 
-        return new ProcessExitStatus(GetExitCode(), wasKilledOnTimeout);
+        return new(GetExitCode(), wasKilledOnTimeout);
     }
 
     private async Task<ProcessExitStatus> WaitForExitAsyncCore(CancellationToken cancellationToken)
@@ -459,7 +459,7 @@ public partial class SafeChildProcessHandle
             registeredWaitHandle?.Unregister(null);
         }
 
-        return new ProcessExitStatus(GetExitCode(), false);
+        return new(GetExitCode(), false);
     }
 
     private async Task<ProcessExitStatus> WaitForExitOrKillOnCancellationAsyncCore(CancellationToken cancellationToken)
@@ -501,7 +501,7 @@ public partial class SafeChildProcessHandle
             registeredWaitHandle?.Unregister(null);
         }
 
-        return new ProcessExitStatus(GetExitCode(), wasKilledBox.Value);
+        return new(GetExitCode(), wasKilledBox.Value);
     }
 
     /// <summary>

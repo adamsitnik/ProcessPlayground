@@ -164,7 +164,7 @@ public partial class SafeChildProcessHandle
                 int errno = Marshal.GetLastPInvokeError();
                 throw new Win32Exception(errno, $"wait_for_exit_and_reap() failed with (errno={errno})");
             default:
-                return new ProcessExitStatus(exitCode, false, rawSignal != 0 ? (PosixSignal)rawSignal : null);
+                return new(exitCode, false, rawSignal != 0 ? (PosixSignal)rawSignal : null);
         }
     }
 
@@ -179,7 +179,7 @@ public partial class SafeChildProcessHandle
                 exitStatus = null;
                 return false;
             default:
-                exitStatus = new ProcessExitStatus(exitCode, false, rawSignal != 0 ? (PosixSignal)rawSignal : null);
+                exitStatus = new(exitCode, false, rawSignal != 0 ? (PosixSignal)rawSignal : null);
                 return true;
         }
     }
@@ -192,7 +192,7 @@ public partial class SafeChildProcessHandle
                 int errno = Marshal.GetLastPInvokeError();
                 throw new Win32Exception(errno, $"wait_for_exit_or_kill_on_timeout() failed with (errno={errno})");
             default:
-                return new ProcessExitStatus(exitCode, hasTimedout == 1, rawSignal != 0 ? (PosixSignal)rawSignal : null);
+                return new(exitCode, hasTimedout == 1, rawSignal != 0 ? (PosixSignal)rawSignal : null);
         }
     }
 
