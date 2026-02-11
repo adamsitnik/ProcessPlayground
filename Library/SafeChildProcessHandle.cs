@@ -83,7 +83,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// Starts a new process.
     /// </summary>
     /// <param name="options">The process start options.</param>
-    /// <param name="input">The handle to use for standard input, or <see langword="null"/> to discard input.</param>
+    /// <param name="input">The handle to use for standard input, or <see langword="null"/> to provide no input.</param>
     /// <param name="output">The handle to use for standard output, or <see langword="null"/> to discard output.</param>
     /// <param name="error">The handle to use for standard error, or <see langword="null"/> to discard error.</param>
     /// <returns>A handle to the started process.</returns>

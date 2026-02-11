@@ -22,7 +22,7 @@ public sealed class ProcessStartOptions
 
     // More or less same as ProcessStartInfo
     /// <summary>
-    /// Gets the application or document to start.
+    /// Gets the application to start.
     /// </summary>
     public string FileName => _fileName;
     /// <summary>
@@ -60,9 +60,6 @@ public sealed class ProcessStartOptions
     /// <summary>
     /// Gets or sets the working directory for the process to be started.
     /// </summary>
-    /// <remarks>
-    /// When the value is <see langword="null"/>, the working directory defaults to the current directory.
-    /// </remarks>
     public string? WorkingDirectory { get; set; }
     /// <summary>
     /// Gets or sets a value indicating whether to start the process in a new window.
@@ -101,7 +98,7 @@ public sealed class ProcessStartOptions
     /// <summary>
     /// Initializes a new instance of the <see cref="ProcessStartOptions"/> class.
     /// </summary>
-    /// <param name="fileName">The application or document to start.</param>
+    /// <param name="fileName">The application to start.</param>
     /// <exception cref="ArgumentException">Thrown when <paramref name="fileName"/> is null or empty.</exception>
     public ProcessStartOptions(string fileName)
     {
