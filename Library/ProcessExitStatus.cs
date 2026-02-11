@@ -4,9 +4,9 @@ namespace System.TBA;
 
 // design: this type does not provide Success property because success criteria may vary between applications
 // example: an app may fail with exit code 0 but produce invalid output
-public readonly struct ProcessExitStatus : IEquatable<ProcessExitStatus>
+public sealed class ProcessExitStatus
 {
-    internal ProcessExitStatus(int exitCode, bool cancelled, PosixSignal? signal = null)
+    public ProcessExitStatus(int exitCode, bool cancelled, PosixSignal? signal = null)
     {
         ExitCode = exitCode;
         Signal = signal;
@@ -38,14 +38,4 @@ public readonly struct ProcessExitStatus : IEquatable<ProcessExitStatus>
     /// Gets a value indicating whether the process has been terminated due to timeout or cancellation.
     /// </summary>
     public bool Canceled { get; }
-
-    public bool Equals(ProcessExitStatus other) => ExitCode == other.ExitCode && Canceled == other.Canceled && Signal == other.Signal;
-
-    public override bool Equals([NotNullWhen(true)] object? obj) => obj is ProcessExitStatus other && Equals(other);
-
-    public static bool operator ==(ProcessExitStatus left, ProcessExitStatus right) => left.Equals(right);
-
-    public static bool operator !=(ProcessExitStatus left, ProcessExitStatus right) => !left.Equals(right);
-
-    public override int GetHashCode() => HashCode.Combine(ExitCode, Canceled, Signal);
 }

@@ -217,7 +217,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
             }
 
             // Both streams are closed, wait for process to exit
-            if (!processHandle.TryGetExitStatus(canceled: false, out ProcessExitStatus exitStatus))
+            if (!processHandle.TryGetExitStatus(canceled: false, out ProcessExitStatus? exitStatus))
             {
                 TimeSpan remaining = timeoutHelper.GetRemainingOrThrow();
                 exitStatus = remaining == Timeout.InfiniteTimeSpan

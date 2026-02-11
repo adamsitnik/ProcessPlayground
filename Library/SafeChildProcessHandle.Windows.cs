@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -396,12 +397,12 @@ public partial class SafeChildProcessHandle
         return new(GetExitCode(), false);
     }
 
-    private bool TryWaitForExitCore(int milliseconds, out ProcessExitStatus exitStatus)
+    private bool TryWaitForExitCore(int milliseconds, [NotNullWhen(true)] out ProcessExitStatus? exitStatus)
     {
         using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(this);
         if (!processWaitHandle.WaitOne(milliseconds))
         {
-            exitStatus = default;
+            exitStatus = null;
             return false;
         }
 

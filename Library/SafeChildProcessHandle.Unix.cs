@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -167,7 +168,7 @@ public partial class SafeChildProcessHandle
         }
     }
 
-    private bool TryWaitForExitCore(int milliseconds, out ProcessExitStatus exitStatus)
+    private bool TryWaitForExitCore(int milliseconds, [NotNullWhen(true)] out ProcessExitStatus? exitStatus)
     {
         switch (try_wait_for_exit(this, ProcessId, _exitPipeFd, milliseconds, out int exitCode, out int rawSignal, out int hasTimedout))
         {
@@ -175,7 +176,7 @@ public partial class SafeChildProcessHandle
                 int errno = Marshal.GetLastPInvokeError();
                 throw new Win32Exception(errno, $"try_wait_for_exit() failed with (errno={errno})");
             case 1: // timeout
-                exitStatus = default;
+                exitStatus = null;
                 return false;
             default:
                 exitStatus = new(exitCode, false, rawSignal != 0 ? (PosixSignal)rawSignal : null);
