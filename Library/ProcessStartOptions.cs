@@ -5,6 +5,9 @@ using System.Runtime.InteropServices;
 
 namespace System.TBA;
 
+/// <summary>
+/// Specifies options for starting a new process.
+/// </summary>
 public sealed class ProcessStartOptions
 {
     private static string? _executableDirectory;
@@ -18,8 +21,20 @@ public sealed class ProcessStartOptions
     private IList<SafeHandle>? _inheritedHandles;
 
     // More or less same as ProcessStartInfo
+    /// <summary>
+    /// Gets the application or document to start.
+    /// </summary>
     public string FileName => _fileName;
+    /// <summary>
+    /// Gets or sets the command-line arguments to pass to the application.
+    /// </summary>
     public IList<string> Arguments { get => _arguments ??= new List<string>(); set => _arguments = value; }
+    /// <summary>
+    /// Gets the environment variables that apply to this process and its child processes.
+    /// </summary>
+    /// <remarks>
+    /// By default, the environment is a copy of the current process environment.
+    /// </remarks>
     public IDictionary<string, string?> Environment => _envVars ??= CreateEnvironmentCopy();
 
     /// <summary>
@@ -42,10 +57,22 @@ public sealed class ProcessStartOptions
     /// </remarks>
     public IList<SafeHandle> InheritedHandles { get => _inheritedHandles ??= new List<SafeHandle>(); set => _inheritedHandles = value; }
     
+    /// <summary>
+    /// Gets or sets the working directory for the process to be started.
+    /// </summary>
+    /// <remarks>
+    /// When the value is <see langword="null"/>, the working directory defaults to the current directory.
+    /// </remarks>
     public string? WorkingDirectory { get; set; }
+    /// <summary>
+    /// Gets or sets a value indicating whether to start the process in a new window.
+    /// </summary>
     public bool CreateNoWindow { get; set; }
 
     // New: User very often implement it on their own.
+    /// <summary>
+    /// Gets or sets a value indicating whether the child process should be terminated when the parent process exits.
+    /// </summary>
     public bool KillOnParentExit { get; set; }
 
     /// <summary>
@@ -71,6 +98,11 @@ public sealed class ProcessStartOptions
 
     internal bool IsFileNameResolved { get; }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ProcessStartOptions"/> class.
+    /// </summary>
+    /// <param name="fileName">The application or document to start.</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="fileName"/> is null or empty.</exception>
     public ProcessStartOptions(string fileName)
     {
         ArgumentException.ThrowIfNullOrEmpty(fileName);
