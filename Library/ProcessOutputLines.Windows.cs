@@ -180,7 +180,7 @@ public partial class ProcessOutputLines : IAsyncEnumerable<ProcessOutputLine>, I
 
             // It's possible for the process to close STD OUT and ERR keep running.
             // We optimize for hot path: process already exited and exit code is available.
-            if (!processHandle.TryGetExitStatus(canceled: false, out ProcessExitStatus exitStatus))
+            if (!processHandle.TryGetExitStatus(canceled: false, out ProcessExitStatus? exitStatus))
             {
                 TimeSpan remaining = timeoutHelper.GetRemainingOrThrow();
                 exitStatus = remaining == Timeout.InfiniteTimeSpan

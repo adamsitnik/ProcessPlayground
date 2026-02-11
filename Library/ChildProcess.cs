@@ -418,7 +418,7 @@ public static partial class ChildProcess
                 byte[] resultBuffer = BufferHelper.CreateCopy(buffer, totalBytesRead);
                 // It's possible for the process to close STD OUT and ERR keep running.
                 // We optimize for hot path: process already exited and exit code is available.
-                if (!processHandle.TryGetExitStatus(canceled: false, out ProcessExitStatus exitStatus))
+                if (!processHandle.TryGetExitStatus(canceled: false, out ProcessExitStatus? exitStatus))
                 {
                     exitStatus = await processHandle.WaitForExitAsync(cancellationToken);
                 }

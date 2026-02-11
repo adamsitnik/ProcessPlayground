@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -393,19 +394,19 @@ public partial class SafeChildProcessHandle
         using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(this);
         processWaitHandle.WaitOne(Timeout.Infinite);
 
-        return new(GetExitCode(), false);
+        return new ProcessExitStatus(GetExitCode(), false);
     }
 
-    private bool TryWaitForExitCore(int milliseconds, out ProcessExitStatus exitStatus)
+    private bool TryWaitForExitCore(int milliseconds, [NotNullWhen(true)] out ProcessExitStatus? exitStatus)
     {
         using Interop.Kernel32.ProcessWaitHandle processWaitHandle = new(this);
         if (!processWaitHandle.WaitOne(milliseconds))
         {
-            exitStatus = default;
+            exitStatus = null;
             return false;
         }
 
-        exitStatus = new(GetExitCode(), false);
+        exitStatus = new ProcessExitStatus(GetExitCode(), false);
         return true;
     }
 
@@ -418,7 +419,7 @@ public partial class SafeChildProcessHandle
             wasKilledOnTimeout = KillCore(throwOnError: false);
         }
 
-        return new(GetExitCode(), wasKilledOnTimeout);
+        return new ProcessExitStatus(GetExitCode(), wasKilledOnTimeout);
     }
 
     private async Task<ProcessExitStatus> WaitForExitAsyncCore(CancellationToken cancellationToken)
@@ -458,7 +459,7 @@ public partial class SafeChildProcessHandle
             registeredWaitHandle?.Unregister(null);
         }
 
-        return new(GetExitCode(), false);
+        return new ProcessExitStatus(GetExitCode(), false);
     }
 
     private async Task<ProcessExitStatus> WaitForExitOrKillOnCancellationAsyncCore(CancellationToken cancellationToken)
@@ -500,7 +501,7 @@ public partial class SafeChildProcessHandle
             registeredWaitHandle?.Unregister(null);
         }
 
-        return new(GetExitCode(), wasKilledBox.Value);
+        return new ProcessExitStatus(GetExitCode(), wasKilledBox.Value);
     }
 
     /// <summary>

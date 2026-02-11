@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -160,7 +161,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// <param name="exitStatus">When this method returns true, contains the exit status of the process.</param>
     /// <returns>true if the process exited before the timeout; otherwise, false.</returns>
     /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
-    public bool TryWaitForExit(TimeSpan timeout, out ProcessExitStatus exitStatus)
+    public bool TryWaitForExit(TimeSpan timeout, [NotNullWhen(true)] out ProcessExitStatus? exitStatus)
     {
         Validate();
 
@@ -297,7 +298,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
         return TryGetExitCodeCore(out exitCode, out signal);
     }
 
-    internal bool TryGetExitStatus(bool canceled, out ProcessExitStatus exitStatus)
+    internal bool TryGetExitStatus(bool canceled, [NotNullWhen(true)] out ProcessExitStatus? exitStatus)
     {
         if (TryGetExitCodeCore(out int exitCode, out PosixSignal? signal))
         {
@@ -305,7 +306,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
             return true;
         }
 
-        exitStatus = default;
+        exitStatus = null;
         return false;
     }
 

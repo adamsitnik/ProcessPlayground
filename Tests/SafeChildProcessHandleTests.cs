@@ -419,9 +419,10 @@ public partial class SafeChildProcessHandleTests
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
 
-        bool exited = processHandle.TryWaitForExit(TimeSpan.FromSeconds(5), out ProcessExitStatus exitStatus);
+        bool exited = processHandle.TryWaitForExit(TimeSpan.FromSeconds(5), out ProcessExitStatus? exitStatus);
 
         Assert.True(exited);
+        Assert.NotNull(exitStatus);
         Assert.Equal(0, exitStatus.ExitCode);
         Assert.False(exitStatus.Canceled);
         Assert.Null(exitStatus.Signal);
@@ -440,11 +441,11 @@ public partial class SafeChildProcessHandleTests
         try
         {
             Stopwatch stopwatch = Stopwatch.StartNew();
-            bool exited = processHandle.TryWaitForExit(TimeSpan.FromMilliseconds(300), out ProcessExitStatus exitStatus);
+            bool exited = processHandle.TryWaitForExit(TimeSpan.FromMilliseconds(300), out ProcessExitStatus? exitStatus);
             stopwatch.Stop();
 
             Assert.False(exited);
-            Assert.Equal(default, exitStatus);
+            Assert.Null(exitStatus);
             Assert.InRange(stopwatch.Elapsed, TimeSpan.FromMilliseconds(290), TimeSpan.FromMilliseconds(600));
         }
         finally
@@ -643,7 +644,7 @@ public partial class SafeChildProcessHandleTests
 
         // WaitForExitAsync should return quickly because the child exits immediately
         // (even though the grandchild is still running for 5 seconds)
-        ProcessExitStatus exitStatus;
+        ProcessExitStatus? exitStatus;
         if (useAsync)
         {
             exitStatus = await processHandle.WaitForExitAsync(cts.Token);
@@ -716,7 +717,7 @@ public partial class SafeChildProcessHandleTests
             processHandle.Kill(entireProcessGroup: entireProcessGroup);
 
             // Wait for parent shell to exit
-            Assert.True(processHandle.TryWaitForExit(TimeSpan.FromMilliseconds(MaxExpectedTerminationTimeMs), out ProcessExitStatus exitStatus), "Parent process should exit after being killed");
+            Assert.True(processHandle.TryWaitForExit(TimeSpan.FromMilliseconds(MaxExpectedTerminationTimeMs), out ProcessExitStatus? exitStatus), "Parent process should exit after being killed");
 
             if (OperatingSystem.IsWindows())
             {
@@ -801,7 +802,7 @@ public partial class SafeChildProcessHandleTests
             // Kill with the specified parameter
             processHandle.Kill(entireProcessGroup: true);
             // Wait for parent shell to exit
-            Assert.True(processHandle.TryWaitForExit(TimeSpan.FromMilliseconds(300), out ProcessExitStatus exitStatus), "Parent process should exit after being killed");
+            Assert.True(processHandle.TryWaitForExit(TimeSpan.FromMilliseconds(300), out ProcessExitStatus? exitStatus), "Parent process should exit after being killed");
 
             Assert.NotEqual(0, exitStatus.ExitCode);
 
