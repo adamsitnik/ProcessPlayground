@@ -302,12 +302,12 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// <param name="signal">The signal to send.</param>
     /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the signal value is not supported.</exception>
-    /// <exception cref="PlatformNotSupportedException">Thrown on Windows, as signaling process groups is not supported.</exception>
     /// <exception cref="Win32Exception">Thrown when the signal operation fails.</exception>
     /// <remarks>
-    /// This method is only supported on Unix/Linux systems.
-    /// All signals defined in PosixSignal are supported.
-    /// The signal is sent to all processes in the process group.
+    /// On Windows, only SIGINT (mapped to CTRL_C_EVENT), SIGQUIT (mapped to CTRL_BREAK_EVENT), and SIGKILL are supported.
+    /// The process must have been started with <see cref="ProcessStartOptions.CreateNewProcessGroup"/> set to true for signals to work properly.
+    /// On Windows, signals are always sent to the entire process group.
+    /// On Unix/Linux, all signals defined in PosixSignal are supported, and the signal is sent to all processes in the process group.
     /// </remarks>
     public void SignalProcessGroup(PosixSignal signal)
     {

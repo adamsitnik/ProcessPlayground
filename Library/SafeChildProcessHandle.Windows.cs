@@ -548,16 +548,10 @@ public partial class SafeChildProcessHandle
 
     private void SendSignalCore(PosixSignal signal, bool entireProcessGroup)
     {
-        // SignalProcessGroup is not supported on Windows
-        if (entireProcessGroup)
-        {
-            throw new PlatformNotSupportedException("SignalProcessGroup is not supported on Windows.");
-        }
-
         // SIGKILL is handled by calling KillCore directly
         if (signal == PosixSignal.SIGKILL)
         {
-            KillCore(throwOnError: true, entireProcessGroup: false);
+            KillCore(throwOnError: true, entireProcessGroup);
             return;
         }
 
