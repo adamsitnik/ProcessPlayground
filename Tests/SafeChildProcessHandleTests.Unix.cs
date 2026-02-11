@@ -20,10 +20,10 @@ public partial class SafeChildProcessHandleTests
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
         // Send SIGTERM signal
-        processHandle.SendSignal(PosixSignal.SIGTERM);
+        processHandle.Signal(PosixSignal.SIGTERM);
 
         // Process should exit after receiving SIGTERM
-        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
+        ProcessExitStatus exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
 
         Assert.Equal(PosixSignal.SIGTERM, exitStatus.Signal);
         // Exit code for signal termination is 128 + signal_number (native signal number, not enum value)
@@ -40,10 +40,10 @@ public partial class SafeChildProcessHandleTests
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
         
         // Send SIGINT signal
-        processHandle.SendSignal(PosixSignal.SIGINT);
+        processHandle.Signal(PosixSignal.SIGINT);
 
         // Process should exit after receiving SIGINT
-        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
+        ProcessExitStatus exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
 
         Assert.Equal(PosixSignal.SIGINT, exitStatus.Signal);
         // Exit code for signal termination is 128 + signal_number (native signal number, not enum value)
@@ -51,7 +51,7 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact]
-    public void SendSignal_InvalidSignal_ThrowsArgumentOutOfRangeException()
+    public void Signal_InvalidSignal_ThrowsArgumentOutOfRangeException()
     {
         // Start a process
         ProcessStartOptions options = new("sleep") { Arguments = { "1" } };
@@ -61,7 +61,7 @@ public partial class SafeChildProcessHandleTests
         // Try to send an invalid signal value
         PosixSignal invalidSignal = (PosixSignal)100;
         
-        Assert.Throws<ArgumentOutOfRangeException>(() => processHandle.SendSignal(invalidSignal));
+        Assert.Throws<ArgumentOutOfRangeException>(() => processHandle.Signal(invalidSignal));
         
         // Wait for process to complete normally
         processHandle.WaitForExit();
@@ -85,7 +85,7 @@ public partial class SafeChildProcessHandleTests
         
         // Try to send a signal to the exited process
         // This should throw a Win32Exception with ESRCH (no such process)
-        var exception = Assert.Throws<Win32Exception>(() => processHandle.SendSignal(PosixSignal.SIGTERM));
+        Win32Exception exception = Assert.Throws<Win32Exception>(() => processHandle.Signal(PosixSignal.SIGTERM));
         
         // ESRCH error code is 3 on Unix systems
         Assert.Equal(3, exception.NativeErrorCode);
@@ -161,11 +161,11 @@ public partial class SafeChildProcessHandleTests
             await Task.Delay(50);
             Assert.False(readTask.IsCompleted, "Grandchild should still be running");
             
-            // Send SIGTERM to only the parent process (entireProcessGroup: false)
-            processHandle.SendSignal(PosixSignal.SIGTERM, entireProcessGroup: false);
+            // Send SIGTERM to only the parent process
+            processHandle.Signal(PosixSignal.SIGTERM);
             
             // Wait for parent shell to exit
-            var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(1));
+            ProcessExitStatus exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(1));
             Assert.Equal(PosixSignal.SIGTERM, exitStatus.Signal);
             
             // Verify the read task still hasn't completed (grandchild is still alive and holds the pipe)
@@ -173,8 +173,8 @@ public partial class SafeChildProcessHandleTests
             Assert.False(readTask.IsCompleted, "Grandchild should still be running after parent was killed");
             
             // Now send SIGTERM to the entire process group
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-            processHandle.SendSignal(PosixSignal.SIGTERM, entireProcessGroup: true);
+            System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            processHandle.SignalProcessGroup(PosixSignal.SIGTERM);
             
             // The grandchild should be terminated, closing the pipe write end
             int bytesRead = await readTask;

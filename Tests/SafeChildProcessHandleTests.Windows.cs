@@ -31,17 +31,17 @@ public partial class SafeChildProcessHandleTests
         Assert.False(hasExited, "Process should still be running before signal is sent");
 
         // Send SIGINT signal (CTRL_C_EVENT)
-        processHandle.SendSignal(PosixSignal.SIGINT);
+        processHandle.Signal(PosixSignal.SIGINT);
 
         // Process should exit after receiving SIGINT
-        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromMilliseconds(300));
+        ProcessExitStatus exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromMilliseconds(300));
 
         // On Windows, the process will be terminated
         Assert.NotEqual(0, exitStatus.ExitCode);
     }
 
     [Fact]
-    public void SendSignal_SIGQUIT_TerminatesProcessInNewProcessGroup()
+    public void Signal_SIGQUIT_TerminatesProcessInNewProcessGroup()
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
@@ -64,17 +64,17 @@ public partial class SafeChildProcessHandleTests
         Assert.False(hasExited, "Process should still be running before signal is sent");
 
         // Send SIGQUIT signal (CTRL_BREAK_EVENT)
-        processHandle.SendSignal(PosixSignal.SIGQUIT);
+        processHandle.Signal(PosixSignal.SIGQUIT);
 
         // Process should exit after receiving SIGQUIT
-        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromMilliseconds(300));
+        ProcessExitStatus exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromMilliseconds(300));
 
         // On Windows, the process will be terminated
         Assert.NotEqual(0, exitStatus.ExitCode);
     }
 
     [Fact]
-    public void SendSignal_UnsupportedSignal_ThrowsArgumentException()
+    public void Signal_UnsupportedSignal_ThrowsArgumentException()
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
@@ -95,7 +95,7 @@ public partial class SafeChildProcessHandleTests
         try
         {
             // Try to send an unsupported signal on Windows (only SIGINT, SIGQUIT, and SIGKILL are supported)
-            Assert.Throws<ArgumentException>(() => processHandle.SendSignal(PosixSignal.SIGTERM));
+            Assert.Throws<ArgumentException>(() => processHandle.Signal(PosixSignal.SIGTERM));
         }
         finally
         {
@@ -146,7 +146,7 @@ public partial class SafeChildProcessHandleTests
         using SafeFileHandle stdin = Console.OpenStandardInputHandle();
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: stdin, output: null, error: null);
         
-        Assert.Throws<InvalidOperationException>(() => processHandle.Kill(entireProcessGroup: true));
+        Assert.Throws<InvalidOperationException>(() => processHandle.KillProcessGroup());
 
         Assert.True(processHandle.Kill());
     }

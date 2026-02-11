@@ -105,7 +105,7 @@ public class OpenProcessTests
 
         using SafeChildProcessHandle handle = SafeChildProcessHandle.Open(processId);
 
-        handle.SendSignal(OperatingSystem.IsWindows() ? PosixSignal.SIGINT : PosixSignal.SIGTERM);
+        handle.Signal(OperatingSystem.IsWindows() ? PosixSignal.SIGINT : PosixSignal.SIGTERM);
 
         ProcessExitStatus exitStatus = handle.WaitForExit();
 

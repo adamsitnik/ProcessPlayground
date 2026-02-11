@@ -714,7 +714,14 @@ public partial class SafeChildProcessHandleTests
             Assert.False(readTask.IsCompleted, "Grandchild should still be running");
 
             // Kill with the specified parameter
-            processHandle.Kill(entireProcessGroup: entireProcessGroup);
+            if (entireProcessGroup)
+            {
+                processHandle.KillProcessGroup();
+            }
+            else
+            {
+                processHandle.Kill();
+            }
 
             // Wait for parent shell to exit
             Assert.True(processHandle.TryWaitForExit(TimeSpan.FromMilliseconds(MaxExpectedTerminationTimeMs), out ProcessExitStatus? exitStatus), "Parent process should exit after being killed");
@@ -737,7 +744,7 @@ public partial class SafeChildProcessHandleTests
                 await Task.Delay(50);
                 Assert.False(readTask.IsCompleted, "Grandchild should still be running after parent was killed");
 
-                processHandle.Kill(entireProcessGroup: true);
+                processHandle.KillProcessGroup();
             }
 
             // The grandchild should be terminated, closing the pipe write end
@@ -754,7 +761,7 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact(Skip = ConditionalTests.WindowsOnly)] // It's pretty flaky on Linux ;(
-    public static async Task Kill_EntireProcessGroup_CanBeCombinedWithKillOnParentDeath()
+    public static async Task Kill_EntireProcessGroup_CanBeCombinedWithKillOnParentExit()
     {
         if (OperatingSystem.IsWindows() && Console.IsInputRedirected)
         {
@@ -780,7 +787,7 @@ public partial class SafeChildProcessHandleTests
                     Arguments = { "-c", "sleep 5 & wait" },
                 };
 
-            options.KillOnParentDeath = true; // Enable KillOnParentDeath
+            options.KillOnParentExit = true;
             options.CreateNewProcessGroup = true;
             // Add the pipe write handle to inherited handles so the grandchild inherits it
             options.InheritedHandles.Add(pipeWriteHandle);
@@ -800,7 +807,7 @@ public partial class SafeChildProcessHandleTests
             Assert.False(readTask.IsCompleted, "Grandchild should still be running");
 
             // Kill with the specified parameter
-            processHandle.Kill(entireProcessGroup: true);
+            processHandle.KillProcessGroup();
             // Wait for parent shell to exit
             Assert.True(processHandle.TryWaitForExit(TimeSpan.FromMilliseconds(300), out ProcessExitStatus? exitStatus), "Parent process should exit after being killed");
 
@@ -814,26 +821,26 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact]
-    public static void KillOnParentDeath_CanBeSetToTrue()
+    public static void KillOnParentExit_CanBeSetToTrue()
     {
         // Simple test to verify the property can be set
         ProcessStartOptions options = OperatingSystem.IsWindows()
-            ? new("cmd.exe") { Arguments = { "/c", "echo test" }, KillOnParentDeath = true }
-            : new("echo") { Arguments = { "test" }, KillOnParentDeath = true };
+            ? new("cmd.exe") { Arguments = { "/c", "echo test" }, KillOnParentExit = true }
+            : new("echo") { Arguments = { "test" }, KillOnParentExit = true };
 
-        Assert.True(options.KillOnParentDeath);
+        Assert.True(options.KillOnParentExit);
 
         using SafeChildProcessHandle processHandle = SafeChildProcessHandle.Start(options, input: null, output: null, error: null);
 
-        var exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
+        ProcessExitStatus exitStatus = processHandle.WaitForExitOrKillOnTimeout(TimeSpan.FromSeconds(5));
         Assert.Equal(0, exitStatus.ExitCode);
     }
 
     [Fact]
-    public static void KillOnParentDeath_DefaultsToFalse()
+    public static void KillOnParentExit_DefaultsToFalse()
     {
         ProcessStartOptions options = new("test");
-        Assert.False(options.KillOnParentDeath);
+        Assert.False(options.KillOnParentExit);
     }
 
     [Fact]
@@ -870,7 +877,7 @@ public partial class SafeChildProcessHandleTests
     }
 
     [Fact]
-    public static void PublicConstructor_WithProcessId_CreatesValidCopy_SendSignal()
+    public static void PublicConstructor_WithProcessId_CreatesValidCopy_Signal()
     {
         ProcessStartOptions options = OperatingSystem.IsWindows()
             ? new("powershell") { Arguments = { "-InputFormat", "None", "-Command", "Start-Sleep 10" }, CreateNewProcessGroup = true }
@@ -880,9 +887,9 @@ public partial class SafeChildProcessHandleTests
         using SafeChildProcessHandle copy = new(source.DangerousGetHandle(), source.ProcessId, ownsHandle: false);
 
         PosixSignal signal = OperatingSystem.IsWindows() ? PosixSignal.SIGINT : PosixSignal.SIGTERM;
-        copy.SendSignal(signal);
+        copy.Signal(signal);
 
-        var exitStatus = copy.WaitForExit();
+        ProcessExitStatus exitStatus = copy.WaitForExit();
         
 #if !WINDOWS
         Assert.Equal(signal, exitStatus.Signal);
