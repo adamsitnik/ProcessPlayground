@@ -13,12 +13,12 @@ namespace Microsoft.Win32.SafeHandles;
 
 public partial class SafeChildProcessHandle
 {
-    // Static job object used for KillOnParentDeath functionality
-    // All child processes with KillOnParentDeath=true are assigned to this job
+    // Static job object used for KillOnParentExit functionality
+    // All child processes with KillOnParentExit=true are assigned to this job
     // Note: The job handle is intentionally never closed - it should live for the
     // lifetime of the process. When this process exits, the job object is destroyed
     // by the OS, which terminates all child processes in the job.
-    private static readonly Lazy<IntPtr> s_killOnParentDeathJob = new(CreateKillOnParentDeathJob);
+    private static readonly Lazy<IntPtr> s_killOnParentExitJob = new(CreateKillOnParentExitJob);
 
     // Thread handle for suspended processes (only used on Windows)
     private readonly IntPtr _threadHandle;
@@ -36,13 +36,13 @@ public partial class SafeChildProcessHandle
         ProcessId = processId;
     }
 
-    private static IntPtr CreateKillOnParentDeathJob()
+    private static IntPtr CreateKillOnParentExitJob()
     {
         // Create a job object without a name (anonymous)
         IntPtr jobHandle = Interop.Kernel32.CreateJobObjectW(IntPtr.Zero, IntPtr.Zero);
         if (jobHandle == IntPtr.Zero)
         {
-            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to create job object for KillOnParentDeath");
+            throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to create job object for KillOnParentExit");
         }
 
         // Set JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE flag to ensure all processes in the job
@@ -165,7 +165,7 @@ public partial class SafeChildProcessHandle
 
             // Determine number of attributes we need
             int attributeCount = 1; // Always need handle list
-            if (options.KillOnParentDeath || options.CreateNewProcessGroup)
+            if (options.KillOnParentExit || options.CreateNewProcessGroup)
                 attributeCount++; // Required for PROC_THREAD_ATTRIBUTE_JOB_LIST
 
             // Initialize the attribute list
@@ -197,14 +197,14 @@ public partial class SafeChildProcessHandle
                 throw new Win32Exception();
             }
 
-            if (options.KillOnParentDeath || options.CreateNewProcessGroup)
+            if (options.KillOnParentExit || options.CreateNewProcessGroup)
             {
                 IntPtr* pJobHandle = stackalloc IntPtr[2];
                 int jobsCount = 0;
 
                 // The parent job must be added first!
-                if (options.KillOnParentDeath)
-                    pJobHandle[jobsCount++] = s_killOnParentDeathJob.Value;
+                if (options.KillOnParentExit)
+                    pJobHandle[jobsCount++] = s_killOnParentExitJob.Value;
                 if (options.CreateNewProcessGroup)
                     pJobHandle[jobsCount++] = processGroupJobHandle;
 
@@ -240,7 +240,7 @@ public partial class SafeChildProcessHandle
                 environmentBlock = ProcessUtils.GetEnvironmentVariablesBlock(options.Environment);
             }
 
-            string? workingDirectory = options.WorkingDirectory?.FullName;
+            string? workingDirectory = options.WorkingDirectory;
             int errorCode = 0;
 
             fixed (char* environmentBlockPtr = environmentBlock)

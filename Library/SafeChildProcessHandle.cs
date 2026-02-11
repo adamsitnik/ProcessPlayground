@@ -225,23 +225,37 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// <summary>
     /// Terminates the process.
     /// </summary>
-    /// <param name="entireProcessGroup">When true, terminates the entire process group (Unix and Windows with <see cref="ProcessStartOptions.CreateNewProcessGroup"/>). Default is false.</param>
     /// <returns>
     /// <c>true</c> if the process was terminated; <c>false</c> if the process had already exited.
     /// </returns>
     /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
     /// <exception cref="Win32Exception">Thrown when the kill operation fails for reasons other than the process having already exited.</exception>
-    /// <remarks>
-    /// On Unix, when <paramref name="entireProcessGroup"/> is true, sends SIGKILL to all processes in the process group.
-    /// On Windows, when <paramref name="entireProcessGroup"/> is true and the process was started with <see cref="ProcessStartOptions.CreateNewProcessGroup"/>=true,
-    /// terminates all processes in the job object. If the process was not started with <see cref="ProcessStartOptions.CreateNewProcessGroup"/>=true, 
-    /// the parameter has no effect and only the single process is terminated.
-    /// </remarks>
-    public bool Kill(bool entireProcessGroup = false)
+    public bool Kill()
     {
         Validate();
 
-        return KillCore(throwOnError: true, entireProcessGroup);
+        return KillCore(throwOnError: true, entireProcessGroup: false);
+    }
+
+    /// <summary>
+    /// Terminates the entire process group.
+    /// </summary>
+    /// <returns>
+    /// <c>true</c> if the process group was terminated; <c>false</c> if the process had already exited.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
+    /// <exception cref="Win32Exception">Thrown when the kill operation fails for reasons other than the process having already exited.</exception>
+    /// <remarks>
+    /// On Unix, sends SIGKILL to all processes in the process group.
+    /// On Windows, requires the process to have been started with <see cref="ProcessStartOptions.CreateNewProcessGroup"/>=true.
+    /// Terminates all processes in the job object. If the process was not started with <see cref="ProcessStartOptions.CreateNewProcessGroup"/>=true, 
+    /// throws an <see cref="InvalidOperationException"/>.
+    /// </remarks>
+    public bool KillProcessGroup()
+    {
+        Validate();
+
+        return KillCore(throwOnError: true, entireProcessGroup: true);
     }
 
     /// <summary>
@@ -260,7 +274,6 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// Sends a signal to the process.
     /// </summary>
     /// <param name="signal">The signal to send.</param>
-    /// <param name="entireProcessGroup">When true, sends the signal to the entire process group (Unix only). Default is false.</param>
     /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the signal value is not supported.</exception>
     /// <exception cref="ArgumentException">Thrown when the signal is not supported on the current platform.</exception>
@@ -268,11 +281,10 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// <remarks>
     /// On Windows, only SIGINT (mapped to CTRL_C_EVENT), SIGQUIT (mapped to CTRL_BREAK_EVENT), and SIGKILL are supported.
     /// The process must have been started with <see cref="ProcessStartOptions.CreateNewProcessGroup"/> set to true for signals to work properly.
-    /// Windows always sends signals to the entire process group, so the <paramref name="entireProcessGroup"/> parameter has no effect.
-    /// On Unix/Linux, all signals defined in PosixSignal are supported. When <paramref name="entireProcessGroup"/> is true,
-    /// the signal is sent to all processes in the process group.
+    /// On Windows, signals are always sent to the entire process group, not just the single process.
+    /// On Unix/Linux, all signals defined in PosixSignal are supported, and the signal is sent only to the specific process.
     /// </remarks>
-    public void SendSignal(PosixSignal signal, bool entireProcessGroup = false)
+    public void Signal(PosixSignal signal)
     {
         if (!Enum.IsDefined(signal))
         {
@@ -281,7 +293,32 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
 
         Validate();
 
-        SendSignalCore(signal, entireProcessGroup);
+        SendSignalCore(signal, entireProcessGroup: false);
+    }
+
+    /// <summary>
+    /// Sends a signal to the entire process group.
+    /// </summary>
+    /// <param name="signal">The signal to send.</param>
+    /// <exception cref="InvalidOperationException">Thrown when the handle is invalid.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the signal value is not supported.</exception>
+    /// <exception cref="Win32Exception">Thrown when the signal operation fails.</exception>
+    /// <remarks>
+    /// On Windows, only SIGINT (mapped to CTRL_C_EVENT), SIGQUIT (mapped to CTRL_BREAK_EVENT), and SIGKILL are supported.
+    /// The process must have been started with <see cref="ProcessStartOptions.CreateNewProcessGroup"/> set to true for signals to work properly.
+    /// On Windows, signals are always sent to the entire process group.
+    /// On Unix/Linux, all signals defined in PosixSignal are supported, and the signal is sent to all processes in the process group.
+    /// </remarks>
+    public void SignalProcessGroup(PosixSignal signal)
+    {
+        if (!Enum.IsDefined(signal))
+        {
+            throw new ArgumentOutOfRangeException(nameof(signal));
+        }
+
+        Validate();
+
+        SendSignalCore(signal, entireProcessGroup: true);
     }
     
     /// <summary>

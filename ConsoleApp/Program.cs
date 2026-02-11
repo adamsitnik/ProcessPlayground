@@ -14,7 +14,7 @@ static void LongRunningWithTimeout()
     ProcessStartOptions info = new("ping")
     {
         Arguments = { "microsoft.com", "-t" /* Ping the specified host until stopped */ },
-        KillOnParentDeath = true,
+        KillOnParentExit = true,
     };
 
     int exitCode = ChildProcess.Inherit(info, TimeSpan.FromSeconds(3)).ExitCode;
@@ -26,7 +26,7 @@ static async Task LongRunningWithTimeoutAsync()
     ProcessStartOptions info = new("ping")
     {
         Arguments = { "microsoft.com", "-t" /* Ping the specified host until stopped */ },
-        KillOnParentDeath = true,
+        KillOnParentExit = true,
     };
 
     using CancellationTokenSource cts = new(TimeSpan.FromSeconds(3));
@@ -39,7 +39,7 @@ static void LongRunningWithCtrlC()
     ProcessStartOptions info = new("ping")
     {
         Arguments = { "microsoft.com", "-t" /* Ping the specified host until stopped */ },
-        KillOnParentDeath = true,
+        KillOnParentExit = true,
     };
 
     int exitCode = ChildProcess.Inherit(info).ExitCode;
@@ -177,7 +177,7 @@ static async Task StreamLongRunningWithTimeoutAsync()
     ProcessStartOptions info = new("ping")
     {
         Arguments = { "microsoft.com", "-t" /* Ping the specified host until stopped */ },
-        KillOnParentDeath = true,
+        KillOnParentExit = true,
     };
 
     using CancellationTokenSource cts = new(TimeSpan.FromSeconds(3));

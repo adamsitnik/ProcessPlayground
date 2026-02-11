@@ -13,13 +13,13 @@ public sealed class ProcessStartOptions
 #endif
 
     private readonly string _fileName;
-    private List<string>? _arguments;
+    private IList<string>? _arguments;
     private Dictionary<string, string?>? _envVars;
-    private List<SafeHandle>? _inheritedHandles;
+    private IList<SafeHandle>? _inheritedHandles;
 
     // More or less same as ProcessStartInfo
     public string FileName => _fileName;
-    public IList<string> Arguments => _arguments ??= new();
+    public IList<string> Arguments { get => _arguments ??= new List<string>(); set => _arguments = value; }
     public IDictionary<string, string?> Environment => _envVars ??= CreateEnvironmentCopy();
 
     /// <summary>
@@ -40,13 +40,13 @@ public sealed class ProcessStartOptions
     /// by removing FD_CLOEXEC flag. It happens after the fork and before the exec, so it does not affect parent process.
     /// </para>
     /// </remarks>
-    public IList<SafeHandle> InheritedHandles => _inheritedHandles ??= new();
+    public IList<SafeHandle> InheritedHandles { get => _inheritedHandles ??= new List<SafeHandle>(); set => _inheritedHandles = value; }
     
-    public DirectoryInfo? WorkingDirectory { get; set; }
+    public string? WorkingDirectory { get; set; }
     public bool CreateNoWindow { get; set; }
 
     // New: User very often implement it on their own.
-    public bool KillOnParentDeath { get; set; }
+    public bool KillOnParentExit { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether to create the process in a new process group.
