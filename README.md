@@ -61,11 +61,13 @@ namespace System.TBA;
 public sealed class ProcessStartOptions
 {
     public string FileName { get; }
-    public IList<string> Arguments { get; }
+    public IList<string> Arguments { get; set; }
     public IDictionary<string, string?> Environment { get; }
-    public DirectoryInfo? WorkingDirectory { get; set; }
+    public IList<SafeHandle> InheritedHandles { get; set; }
+    public string? WorkingDirectory { get; set; }
     public bool CreateNoWindow { get; set; }
-    public bool KillOnParentDeath { get; set; }
+    public bool KillOnParentExit { get; set; }
+    public bool CreateNewProcessGroup { get; set; }
 
     public ProcessStartOptions(string fileName);
     
@@ -78,11 +80,13 @@ public sealed class ProcessStartOptions
 | Property | Type | Description |
 |----------|------|-------------|
 | `FileName` | `string` | The name of the executable to run (required) |
-| `Arguments` | `IList<string>` | Command-line arguments to pass to the process |
+| `Arguments` | `IList<string>` | Command-line arguments to pass to the process (settable) |
 | `Environment` | `IDictionary<string, string?>` | Environment variables for the child process |
-| `WorkingDirectory` | `DirectoryInfo?` | Working directory for the child process |
+| `InheritedHandles` | `IList<SafeHandle>` | Handles to inherit in the child process (settable) |
+| `WorkingDirectory` | `string?` | Working directory for the child process |
 | `CreateNoWindow` | `bool` | Whether to create a console window |
-| `KillOnParentDeath` | `bool` | Whether to kill the process when the parent process exits |
+| `KillOnParentExit` | `bool` | Whether to kill the process when the parent process exits |
+| `CreateNewProcessGroup` | `bool` | Whether to create the process in a new process group |
 
 **Static Methods:**
 
@@ -90,25 +94,36 @@ public sealed class ProcessStartOptions
 |--------|-------------|
 | `ResolvePath(string fileName)` | Resolves the given file name to an absolute path by searching the current directory, executable directory, system directories (Windows), and PATH environment variable. Returns a new ProcessStartOptions instance with the resolved path. Throws `FileNotFoundException` if the file cannot be found. |
 
-### Low-Level APIs: SafeProcessHandle
+### Low-Level APIs: SafeChildProcessHandle
 
 Low-level APIs for advanced process management scenarios:
 
 ```csharp
 namespace Microsoft.Win32.SafeHandles;
 
-public class SafeProcessHandle
+public class SafeChildProcessHandle
 {
-    public static SafeProcessHandle Start(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error);
+    public static SafeChildProcessHandle Start(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error);
+    public static SafeChildProcessHandle StartSuspended(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error);
+    public static SafeChildProcessHandle Open(int processId);
+    
     public int ProcessId { get; }
-    public int WaitForExit(TimeSpan? timeout = default);
-    public Task<int> WaitForExitAsync(CancellationToken cancellationToken = default);
-    public void Kill();
-    public void SendSignal(PosixSignal signal);  // Unix only
+    
+    public ProcessExitStatus WaitForExit();
+    public bool TryWaitForExit(TimeSpan timeout, out ProcessExitStatus? exitStatus);
+    public ProcessExitStatus WaitForExitOrKillOnTimeout(TimeSpan timeout);
+    public Task<ProcessExitStatus> WaitForExitAsync(CancellationToken cancellationToken = default);
+    public Task<ProcessExitStatus> WaitForExitOrKillOnCancellationAsync(CancellationToken cancellationToken);
+    
+    public bool Kill();
+    public bool KillProcessGroup();
+    public void Resume();
+    public void Signal(PosixSignal signal);  // Unix-specific signals, limited Windows support
+    public void SignalProcessGroup(PosixSignal signal);  // Unix only
 }
 ```
 
-The new `SafeProcessHandle` APIs provide fine-grained control over process creation and lifecycle management. They enable advanced scenarios like piping between processes.
+The new `SafeChildProcessHandle` APIs provide fine-grained control over process creation and lifecycle management. They enable advanced scenarios like piping between processes.
 
 **Example: Piping between processes**
 
@@ -137,11 +152,11 @@ using (writePipe)
     };
 
     // Start producer with output redirected to the write end of the pipe
-    using SafeProcessHandle producerHandle = SafeProcessHandle.Start(producer, input: null, output: writePipe, error: null);
+    using SafeChildProcessHandle producerHandle = SafeChildProcessHandle.Start(producer, input: null, output: writePipe, error: null);
 
     // Start consumer with input from the read end of the pipe
     using SafeFileHandle outputHandle = File.OpenHandle("output.txt", FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
-    using SafeProcessHandle consumerHandle = SafeProcessHandle.Start(consumer, readPipe, outputHandle, error: null);
+    using SafeChildProcessHandle consumerHandle = SafeChildProcessHandle.Start(consumer, readPipe, outputHandle, error: null);
 
     // Wait for both processes to complete
     await producerHandle.WaitForExitAsync();
@@ -436,8 +451,8 @@ Console.WriteLine($"Output: {text}");
 | Stream output | Redirect + `ReadLineAsync` loop | `ChildProcess.StreamOutputLines()` |
 | Capture stdout/stderr as separate strings | Redirect + `ReadToEndAsync()` | `ChildProcess.CaptureOutput()` |
 | Capture combined stdout/stderr as bytes | Redirect + `ReadToEndAsync()` | `ChildProcess.CaptureCombined()` |
-| Piping between processes | Complex handle management | `ProcessHandle.Start()` with pipes |
-| Parent death handling | Manual implementation | `KillOnParentDeath = true` |
+| Piping between processes | Complex handle management | `SafeChildProcessHandle.Start()` with pipes |
+| Parent exit handling | Manual implementation | `KillOnParentExit = true` |
 | Timeout | `WaitForExit(int)` + `Kill` | `Inherit(TimeSpan)` or `CancellationToken` |
 | Path resolution | Manual PATH search | `ProcessStartOptions.ResolvePath()` |
 
@@ -446,7 +461,7 @@ Console.WriteLine($"Output: {text}");
 - **Library/**: Core implementation of the process APIs
   - Low-level handle APIs (`Console`, `File`)
   - `ProcessStartOptions` configuration class
-  - `SafeProcessHandle` for advanced process control
+  - `SafeChildProcessHandle` for advanced process control
   - `ChildProcess` high-level convenience methods
   - `ProcessOutputLines` for streaming process output lines
 - **ConsoleApp/**: Sample console application demonstrating usage
