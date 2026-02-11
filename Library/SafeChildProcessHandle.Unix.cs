@@ -76,7 +76,7 @@ public partial class SafeChildProcessHandle
     {
         // Allocate native memory BEFORE forking
         byte* resolvedPathPtr = UnixHelpers.AllocateNullTerminatedUtf8String(resolvedPath);
-        byte* workingDirPtr = UnixHelpers.AllocateNullTerminatedUtf8String(options.WorkingDirectory?.FullName);
+        byte* workingDirPtr = UnixHelpers.AllocateNullTerminatedUtf8String(options.WorkingDirectory);
         byte** argvPtr = null;
         byte** envpPtr = null;
         int* inheritedHandlesPtr = null;
@@ -117,7 +117,7 @@ public partial class SafeChildProcessHandle
                 out int pid,
                 out int pidfd,
                 out int exitPipeFd,
-                options.KillOnParentDeath ? 1 : 0,
+                options.KillOnParentExit ? 1 : 0,
                 createSuspended ? 1 : 0,
                 options.CreateNewProcessGroup ? 1 : 0,
                 inheritedHandlesPtr,
