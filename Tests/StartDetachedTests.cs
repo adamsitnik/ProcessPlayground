@@ -49,16 +49,9 @@ public class StartDetachedTests
     [Fact]
     public static void StartDetached_ProcessRunsIndependently()
     {
-        ProcessStartOptions options;
-        
-        if (OperatingSystem.IsWindows())
-        {
-            options = new("powershell") { Arguments = { "-Command", "Start-Sleep 1" } };
-        }
-        else
-        {
-            options = new("sleep") { Arguments = { "1" } };
-        }
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("powershell") { Arguments = { "-Command", "Start-Sleep 1" } }
+            : new("sleep") { Arguments = { "1" } };
 
         using SafeChildProcessHandle handle = SafeChildProcessHandle.StartDetached(options);
         
@@ -73,16 +66,9 @@ public class StartDetachedTests
     [Fact]
     public static void StartDetached_CanKillProcess()
     {
-        ProcessStartOptions options;
-        
-        if (OperatingSystem.IsWindows())
-        {
-            options = new("powershell") { Arguments = { "-Command", "Start-Sleep 10" } };
-        }
-        else
-        {
-            options = new("sleep") { Arguments = { "10" } };
-        }
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("powershell") { Arguments = { "-Command", "Start-Sleep 10" } }
+            : new("sleep") { Arguments = { "10" } };
 
         using SafeChildProcessHandle handle = SafeChildProcessHandle.StartDetached(options);
         
@@ -110,15 +96,9 @@ public class StartDetachedTests
     {
         string tempDir = Path.GetTempPath();
         
-        ProcessStartOptions options;
-        if (OperatingSystem.IsWindows())
-        {
-            options = new("cmd.exe") { Arguments = { "/c", "cd" }, WorkingDirectory = tempDir };
-        }
-        else
-        {
-            options = new("pwd") { WorkingDirectory = tempDir };
-        }
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "cd" }, WorkingDirectory = tempDir }
+            : new("pwd") { WorkingDirectory = tempDir };
 
         using SafeChildProcessHandle handle = SafeChildProcessHandle.StartDetached(options);
         

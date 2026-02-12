@@ -135,8 +135,7 @@ public partial class SafeChildProcessHandle
                 : Duplicate(errorHandle, currentProcHandle));
 
         // Calculate total handle count: stdio handles (max 3) + user-provided inherited handles
-        // For detached processes, we don't inherit any user handles
-        int maxHandleCount = 3 + (detached ? 0 : (options.HasInheritedHandlesBeenAccessed ? options.InheritedHandles.Count : 0));
+        int maxHandleCount = 3 + (options.HasInheritedHandlesBeenAccessed ? options.InheritedHandles.Count : 0);
         
         // Allocate handles array on heap (simpler for .NET Framework compatibility)
         IntPtr heapHandlesPtr = Marshal.AllocHGlobal(maxHandleCount * sizeof(IntPtr));
@@ -151,20 +150,7 @@ public partial class SafeChildProcessHandle
             IntPtr outputPtr = duplicatedOutput.DangerousGetHandle();
             IntPtr errorPtr = duplicatedError.DangerousGetHandle();
 
-            // For detached processes, add stdio handles directly
-            // For normal processes, use PrepareHandleAllowList which also adds user handles
-            if (detached)
-            {
-                handlesToInherit[handleCount++] = inputPtr;
-                if (outputPtr != inputPtr)
-                    handlesToInherit[handleCount++] = outputPtr;
-                if (errorPtr != inputPtr && errorPtr != outputPtr)
-                    handlesToInherit[handleCount++] = errorPtr;
-            }
-            else
-            {
-                PrepareHandleAllowList(options, handlesToInherit, ref handleCount, inputPtr, outputPtr, errorPtr);
-            }
+            PrepareHandleAllowList(options, handlesToInherit, ref handleCount, inputPtr, outputPtr, errorPtr);
 
             // Create a job object if CreateNewProcessGroup is requested or if detached
             // This must happen before starting the process to ensure atomicity
