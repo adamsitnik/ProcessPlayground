@@ -74,7 +74,7 @@ public class StartDetachedTests
         
         Assert.NotEqual(0, handle.ProcessId);
         
-        Assert.False(processHandle.TryWaitForExit(TimeSpan.FromMilliseconds(100), out _));
+        Assert.False(handle .TryWaitForExit(TimeSpan.FromMilliseconds(100), out _));
         
         Assert.True(handle.Kill());
         
