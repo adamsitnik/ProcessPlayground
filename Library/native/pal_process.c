@@ -144,6 +144,7 @@ int create_kqueue_cloexec(void) {
 //   Note: On macOS with posix_spawn, kill_on_parent_death is not supported and will be ignored
 // If create_suspended is non-zero, the child process will be created in a suspended state (stopped)
 // If create_new_process_group is non-zero, the child process will be created in a new process group
+// If detached is non-zero, the child process will be detached (starts a new session with setsid)
 // If inherited_handles is not NULL and inherited_handles_count > 0, the specified file descriptors will be inherited
 int spawn_process(
     const char* path,
@@ -159,6 +160,7 @@ int spawn_process(
     int kill_on_parent_death,
     int create_suspended,
     int create_new_process_group,
+    int detached,
     const int* inherited_handles,
     int inherited_handles_count)
 {
@@ -202,6 +204,19 @@ int spawn_process(
         flags |= POSIX_SPAWN_START_SUSPENDED;
     }
 #endif
+    // If detached is requested, add the POSIX_SPAWN_SETSID flag to create a new session
+    if (detached) {
+#ifdef POSIX_SPAWN_SETSID
+        flags |= POSIX_SPAWN_SETSID;
+#else
+        // POSIX_SPAWN_SETSID is not available on this platform
+        posix_spawnattr_destroy(&attr);
+        close(exit_pipe[0]);
+        close(exit_pipe[1]);
+        errno = ENOTSUP;
+        return -1;
+#endif
+    }
     // If create_new_process_group is requested, add the POSIX_SPAWN_SETPGROUP flag
     if (create_new_process_group) {
         flags |= POSIX_SPAWN_SETPGROUP;
@@ -444,6 +459,15 @@ int spawn_process(
         
         // Restore signal mask immediately
         pthread_sigmask(SIG_SETMASK, &old_signals, NULL);
+        
+        // If detached is enabled, create a new session (detach from controlling terminal)
+        // setsid() creates a new session if the calling process is not a process group leader
+        // The calling process becomes the leader of the new session and the leader of a new process group
+        if (detached) {
+            if (setsid() == -1) {
+                write_errno_and_exit(wait_pipe[1], errno);
+            }
+        }
         
         // If create_new_process_group is enabled, create a new process group
         // setpgid(0, 0) sets the process group ID of the calling process to its own PID

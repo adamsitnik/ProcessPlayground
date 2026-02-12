@@ -47,6 +47,77 @@ public partial class SafeChildProcessHandle
         };
     }
 
+    private static SafeChildProcessHandle StartDetachedCore(ProcessStartOptions options)
+    {
+        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
+        
+        return StartDetachedCoreInternal(options, nullHandle, nullHandle, nullHandle);
+    }
+
+    private static unsafe SafeChildProcessHandle StartDetachedCoreInternal(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
+    {
+        string? resolvedPath = options.IsFileNameResolved ? options.FileName : ProcessStartOptions.ResolvePathInternal(options.FileName);
+        if (string.IsNullOrEmpty(resolvedPath))
+        {
+            throw new Win32Exception(2, $"Cannot find executable: {options.FileName}");
+        }
+
+        string[] argv = [resolvedPath, .. options.Arguments];
+        string[]? envp = options.HasEnvironmentBeenAccessed ? UnixHelpers.GetEnvironmentVariables(options) : null;
+
+        int stdInFd = (int)inputHandle.DangerousGetHandle();
+        int stdOutFd = (int)outputHandle.DangerousGetHandle();
+        int stdErrFd = (int)errorHandle.DangerousGetHandle();
+
+        byte* resolvedPathPtr = UnixHelpers.AllocateNullTerminatedUtf8String(resolvedPath);
+        byte* workingDirPtr = UnixHelpers.AllocateNullTerminatedUtf8String(options.WorkingDirectory);
+        byte** argvPtr = null;
+        byte** envpPtr = null;
+        
+        try
+        {
+            UnixHelpers.AllocNullTerminatedArray(argv, ref argvPtr);
+            
+            if (envp is not null)
+            {
+                UnixHelpers.AllocNullTerminatedArray(envp, ref envpPtr);
+            }
+
+            int result = spawn_process(
+                resolvedPathPtr,
+                argvPtr,
+                envpPtr,
+                stdInFd,
+                stdOutFd,
+                stdErrFd,
+                workingDirPtr,
+                out int pid,
+                out int pidfd,
+                out int exitPipeFd,
+                options.KillOnParentExit ? 1 : 0,
+                0, // create_suspended = 0
+                0, // create_new_process_group = 0 (detached implies new session, not just new process group)
+                1, // detached = 1
+                null, // no inherited handles for detached processes
+                0);
+
+            if (result == -1)
+            {
+                int errorCode = Marshal.GetLastPInvokeError();
+                throw new Win32Exception(errorCode, "Failed to spawn detached process");
+            }
+
+            return new SafeChildProcessHandle(pidfd, pid, exitPipeFd);
+        }
+        finally
+        {
+            NativeMemory.Free(resolvedPathPtr);
+            UnixHelpers.FreePointer(workingDirPtr);
+            UnixHelpers.FreeArray(envpPtr, envp?.Length ?? 0);
+            UnixHelpers.FreeArray(argvPtr, argv.Length);
+        }
+    }
+
     private static SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle, bool createSuspended)
     {
         // Resolve executable path first
@@ -120,6 +191,7 @@ public partial class SafeChildProcessHandle
                 options.KillOnParentExit ? 1 : 0,
                 createSuspended ? 1 : 0,
                 options.CreateNewProcessGroup ? 1 : 0,
+                0, // detached = 0 for normal process creation
                 inheritedHandlesPtr,
                 inheritedHandlesCount);
 
@@ -342,6 +414,7 @@ public partial class SafeChildProcessHandle
         int kill_on_parent_death,
         int create_suspended,
         int create_new_process_group,
+        int detached,
         int* inherited_handles,
         int inherited_handles_count);
 

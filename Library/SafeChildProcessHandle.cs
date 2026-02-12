@@ -94,6 +94,30 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     }
 
     /// <summary>
+    /// Starts a new detached process with standard input, output, and error redirected to NUL.
+    /// </summary>
+    /// <param name="options">The process start options.</param>
+    /// <returns>A handle to the started detached process.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when <see cref="ProcessStartOptions.InheritedHandles"/> is not empty.</exception>
+    /// <remarks>
+    /// On Windows, the process is started with DETACHED_PROCESS and CREATE_NEW_PROCESS_GROUP flags.
+    /// On macOS, the process is started with POSIX_SPAWN_SETSID.
+    /// On other Unix systems, the process calls setsid() after fork and before exec.
+    /// </remarks>
+    public static SafeChildProcessHandle StartDetached(ProcessStartOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (options.HasInheritedHandlesBeenAccessed && options.InheritedHandles.Count > 0)
+        {
+            throw new InvalidOperationException("A detached process cannot inherit handles.");
+        }
+
+        return StartDetachedCore(options);
+    }
+
+    /// <summary>
     /// Starts a new process in a suspended state.
     /// </summary>
     /// <param name="options">Process start options.</param>
