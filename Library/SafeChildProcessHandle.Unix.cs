@@ -47,7 +47,7 @@ public partial class SafeChildProcessHandle
         };
     }
 
-    private static SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle, bool createSuspended)
+    private static SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle, bool createSuspended, bool detached)
     {
         // Resolve executable path first
         string? resolvedPath = options.IsFileNameResolved ? options.FileName : ProcessStartOptions.ResolvePathInternal(options.FileName);
@@ -68,11 +68,11 @@ public partial class SafeChildProcessHandle
         int stdOutFd = (int)outputHandle.DangerousGetHandle();
         int stdErrFd = (int)errorHandle.DangerousGetHandle();
 
-        return StartProcessInternal(resolvedPath, argv, envp, options, stdInFd, stdOutFd, stdErrFd, createSuspended);
+        return StartProcessInternal(resolvedPath, argv, envp, options, stdInFd, stdOutFd, stdErrFd, createSuspended, detached);
     }
 
     private static unsafe SafeChildProcessHandle StartProcessInternal(string resolvedPath, string[] argv, string[]? envp,
-        ProcessStartOptions options, int stdinFd, int stdoutFd, int stderrFd, bool createSuspended)
+        ProcessStartOptions options, int stdinFd, int stdoutFd, int stderrFd, bool createSuspended, bool detached)
     {
         // Allocate native memory BEFORE forking
         byte* resolvedPathPtr = UnixHelpers.AllocateNullTerminatedUtf8String(resolvedPath);
@@ -92,8 +92,8 @@ public partial class SafeChildProcessHandle
                 UnixHelpers.AllocNullTerminatedArray(envp, ref envpPtr);
             }
             
-            // Allocate and copy inherited handles if provided
-            if (options.HasInheritedHandlesBeenAccessed && options.InheritedHandles.Count > 0)
+            // Allocate and copy inherited handles if provided (and not detached)
+            if (!detached && options.HasInheritedHandlesBeenAccessed && options.InheritedHandles.Count > 0)
             {
                 inheritedHandlesCount = options.InheritedHandles.Count;
                 inheritedHandlesPtr = (int*)NativeMemory.Alloc((nuint)inheritedHandlesCount, (nuint)sizeof(int));
@@ -120,6 +120,7 @@ public partial class SafeChildProcessHandle
                 options.KillOnParentExit ? 1 : 0,
                 createSuspended ? 1 : 0,
                 options.CreateNewProcessGroup ? 1 : 0,
+                detached ? 1 : 0,
                 inheritedHandlesPtr,
                 inheritedHandlesCount);
 
@@ -342,6 +343,7 @@ public partial class SafeChildProcessHandle
         int kill_on_parent_death,
         int create_suspended,
         int create_new_process_group,
+        int detached,
         int* inherited_handles,
         int inherited_handles_count);
 

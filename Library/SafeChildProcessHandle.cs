@@ -90,7 +90,31 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is null.</exception>
     public static SafeChildProcessHandle Start(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error)
     {
-        return StartInternal(options, input, output, error, createSuspended: false);
+        return StartInternal(options, input, output, error, createSuspended: false, detached: false);
+    }
+
+    /// <summary>
+    /// Starts a new detached process with standard input, output, and error redirected to NUL.
+    /// </summary>
+    /// <param name="options">The process start options.</param>
+    /// <returns>A handle to the started detached process.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when <see cref="ProcessStartOptions.InheritedHandles"/> is not empty.</exception>
+    /// <remarks>
+    /// On Windows, the process is started with DETACHED_PROCESS and CREATE_NEW_PROCESS_GROUP flags.
+    /// On macOS, the process is started with POSIX_SPAWN_SETSID.
+    /// On other Unix systems, the process calls setsid() after fork and before exec.
+    /// </remarks>
+    public static SafeChildProcessHandle StartDetached(ProcessStartOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        if (options.HasInheritedHandlesBeenAccessed && options.InheritedHandles.Count > 0)
+        {
+            throw new InvalidOperationException("A detached process cannot inherit handles.");
+        }
+
+        return StartInternal(options, input: null, output: null, error: null, createSuspended: false, detached: true);
     }
 
     /// <summary>
@@ -103,10 +127,10 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// <returns>A handle to the suspended process. Call <see cref="Resume"/> to start execution.</returns>
     public static SafeChildProcessHandle StartSuspended(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error)
     {
-        return StartInternal(options, input, output, error, createSuspended: true);
+        return StartInternal(options, input, output, error, createSuspended: true, detached: false);
     }
 
-    private static SafeChildProcessHandle StartInternal(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error, bool createSuspended)
+    private static SafeChildProcessHandle StartInternal(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error, bool createSuspended, bool detached)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -123,7 +147,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
 
         try
         {
-            return StartCore(options, input, output, error, createSuspended);
+            return StartCore(options, input, output, error, createSuspended, detached);
         }
         finally
         {

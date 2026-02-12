@@ -105,7 +105,7 @@ public partial class SafeChildProcessHandle
             && exitCode != Interop.Kernel32.HandleOptions.STILL_ACTIVE;
     }
 
-    private static unsafe SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle, bool createSuspended)
+    private static unsafe SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle, bool createSuspended, bool detached)
     {
         ValueStringBuilder applicationName = new(stackalloc char[256]);
         ValueStringBuilder commandLine = new(stackalloc char[256]);
@@ -152,9 +152,9 @@ public partial class SafeChildProcessHandle
 
             PrepareHandleAllowList(options, handlesToInherit, ref handleCount, inputPtr, outputPtr, errorPtr);
 
-            // Create a job object if CreateNewProcessGroup is requested
+            // Create a job object if CreateNewProcessGroup is requested or if detached
             // This must happen before starting the process to ensure atomicity
-            if (options.CreateNewProcessGroup)
+            if (options.CreateNewProcessGroup || detached)
             {
                 processGroupJobHandle = Interop.Kernel32.CreateJobObjectW(IntPtr.Zero, IntPtr.Zero);
                 if (processGroupJobHandle == IntPtr.Zero)
@@ -165,7 +165,7 @@ public partial class SafeChildProcessHandle
 
             // Determine number of attributes we need
             int attributeCount = 1; // Always need handle list
-            if (options.KillOnParentExit || options.CreateNewProcessGroup)
+            if (options.KillOnParentExit || options.CreateNewProcessGroup || detached)
                 attributeCount++; // Required for PROC_THREAD_ATTRIBUTE_JOB_LIST
 
             // Initialize the attribute list
@@ -197,7 +197,7 @@ public partial class SafeChildProcessHandle
                 throw new Win32Exception();
             }
 
-            if (options.KillOnParentExit || options.CreateNewProcessGroup)
+            if (options.KillOnParentExit || options.CreateNewProcessGroup || detached)
             {
                 IntPtr* pJobHandle = stackalloc IntPtr[2];
                 int jobsCount = 0;
@@ -205,7 +205,7 @@ public partial class SafeChildProcessHandle
                 // The parent job must be added first!
                 if (options.KillOnParentExit)
                     pJobHandle[jobsCount++] = s_killOnParentExitJob.Value;
-                if (options.CreateNewProcessGroup)
+                if (options.CreateNewProcessGroup || detached)
                     pJobHandle[jobsCount++] = processGroupJobHandle;
 
                 if (!Interop.Kernel32.UpdateProcThreadAttribute(
@@ -231,7 +231,8 @@ public partial class SafeChildProcessHandle
             int creationFlags = Interop.Kernel32.EXTENDED_STARTUPINFO_PRESENT;
             if (options.CreateNoWindow) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NO_WINDOW;
             if (createSuspended) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_SUSPENDED;
-            if (options.CreateNewProcessGroup) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NEW_PROCESS_GROUP;
+            if (options.CreateNewProcessGroup || detached) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NEW_PROCESS_GROUP;
+            if (detached) creationFlags |= Interop.Advapi32.StartupInfoOptions.DETACHED_PROCESS;
 
             string? environmentBlock = null;
             if (options.HasEnvironmentBeenAccessed)
