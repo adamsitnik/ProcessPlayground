@@ -198,8 +198,7 @@ public partial class SafeChildProcessHandle
                 IntPtr* pJobHandle = stackalloc IntPtr[2];
                 int jobsCount = 0;
 
-                if (options.KillOnParentExit)
-                    pJobHandle[jobsCount++] = s_killOnParentExitJob.Value;
+                pJobHandle[jobsCount++] = s_killOnParentExitJob.Value;
                 pJobHandle[jobsCount++] = processGroupJobHandle;
 
                 if (!Interop.Kernel32.UpdateProcThreadAttribute(

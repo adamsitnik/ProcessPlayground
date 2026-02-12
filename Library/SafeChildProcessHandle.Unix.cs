@@ -96,7 +96,7 @@ public partial class SafeChildProcessHandle
                 out int exitPipeFd,
                 options.KillOnParentExit ? 1 : 0,
                 0, // create_suspended = 0
-                0, // create_new_process_group = 0 (detached implies new session, not just new process group)
+                0, // create_new_process_group = 0 (setsid creates both a new session and a new process group)
                 1, // detached = 1
                 null, // no inherited handles for detached processes
                 0);
