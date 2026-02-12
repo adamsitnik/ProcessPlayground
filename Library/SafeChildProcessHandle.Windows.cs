@@ -232,7 +232,11 @@ public partial class SafeChildProcessHandle
             if (options.CreateNoWindow) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NO_WINDOW;
             if (createSuspended) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_SUSPENDED;
             if (options.CreateNewProcessGroup || detached) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NEW_PROCESS_GROUP;
-            if (detached) creationFlags |= Interop.Advapi32.StartupInfoOptions.DETACHED_PROCESS;
+            if (detached)
+            {
+                creationFlags |= Interop.Advapi32.StartupInfoOptions.DETACHED_PROCESS;
+                creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_BREAKAWAY_FROM_JOB;
+            }
 
             string? environmentBlock = null;
             if (options.HasEnvironmentBeenAccessed)
