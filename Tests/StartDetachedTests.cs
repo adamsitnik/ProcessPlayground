@@ -132,15 +132,9 @@ public class StartDetachedTests
         string testVar = "TEST_DETACHED_VAR_" + Guid.NewGuid().ToString("N");
         string testValue = "test_value_123";
         
-        ProcessStartOptions options;
-        if (OperatingSystem.IsWindows())
-        {
-            options = new("cmd.exe") { Arguments = { "/c", "exit 0" } };
-        }
-        else
-        {
-            options = new("sh") { Arguments = { "-c", "exit 0" } };
-        }
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("cmd.exe") { Arguments = { "/c", "exit 0" } }
+            : new("sh") { Arguments = { "-c", "exit 0" } };
         
         options.Environment[testVar] = testValue;
 

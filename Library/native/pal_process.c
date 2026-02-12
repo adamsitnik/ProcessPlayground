@@ -175,6 +175,14 @@ int spawn_process(
     }
 #endif
     
+    // On platforms without POSIX_SPAWN_SETSID, return ENOTSUP early if detached is requested
+#ifndef POSIX_SPAWN_SETSID
+    if (detached) {
+        errno = ENOTSUP;
+        return -1;
+    }
+#endif
+    
     int exit_pipe[2];
     pid_t child_pid;
     posix_spawn_file_actions_t file_actions;
@@ -206,16 +214,7 @@ int spawn_process(
 #endif
     // If detached is requested, add the POSIX_SPAWN_SETSID flag to create a new session
     if (detached) {
-#ifdef POSIX_SPAWN_SETSID
         flags |= POSIX_SPAWN_SETSID;
-#else
-        // POSIX_SPAWN_SETSID is not available on this platform
-        posix_spawnattr_destroy(&attr);
-        close(exit_pipe[0]);
-        close(exit_pipe[1]);
-        errno = ENOTSUP;
-        return -1;
-#endif
     }
     // If create_new_process_group is requested, add the POSIX_SPAWN_SETPGROUP flag
     if (create_new_process_group) {

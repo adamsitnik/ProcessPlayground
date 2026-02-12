@@ -90,7 +90,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is null.</exception>
     public static SafeChildProcessHandle Start(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error)
     {
-        return StartInternal(options, input, output, error, createSuspended: false);
+        return StartInternal(options, input, output, error, createSuspended: false, detached: false);
     }
 
     /// <summary>
@@ -114,7 +114,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
             throw new InvalidOperationException("A detached process cannot inherit handles.");
         }
 
-        return StartDetachedCore(options);
+        return StartInternal(options, input: null, output: null, error: null, createSuspended: false, detached: true);
     }
 
     /// <summary>
@@ -127,10 +127,10 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
     /// <returns>A handle to the suspended process. Call <see cref="Resume"/> to start execution.</returns>
     public static SafeChildProcessHandle StartSuspended(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error)
     {
-        return StartInternal(options, input, output, error, createSuspended: true);
+        return StartInternal(options, input, output, error, createSuspended: true, detached: false);
     }
 
-    private static SafeChildProcessHandle StartInternal(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error, bool createSuspended)
+    private static SafeChildProcessHandle StartInternal(ProcessStartOptions options, SafeFileHandle? input, SafeFileHandle? output, SafeFileHandle? error, bool createSuspended, bool detached)
     {
         ArgumentNullException.ThrowIfNull(options);
 
@@ -147,7 +147,7 @@ public sealed partial class SafeChildProcessHandle : SafeHandle
 
         try
         {
-            return StartCore(options, input, output, error, createSuspended);
+            return StartCore(options, input, output, error, createSuspended, detached);
         }
         finally
         {

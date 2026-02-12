@@ -105,234 +105,7 @@ public partial class SafeChildProcessHandle
             && exitCode != Interop.Kernel32.HandleOptions.STILL_ACTIVE;
     }
 
-    private static SafeChildProcessHandle StartDetachedCore(ProcessStartOptions options)
-    {
-        using SafeFileHandle nullHandle = File.OpenNullFileHandle();
-        
-        // For detached processes, we need to modify the StartCore logic
-        // We'll create a specialized version that uses DETACHED_PROCESS flag
-        return StartDetachedCoreInternal(options, nullHandle, nullHandle, nullHandle);
-    }
-
-    private static unsafe SafeChildProcessHandle StartDetachedCoreInternal(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle)
-    {
-        ValueStringBuilder applicationName = new(stackalloc char[256]);
-        ValueStringBuilder commandLine = new(stackalloc char[256]);
-        ProcessUtils.BuildArgs(options, ref applicationName, ref commandLine);
-
-        Interop.Kernel32.STARTUPINFOEX startupInfoEx = default;
-        Interop.Kernel32.PROCESS_INFORMATION processInfo = default;
-        Interop.Kernel32.SECURITY_ATTRIBUTES unused_SecAttrs = default;
-        SafeChildProcessHandle? procSH = null;
-        IntPtr currentProcHandle = Interop.Kernel32.GetCurrentProcess();
-        IntPtr attributeListBuffer = IntPtr.Zero;
-        Interop.Kernel32.LPPROC_THREAD_ATTRIBUTE_LIST attributeList = default;
-
-        using SafeFileHandle duplicatedInput = Duplicate(inputHandle, currentProcHandle);
-        using SafeFileHandle duplicatedOutput = inputHandle.DangerousGetHandle() == outputHandle.DangerousGetHandle()
-            ? duplicatedInput
-            : Duplicate(outputHandle, currentProcHandle);
-        using SafeFileHandle duplicatedError = outputHandle.DangerousGetHandle() == errorHandle.DangerousGetHandle()
-            ? duplicatedOutput
-            : (inputHandle.DangerousGetHandle() == errorHandle.DangerousGetHandle()
-                ? duplicatedInput
-                : Duplicate(errorHandle, currentProcHandle));
-
-        int maxHandleCount = 3;
-        IntPtr heapHandlesPtr = Marshal.AllocHGlobal(maxHandleCount * sizeof(IntPtr));
-        IntPtr* handlesToInherit = (IntPtr*)heapHandlesPtr;
-        IntPtr processGroupJobHandle = IntPtr.Zero;
-
-        try
-        {
-            int handleCount = 0;
-
-            IntPtr inputPtr = duplicatedInput.DangerousGetHandle();
-            IntPtr outputPtr = duplicatedOutput.DangerousGetHandle();
-            IntPtr errorPtr = duplicatedError.DangerousGetHandle();
-
-            handlesToInherit[handleCount++] = inputPtr;
-            if (outputPtr != inputPtr)
-                handlesToInherit[handleCount++] = outputPtr;
-            if (errorPtr != inputPtr && errorPtr != outputPtr)
-                handlesToInherit[handleCount++] = errorPtr;
-
-            // Create a job object for the process group (required for detached processes)
-            processGroupJobHandle = Interop.Kernel32.CreateJobObjectW(IntPtr.Zero, IntPtr.Zero);
-            if (processGroupJobHandle == IntPtr.Zero)
-            {
-                throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to create job object for process group: the system may have reached its job object limit or insufficient permissions");
-            }
-
-            int attributeCount = 1; // Always need handle list
-            if (options.KillOnParentExit)
-                attributeCount++; // Required for PROC_THREAD_ATTRIBUTE_JOB_LIST
-
-            IntPtr size = IntPtr.Zero;
-            Interop.Kernel32.LPPROC_THREAD_ATTRIBUTE_LIST emptyList = default;
-
-            Interop.Kernel32.InitializeProcThreadAttributeList(emptyList, attributeCount, 0, ref size);
-
-            attributeListBuffer = Marshal.AllocHGlobal(size);
-            attributeList.AttributeList = attributeListBuffer;
-
-            if (!Interop.Kernel32.InitializeProcThreadAttributeList(attributeList, attributeCount, 0, ref size))
-            {
-                throw new Win32Exception();
-            }
-
-            if (!Interop.Kernel32.UpdateProcThreadAttribute(
-                attributeList,
-                0,
-                (IntPtr)Interop.Kernel32.PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
-                handlesToInherit,
-                (IntPtr)(handleCount * sizeof(IntPtr)),
-                null,
-                IntPtr.Zero))
-            {
-                throw new Win32Exception();
-            }
-
-            if (options.KillOnParentExit)
-            {
-                IntPtr* pJobHandle = stackalloc IntPtr[2];
-                int jobsCount = 0;
-
-                pJobHandle[jobsCount++] = s_killOnParentExitJob.Value;
-                pJobHandle[jobsCount++] = processGroupJobHandle;
-
-                if (!Interop.Kernel32.UpdateProcThreadAttribute(
-                    attributeList,
-                    0,
-                    Interop.Kernel32.PROC_THREAD_ATTRIBUTE_JOB_LIST,
-                    pJobHandle,
-                    jobsCount * sizeof(IntPtr),
-                    null,
-                    IntPtr.Zero))
-                {
-                    throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to add job list to proc thread attributes");
-                }
-            }
-            else
-            {
-                IntPtr* pJobHandle = stackalloc IntPtr[1];
-                pJobHandle[0] = processGroupJobHandle;
-
-                if (!Interop.Kernel32.UpdateProcThreadAttribute(
-                    attributeList,
-                    0,
-                    Interop.Kernel32.PROC_THREAD_ATTRIBUTE_JOB_LIST,
-                    pJobHandle,
-                    sizeof(IntPtr),
-                    null,
-                    IntPtr.Zero))
-                {
-                    throw new Win32Exception(Marshal.GetLastPInvokeError(), "Failed to add job list to proc thread attributes");
-                }
-            }
-
-            startupInfoEx.lpAttributeList = attributeList;
-            startupInfoEx.StartupInfo.cb = sizeof(Interop.Kernel32.STARTUPINFOEX);
-            startupInfoEx.StartupInfo.hStdInput = inputPtr;
-            startupInfoEx.StartupInfo.hStdOutput = outputPtr;
-            startupInfoEx.StartupInfo.hStdError = errorPtr;
-            startupInfoEx.StartupInfo.dwFlags = Interop.Advapi32.StartupInfoOptions.STARTF_USESTDHANDLES;
-
-            int creationFlags = Interop.Kernel32.EXTENDED_STARTUPINFO_PRESENT
-                | Interop.Advapi32.StartupInfoOptions.DETACHED_PROCESS
-                | Interop.Advapi32.StartupInfoOptions.CREATE_NEW_PROCESS_GROUP;
-            if (options.CreateNoWindow) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NO_WINDOW;
-
-            string? environmentBlock = null;
-            if (options.HasEnvironmentBeenAccessed)
-            {
-                creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_UNICODE_ENVIRONMENT;
-                environmentBlock = ProcessUtils.GetEnvironmentVariablesBlock(options.Environment);
-            }
-
-            string? workingDirectory = options.WorkingDirectory;
-            int errorCode = 0;
-
-            fixed (char* environmentBlockPtr = environmentBlock)
-            fixed (char* applicationNamePtr = &applicationName.GetPinnableReference())
-            fixed (char* commandLinePtr = &commandLine.GetPinnableReference())
-            {
-                bool retVal = Interop.Kernel32.CreateProcess(
-                    applicationNamePtr,
-                    commandLinePtr,
-                    ref unused_SecAttrs,
-                    ref unused_SecAttrs,
-                    true,
-                    creationFlags,
-                    environmentBlockPtr,
-                    workingDirectory,
-                    ref startupInfoEx,
-                    ref processInfo
-                );
-                if (!retVal)
-                    errorCode = Marshal.GetLastPInvokeError();
-            }
-
-            if (processInfo.hProcess != IntPtr.Zero && processInfo.hProcess != new IntPtr(-1))
-            {
-                procSH = new(processInfo.hProcess, IntPtr.Zero, processGroupJobHandle, processInfo.dwProcessId);
-                if (processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
-                    Interop.Kernel32.CloseHandle(processInfo.hThread);
-            }
-            else if (processInfo.hThread != IntPtr.Zero && processInfo.hThread != new IntPtr(-1))
-            {
-                Interop.Kernel32.CloseHandle(processInfo.hThread);
-            }
-
-            if (procSH == null)
-            {
-                throw new Win32Exception(errorCode, "Failed to create process.");
-            }
-        }
-        catch
-        {
-            procSH?.Dispose();
-            
-            if (processGroupJobHandle != IntPtr.Zero)
-            {
-                Interop.Kernel32.CloseHandle(processGroupJobHandle);
-            }
-            
-            throw;
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(heapHandlesPtr);
-            
-            if (attributeListBuffer != IntPtr.Zero)
-            {
-                Interop.Kernel32.DeleteProcThreadAttributeList(attributeList);
-                Marshal.FreeHGlobal(attributeListBuffer);
-            }
-            Interop.Kernel32.CloseHandle(currentProcHandle);
-        }
-
-        return procSH;
-
-        static SafeFileHandle Duplicate(SafeFileHandle sourceHandle, nint currentProcHandle)
-        {
-            if (!Interop.Kernel32.DuplicateHandle(
-                currentProcHandle,
-                sourceHandle,
-                currentProcHandle,
-                out SafeFileHandle duplicated,
-                0,
-                true,
-                Interop.Kernel32.HandleOptions.DUPLICATE_SAME_ACCESS))
-            {
-                throw new Win32Exception();
-            }
-
-            return duplicated;
-        }
-    }
-
-    private static unsafe SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle, bool createSuspended)
+    private static unsafe SafeChildProcessHandle StartCore(ProcessStartOptions options, SafeFileHandle inputHandle, SafeFileHandle outputHandle, SafeFileHandle errorHandle, bool createSuspended, bool detached)
     {
         ValueStringBuilder applicationName = new(stackalloc char[256]);
         ValueStringBuilder commandLine = new(stackalloc char[256]);
@@ -362,7 +135,8 @@ public partial class SafeChildProcessHandle
                 : Duplicate(errorHandle, currentProcHandle));
 
         // Calculate total handle count: stdio handles (max 3) + user-provided inherited handles
-        int maxHandleCount = 3 + (options.HasInheritedHandlesBeenAccessed ? options.InheritedHandles.Count : 0);
+        // For detached processes, we don't inherit any user handles
+        int maxHandleCount = 3 + (detached ? 0 : (options.HasInheritedHandlesBeenAccessed ? options.InheritedHandles.Count : 0));
         
         // Allocate handles array on heap (simpler for .NET Framework compatibility)
         IntPtr heapHandlesPtr = Marshal.AllocHGlobal(maxHandleCount * sizeof(IntPtr));
@@ -377,11 +151,24 @@ public partial class SafeChildProcessHandle
             IntPtr outputPtr = duplicatedOutput.DangerousGetHandle();
             IntPtr errorPtr = duplicatedError.DangerousGetHandle();
 
-            PrepareHandleAllowList(options, handlesToInherit, ref handleCount, inputPtr, outputPtr, errorPtr);
+            // For detached processes, add stdio handles directly
+            // For normal processes, use PrepareHandleAllowList which also adds user handles
+            if (detached)
+            {
+                handlesToInherit[handleCount++] = inputPtr;
+                if (outputPtr != inputPtr)
+                    handlesToInherit[handleCount++] = outputPtr;
+                if (errorPtr != inputPtr && errorPtr != outputPtr)
+                    handlesToInherit[handleCount++] = errorPtr;
+            }
+            else
+            {
+                PrepareHandleAllowList(options, handlesToInherit, ref handleCount, inputPtr, outputPtr, errorPtr);
+            }
 
-            // Create a job object if CreateNewProcessGroup is requested
+            // Create a job object if CreateNewProcessGroup is requested or if detached
             // This must happen before starting the process to ensure atomicity
-            if (options.CreateNewProcessGroup)
+            if (options.CreateNewProcessGroup || detached)
             {
                 processGroupJobHandle = Interop.Kernel32.CreateJobObjectW(IntPtr.Zero, IntPtr.Zero);
                 if (processGroupJobHandle == IntPtr.Zero)
@@ -392,7 +179,7 @@ public partial class SafeChildProcessHandle
 
             // Determine number of attributes we need
             int attributeCount = 1; // Always need handle list
-            if (options.KillOnParentExit || options.CreateNewProcessGroup)
+            if (options.KillOnParentExit || options.CreateNewProcessGroup || detached)
                 attributeCount++; // Required for PROC_THREAD_ATTRIBUTE_JOB_LIST
 
             // Initialize the attribute list
@@ -424,7 +211,7 @@ public partial class SafeChildProcessHandle
                 throw new Win32Exception();
             }
 
-            if (options.KillOnParentExit || options.CreateNewProcessGroup)
+            if (options.KillOnParentExit || options.CreateNewProcessGroup || detached)
             {
                 IntPtr* pJobHandle = stackalloc IntPtr[2];
                 int jobsCount = 0;
@@ -432,7 +219,7 @@ public partial class SafeChildProcessHandle
                 // The parent job must be added first!
                 if (options.KillOnParentExit)
                     pJobHandle[jobsCount++] = s_killOnParentExitJob.Value;
-                if (options.CreateNewProcessGroup)
+                if (options.CreateNewProcessGroup || detached)
                     pJobHandle[jobsCount++] = processGroupJobHandle;
 
                 if (!Interop.Kernel32.UpdateProcThreadAttribute(
@@ -458,7 +245,8 @@ public partial class SafeChildProcessHandle
             int creationFlags = Interop.Kernel32.EXTENDED_STARTUPINFO_PRESENT;
             if (options.CreateNoWindow) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NO_WINDOW;
             if (createSuspended) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_SUSPENDED;
-            if (options.CreateNewProcessGroup) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NEW_PROCESS_GROUP;
+            if (options.CreateNewProcessGroup || detached) creationFlags |= Interop.Advapi32.StartupInfoOptions.CREATE_NEW_PROCESS_GROUP;
+            if (detached) creationFlags |= Interop.Advapi32.StartupInfoOptions.DETACHED_PROCESS;
 
             string? environmentBlock = null;
             if (options.HasEnvironmentBeenAccessed)
