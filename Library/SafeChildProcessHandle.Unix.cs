@@ -365,6 +365,6 @@ public partial class SafeChildProcessHandle
             throw new Win32Exception(errno, $"Failed to open process {processId} (errno={errno})");
         }
 
-        return new SafeChildProcessHandle(pidfd, processId, ownsHandle: true);
+        return new SafeChildProcessHandle(pidfd, processId);
     }
 }
