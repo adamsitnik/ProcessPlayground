@@ -23,15 +23,18 @@ public static partial class FileExtensions
             bool ret = Interop.Kernel32.CreatePipe(out read, out write, ref securityAttributes, 0);
             if (!ret || read.IsInvalid || write.IsInvalid)
             {
-                throw new Win32Exception(Marshal.GetLastPInvokeError());
+                throw new Win32Exception();
             }
             return;
         }
 
-        // When one or both ends are async, use named pipes to support async I/O
+        // When one or both ends are async, use named pipes to support async I/O.
         string pipeName = $@"\\.\pipe\{Guid.NewGuid()}";
-        // TODO: think about security attributes
-        // Example: current-user: https://github.com/dotnet/runtime/blob/ed58e5fd2d5bce794c1d5acafa9f268151fefd47/src/libraries/System.IO.Pipes/src/System/IO/Pipes/NamedPipeServerStream.Windows.cs#L102-L123
+
+        // Security: we don't need to specify a security descriptor, because
+        // we allow only for 1 instance of the pipe and immediately open the write end,
+        // so there is no time window for another process to open the pipe with different permissions.
+        // Even if that happens, we are going to fail to open the write end and throw an exception, so there is no security risk.
 
         // Determine the open mode for the read end
         int openMode = Interop.Kernel32.FileOperations.PIPE_ACCESS_INBOUND |
@@ -46,12 +49,12 @@ public static partial class FileExtensions
                        Interop.Kernel32.FileOperations.PIPE_READMODE_BYTE | // Data is read from the pipe as a stream of bytes
                        Interop.Kernel32.FileOperations.PIPE_WAIT; // Blocking mode is enabled (the operations are not completed until there is data to read)
 
-        // TODO: handle pipe name collisions (very unlikely)
+        // We could consider specyfing a larger buffer size.
         read = Interop.Kernel32.CreateNamedPipe(pipeName, openMode, pipeMode, 1, 0, 0, 0, ref securityAttributes);
 
         if (read.IsInvalid)
         {
-            throw new Win32Exception(Marshal.GetLastPInvokeError());
+            throw new Win32Exception();
         }
 
         try
