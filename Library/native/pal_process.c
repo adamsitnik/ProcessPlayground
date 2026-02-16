@@ -139,7 +139,6 @@ int create_kqueue_cloexec(void) {
 // Returns 0 on success, -1 on error (errno is set)
 // If out_pid is not NULL, the PID of the child process is stored there
 // If out_pidfd is not NULL, the pidfd of the child process is stored there (Linux only, -1 on other platforms)
-// If out_exit_pipe_fd is not NULL, the read end of exit monitoring pipe is stored there
 // If kill_on_parent_death is non-zero, the child process will be killed when the parent dies
 //   Note: On macOS with posix_spawn, kill_on_parent_death is not supported and will be ignored
 // If create_suspended is non-zero, the child process will be created in a suspended state (stopped)
@@ -156,7 +155,6 @@ int spawn_process(
     const char* working_dir,
     int* out_pid,
     int* out_pidfd,
-    int* out_exit_pipe_fd,
     int kill_on_parent_death,
     int create_suspended,
     int create_new_process_group,
@@ -183,23 +181,14 @@ int spawn_process(
     }
 #endif
     
-    int exit_pipe[2];
     pid_t child_pid;
     posix_spawn_file_actions_t file_actions;
     posix_spawnattr_t attr;
     int result;
     
-    // Create pipe for exit monitoring (CLOEXEC to avoid other parallel processes inheriting it)
-    if (create_cloexec_pipe(exit_pipe) != 0) {
-        return -1;
-    }
-    
     // Initialize posix_spawn attributes
     if ((result = posix_spawnattr_init(&attr)) != 0) {
-        int saved_errno = result;
-        close(exit_pipe[0]);
-        close(exit_pipe[1]);
-        errno = saved_errno;
+        errno = result;
         return -1;
     }
     
@@ -223,8 +212,6 @@ int spawn_process(
     if ((result = posix_spawnattr_setflags(&attr, flags)) != 0) {
         int saved_errno = result;
         posix_spawnattr_destroy(&attr);
-        close(exit_pipe[0]);
-        close(exit_pipe[1]);
         errno = saved_errno;
         return -1;
     }
@@ -236,8 +223,6 @@ int spawn_process(
         if ((result = posix_spawnattr_setpgroup(&attr, 0)) != 0) {
             int saved_errno = result;
             posix_spawnattr_destroy(&attr);
-            close(exit_pipe[0]);
-            close(exit_pipe[1]);
             errno = saved_errno;
             return -1;
         }
@@ -249,8 +234,6 @@ int spawn_process(
     if ((result = posix_spawnattr_setsigdefault(&attr, &all_signals)) != 0) {
         int saved_errno = result;
         posix_spawnattr_destroy(&attr);
-        close(exit_pipe[0]);
-        close(exit_pipe[1]);
         errno = saved_errno;
         return -1;
     }
@@ -259,8 +242,6 @@ int spawn_process(
     if ((result = posix_spawn_file_actions_init(&file_actions)) != 0) {
         int saved_errno = result;
         posix_spawnattr_destroy(&attr);
-        close(exit_pipe[0]);
-        close(exit_pipe[1]);
         errno = saved_errno;
         return -1;
     }
@@ -273,41 +254,21 @@ int spawn_process(
         int saved_errno = result;
         posix_spawn_file_actions_destroy(&file_actions);
         posix_spawnattr_destroy(&attr);
-        close(exit_pipe[0]);
-        close(exit_pipe[1]);
         errno = saved_errno;
         return -1;
     }
 
-    // Set up exit pipe write end as fd 3 in the child process
-    // We use fd 3 for the exit pipe as it's typically unused by standard streams (0-2).
-    // With POSIX_SPAWN_CLOEXEC_DEFAULT, all fds except 0,1,2 are automatically closed,
-    // so we must explicitly mark fd 3 as inheritable using addinherit_np.
-    if ((result = posix_spawn_file_actions_adddup2(&file_actions, exit_pipe[1], 3)) != 0
-        || (result = posix_spawn_file_actions_addinherit_np(&file_actions, 3)) != 0)
-    {
-        int saved_errno = result;
-        posix_spawn_file_actions_destroy(&file_actions);
-        posix_spawnattr_destroy(&attr);
-        close(exit_pipe[0]);
-        close(exit_pipe[1]);
-        errno = saved_errno;
-        return -1;
-    }
-    
     // Add user-provided inherited handles using posix_spawn_file_actions_addinherit_np
     // This ensures they are not closed by POSIX_SPAWN_CLOEXEC_DEFAULT
     if (inherited_handles != NULL && inherited_handles_count > 0) {
         for (int i = 0; i < inherited_handles_count; i++) {
             int fd = inherited_handles[i];
-            // Skip stdio fds and exit pipe fd as they're already handled
-            if (fd != 0 && fd != 1 && fd != 2 && fd != 3) {
+            // Skip stdio fds as they're already handled
+            if (fd != 0 && fd != 1 && fd != 2) {
                 if ((result = posix_spawn_file_actions_addinherit_np(&file_actions, fd)) != 0) {
                     int saved_errno = result;
                     posix_spawn_file_actions_destroy(&file_actions);
                     posix_spawnattr_destroy(&attr);
-                    close(exit_pipe[0]);
-                    close(exit_pipe[1]);
                     errno = saved_errno;
                     return -1;
                 }
@@ -322,8 +283,6 @@ int spawn_process(
             int saved_errno = result;
             posix_spawn_file_actions_destroy(&file_actions);
             posix_spawnattr_destroy(&attr);
-            close(exit_pipe[0]);
-            close(exit_pipe[1]);
             errno = saved_errno;
             return -1;
         }
@@ -332,8 +291,6 @@ int spawn_process(
         // as we cannot fulfill the working directory requirement
         posix_spawn_file_actions_destroy(&file_actions);
         posix_spawnattr_destroy(&attr);
-        close(exit_pipe[0]);
-        close(exit_pipe[1]);
         errno = ENOTSUP;
         return -1;
 #endif
@@ -348,12 +305,8 @@ int spawn_process(
     posix_spawn_file_actions_destroy(&file_actions);
     posix_spawnattr_destroy(&attr);
     
-    // Close write end of exit pipe (child owns it)
-    close(exit_pipe[1]);
-    
     if (result != 0) {
         // Spawn failed
-        close(exit_pipe[0]);
         errno = result;
         return -1;
     }
@@ -362,15 +315,12 @@ int spawn_process(
     // macOS does not provide a mechanism to automatically kill a child process when the parent dies
     (void)kill_on_parent_death;
     
-    // Success - return PID and exit pipe fd if requested
+    // Success - return PID if requested
     if (out_pid != NULL) {
         *out_pid = child_pid;
     }
     if (out_pidfd != NULL) {
         *out_pidfd = -1;  // pidfd not supported on macOS
-    }
-    if (out_exit_pipe_fd != NULL) {
-        *out_exit_pipe_fd = exit_pipe[0];
     }
     return 0;
 #else
@@ -385,21 +335,11 @@ int spawn_process(
 #endif
     
     int wait_pipe[2];
-    int exit_pipe[2];
     int pidfd = -1;
     sigset_t all_signals, old_signals;
     
     // Create pipe for exec synchronization (CLOEXEC so child doesn't inherit it)
     if (create_cloexec_pipe(wait_pipe) != 0) {
-        return -1;
-    }
-    
-    // Create pipe for exit monitoring (CLOEXEC to avoid other parallel processes inheriting it)
-    if (create_cloexec_pipe(exit_pipe) != 0) {
-        int saved_errno = errno;
-        close(wait_pipe[0]);
-        close(wait_pipe[1]);
-        errno = saved_errno;
         return -1;
     }
     
@@ -426,8 +366,6 @@ int spawn_process(
         pthread_sigmask(SIG_SETMASK, &old_signals, NULL);
         close(wait_pipe[0]);
         close(wait_pipe[1]);
-        close(exit_pipe[0]);
-        close(exit_pipe[1]);
         errno = saved_errno;
         return -1;
     }
@@ -446,8 +384,6 @@ int spawn_process(
         pthread_sigmask(SIG_SETMASK, &old_signals, NULL);
         close(wait_pipe[0]);
         close(wait_pipe[1]);
-        close(exit_pipe[0]);
-        close(exit_pipe[1]);
         errno = saved_errno;
         return -1;
     }
@@ -527,14 +463,6 @@ int spawn_process(
         // Close read end of wait pipe (we only write)
         close(wait_pipe[0]);
         
-        // Duplicate exit pipe write end to fd 3 (so it survives execve)
-        // We use fd 3 as it's typically unused by standard streams
-        if (dup2(exit_pipe[1], 3) == -1) {
-            write_errno_and_exit(wait_pipe[1], errno);
-        }
-        close(exit_pipe[0]);
-        close(exit_pipe[1]);
-        
         // Redirect stdin/stdout/stderr
         if (stdin_fd != 0) {
             if (dup2(stdin_fd, 0) == -1) {
@@ -555,13 +483,13 @@ int spawn_process(
         }
         
 #ifdef HAVE_CLOSE_RANGE
-        // On systems with close_range (Linux and FreeBSD), use it to mark all FDs from 4 onwards as CLOEXEC
+        // On systems with close_range (Linux and FreeBSD), use it to mark all FDs from 3 onwards as CLOEXEC
         // This prevents the child from inheriting unwanted file descriptors
-        // FDs 0-2 are stdin/stdout/stderr, fd 3 is our exit pipe
+        // FDs 0-2 are stdin/stdout/stderr
         // We use CLOSE_RANGE_CLOEXEC to set the flag without closing the FDs
         // This must be called AFTER the dup2 calls above, so that if stdin_fd/stdout_fd/stderr_fd
-        // are >= 4, they don't get CLOEXEC set before being duplicated to 0/1/2
-        syscall(__NR_close_range, 4, ~0U, CLOSE_RANGE_CLOEXEC);
+        // are >= 3, they don't get CLOEXEC set before being duplicated to 0/1/2
+        syscall(__NR_close_range, 3, ~0U, CLOSE_RANGE_CLOEXEC);
         // Ignore errors - if close_range is not supported, we continue anyway
         
         // Remove CLOEXEC flag from user-provided inherited handles
@@ -569,9 +497,9 @@ int spawn_process(
         if (inherited_handles != NULL && inherited_handles_count > 0) {
             for (int i = 0; i < inherited_handles_count; i++) {
                 int fd = inherited_handles[i];
-                // Skip stdio fds and exit pipe fd as they're already handled
-                // Also skip fds < 4 as they weren't affected by close_range
-                if (fd >= 4) {
+                // Skip stdio fds as they're already handled
+                // Also skip fds < 3 as they weren't affected by close_range
+                if (fd >= 3) {
                     int flags = fcntl(fd, F_GETFD);
                     if (flags != -1) {
                         fcntl(fd, F_SETFD, flags & ~FD_CLOEXEC);
@@ -628,16 +556,13 @@ int spawn_process(
     // Close write end of wait pipe
     close(wait_pipe[1]);
     
-    // Close write end of exit pipe (child owns it)
-    close(exit_pipe[1]);
-    
     // Wait for child to exec or fail
     int child_errno = 0;
     ssize_t bytes_read = read(wait_pipe[0], &child_errno, sizeof(child_errno));
     close(wait_pipe[0]);
     
     if (bytes_read == sizeof(child_errno)) {
-        // Child failed to exec - reap it and close exit pipe
+        // Child failed to exec - reap it
 #ifdef HAVE_CLONE3
         siginfo_t info;
         waitid(P_PIDFD, pidfd, &info, WEXITED);
@@ -646,7 +571,6 @@ int spawn_process(
         int status;
         waitpid(child_pid, &status, 0);
 #endif
-        close(exit_pipe[0]);
         errno = child_errno;
         return -1;
     }
@@ -666,7 +590,6 @@ int spawn_process(
 #ifdef HAVE_CLONE3
             close(pidfd);
 #endif
-            close(exit_pipe[0]);
             errno = saved_errno;
             return -1;
         }
@@ -677,22 +600,18 @@ int spawn_process(
 #ifdef HAVE_CLONE3
             close(pidfd);
 #endif
-            close(exit_pipe[0]);
             errno = ECHILD;  // Use ECHILD to indicate child state error
             return -1;
         }
         // Child is now stopped and waiting for SIGCONT
     }
     
-    // Success - return PID, pidfd, and exit pipe fd if requested
+    // Success - return PID and pidfd if requested
     if (out_pid != NULL) {
         *out_pid = child_pid;
     }
     if (out_pidfd != NULL) {
         *out_pidfd = pidfd;
-    }
-    if (out_exit_pipe_fd != NULL) {
-        *out_exit_pipe_fd = exit_pipe[0];
     }
     return 0;
 #endif
@@ -843,7 +762,7 @@ int wait_for_exit_and_reap(int pidfd, int pid, int* out_exitCode, int* out_signa
 
 // Try to wait for exit with cancellation support
 // Returns -1 on error, 1 on cancellation (data in cancelPipeFd), or 0 if process exited.
-int try_wait_for_exit_cancellable(int pidfd, int pid, int exitPipeFd, int cancelPipeFd, int* out_exitCode, int* out_signal) {
+int try_wait_for_exit_cancellable(int pidfd, int pid, int cancelPipeFd, int* out_exitCode, int* out_signal) {
     int ret;
 #if defined(HAVE_KQUEUE) || defined(HAVE_KQUEUEX)
     // macOS and FreeBSD have kqueue which can monitor process exit
@@ -890,16 +809,12 @@ int try_wait_for_exit_cancellable(int pidfd, int pid, int exitPipeFd, int cancel
         // Cancellation requested
         return 1;
     }
-#else
+#elif defined(HAVE_PIDFD)
+    // Linux with pidfd support
     struct pollfd pfds[2] = { 0 };
     
-#ifdef HAVE_PIDFD
     // Wait on the process descriptor with poll
     pfds[0].fd = pidfd;
-#else
-    // Wait for the child to finish by monitoring exit pipe for EOF
-    pfds[0].fd = exitPipeFd;
-#endif
     // To poll a process descriptor, Linux needs POLLIN and FreeBSD needs POLLHUP.
     // There are no side-effects to use both
     pfds[0].events = POLLHUP | POLLIN;
@@ -920,6 +835,10 @@ int try_wait_for_exit_cancellable(int pidfd, int pid, int exitPipeFd, int cancel
         // Cancellation requested (data available in cancelPipeFd)
         return 1;
     }
+#else
+    // No kqueue or pidfd support
+    errno = ENOTSUP;
+    return -1;
 #endif
 
     // Process exited - collect exit status
@@ -928,7 +847,7 @@ int try_wait_for_exit_cancellable(int pidfd, int pid, int exitPipeFd, int cancel
 
 // Try to wait for exit with timeout, but don't kill the process if timeout occurs
 // Returns -1 on error, 1 on timeout, or 0 if process exited.
-int try_wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_exitCode, int* out_signal) {
+int try_wait_for_exit(int pidfd, int pid, int timeout_ms, int* out_exitCode, int* out_signal) {
     int ret;
 #if defined(HAVE_KQUEUE) || defined(HAVE_KQUEUEX)
     // macOS and FreeBSD have kqueue which can monitor process exit
@@ -965,15 +884,11 @@ int try_wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* o
     }
 
     close(queue);
-#else
+#elif defined(HAVE_PIDFD)
+    // Linux with pidfd support
     struct pollfd pfd = { 0 };
-#ifdef HAVE_PIDFD
-    //  Wait on the process descriptor with poll
+    // Wait on the process descriptor with poll
     pfd.fd = pidfd;
-#else
-    // Wait for the child to finish with a timeout by monitoring exit pipe for EOF.
-    pfd.fd = exitPipeFd;
-#endif
     // To poll a process descriptor, Linux needs POLLIN and FreeBSD needs POLLHUP.
     // There are no side-effects to use both
     pfd.events = POLLHUP | POLLIN;
@@ -983,6 +898,10 @@ int try_wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* o
     if (ret == -1) { // Error
         return -1;
     }
+#else
+    // No kqueue or pidfd support
+    errno = ENOTSUP;
+    return -1;
 #endif
 
     if (ret == 0) {
@@ -995,8 +914,8 @@ int try_wait_for_exit(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* o
 
 
 // -1 is a valid exit code, so to distinguish between a normal exit code and an error, we return 0 on success and -1 on error
-int wait_for_exit_or_kill_on_timeout(int pidfd, int pid, int exitPipeFd, int timeout_ms, int* out_exitCode, int* out_signal, int* out_timeout) {
-    int ret = try_wait_for_exit(pidfd, pid, exitPipeFd, timeout_ms, out_exitCode, out_signal);
+int wait_for_exit_or_kill_on_timeout(int pidfd, int pid, int timeout_ms, int* out_exitCode, int* out_signal, int* out_timeout) {
+    int ret = try_wait_for_exit(pidfd, pid, timeout_ms, out_exitCode, out_signal);
     if (ret != 1) {
         return ret; // Either process exited (0) or error occurred (-1)
     }

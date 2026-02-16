@@ -20,26 +20,15 @@ namespace Microsoft.Win32.SafeHandles;
 public partial class SafeChildProcessHandle
 {
     internal const int NoPidFd = -1;
-    // Buffer for reading from exit pipe (reused to avoid allocations)
-    private static readonly byte[] s_exitPipeBuffer = new byte[1];
 
-    private readonly int _exitPipeFd;
-
-    private SafeChildProcessHandle(int pidfd, int pid, int exitPipeFd)
+    private SafeChildProcessHandle(int pidfd, int pid)
         : this(existingHandle: (IntPtr)pidfd, ownsHandle: true)
     {
         ProcessId = pid;
-        _exitPipeFd = exitPipeFd;
     }
 
     protected override bool ReleaseHandle()
     {
-        // Close the exit pipe fd if it's valid
-        if (_exitPipeFd > 0)
-        {
-            close(_exitPipeFd);
-        }
-
         return (int)this.handle switch
         {
             NoPidFd => true,
@@ -116,7 +105,6 @@ public partial class SafeChildProcessHandle
                 workingDirPtr,
                 out int pid,
                 out int pidfd,
-                out int exitPipeFd,
                 options.KillOnParentExit ? 1 : 0,
                 createSuspended ? 1 : 0,
                 options.CreateNewProcessGroup ? 1 : 0,
@@ -130,7 +118,7 @@ public partial class SafeChildProcessHandle
                 throw new Win32Exception(errorCode, "Failed to spawn process");
             }
 
-            return new SafeChildProcessHandle(pidfd, pid, exitPipeFd);
+            return new SafeChildProcessHandle(pidfd, pid);
         }
         finally
         {
@@ -171,7 +159,7 @@ public partial class SafeChildProcessHandle
 
     private bool TryWaitForExitCore(int milliseconds, [NotNullWhen(true)] out ProcessExitStatus? exitStatus)
     {
-        switch (try_wait_for_exit(this, ProcessId, _exitPipeFd, milliseconds, out int exitCode, out int rawSignal, out int hasTimedout))
+        switch (try_wait_for_exit(this, ProcessId, milliseconds, out int exitCode, out int rawSignal, out int hasTimedout))
         {
             case -1:
                 int errno = Marshal.GetLastPInvokeError();
@@ -187,7 +175,7 @@ public partial class SafeChildProcessHandle
 
     private ProcessExitStatus WaitForExitOrKillOnTimeoutCore(int milliseconds)
     {
-        switch (wait_for_exit_or_kill_on_timeout(this, ProcessId, _exitPipeFd, milliseconds, out int exitCode, out int rawSignal, out int hasTimedout))
+        switch (wait_for_exit_or_kill_on_timeout(this, ProcessId, milliseconds, out int exitCode, out int rawSignal, out int hasTimedout))
         {
             case -1:
                 int errno = Marshal.GetLastPInvokeError();
@@ -217,7 +205,7 @@ public partial class SafeChildProcessHandle
 
             return await Task.Run(() =>
             {
-                switch (try_wait_for_exit_cancellable(this, ProcessId, _exitPipeFd, (int)readHandle.DangerousGetHandle(), out int exitCode, out int rawSignal))
+                switch (try_wait_for_exit_cancellable(this, ProcessId, (int)readHandle.DangerousGetHandle(), out int exitCode, out int rawSignal))
                 {
                     case -1:
                         int errno = Marshal.GetLastPInvokeError();
@@ -250,7 +238,7 @@ public partial class SafeChildProcessHandle
 
             return await Task.Run(() =>
             {
-                switch (try_wait_for_exit_cancellable(this, ProcessId, _exitPipeFd, (int)readHandle.DangerousGetHandle(), out int exitCode, out int rawSignal))
+                switch (try_wait_for_exit_cancellable(this, ProcessId, (int)readHandle.DangerousGetHandle(), out int exitCode, out int rawSignal))
                 {
                     case -1:
                         int errno = Marshal.GetLastPInvokeError();
@@ -339,7 +327,6 @@ public partial class SafeChildProcessHandle
         byte* working_dir,
         out int pid,
         out int pidfd,
-        out int exit_pipe_fd,
         int kill_on_parent_death,
         int create_suspended,
         int create_new_process_group,
@@ -354,13 +341,13 @@ public partial class SafeChildProcessHandle
     private static partial int wait_for_exit_and_reap(SafeChildProcessHandle pidfd, int pid, out int exitCode, out int signal);
 
     [LibraryImport("pal_process", SetLastError = true)]
-    private static partial int try_wait_for_exit(SafeChildProcessHandle pidfd, int pid, int exitPipeFd, int timeout_ms, out int exitCode, out int signal, out int hasTimedout);
+    private static partial int try_wait_for_exit(SafeChildProcessHandle pidfd, int pid, int timeout_ms, out int exitCode, out int signal, out int hasTimedout);
 
     [LibraryImport("pal_process", SetLastError = true)]
-    private static partial int try_wait_for_exit_cancellable(SafeChildProcessHandle pidfd, int pid, int exitPipeFd, int cancelPipeFd, out int exitCode, out int signal);
+    private static partial int try_wait_for_exit_cancellable(SafeChildProcessHandle pidfd, int pid, int cancelPipeFd, out int exitCode, out int signal);
 
     [LibraryImport("pal_process", SetLastError = true)]
-    private static partial int wait_for_exit_or_kill_on_timeout(SafeChildProcessHandle pidfd, int pid, int exitPipeFd, int timeout_ms, out int exitCode, out int signal, out int hasTimedout);
+    private static partial int wait_for_exit_or_kill_on_timeout(SafeChildProcessHandle pidfd, int pid, int timeout_ms, out int exitCode, out int signal, out int hasTimedout);
 
     [LibraryImport("pal_process", SetLastError = true)]
     private static partial int try_get_exit_code(SafeChildProcessHandle pidfd, int pid, out int exitCode, out int signal);
@@ -378,8 +365,6 @@ public partial class SafeChildProcessHandle
             throw new Win32Exception(errno, $"Failed to open process {processId} (errno={errno})");
         }
 
-        // Create a SafeChildProcessHandle with the pidfd (or -1 if not available)
-        // and the process ID. No exit pipe is available, so we use public ctor.
         return new SafeChildProcessHandle(pidfd, processId, ownsHandle: true);
     }
 }
