@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.TBA;
@@ -141,4 +142,35 @@ public class CreateSuspendedTests
         Assert.False(exitStatus.Canceled);
         Assert.Null(exitStatus.Signal);
     }
+
+#if !WINDOWS
+    [Fact]
+    public static void StartSuspended_Unix_CanSetProcessPriority()
+    {
+        ProcessStartOptions options = new("echo") { Arguments = { "test" } };
+
+        using SafeChildProcessHandle processHandle = SafeChildProcessHandle.StartSuspended(options, input: null, output: null, error: null);
+
+        int pid = processHandle.ProcessId;
+
+        Marshal.SetLastSystemError(0);
+        int currentPriority = getpriority(PRIO_PROCESS, (uint)pid);
+        Assert.Equal(0, Marshal.GetLastSystemError());
+
+        int result = setpriority(PRIO_PROCESS, (uint)pid, currentPriority + 1);
+        Assert.Equal(0, result);
+
+        processHandle.Resume();
+
+        EnsureProcessCompletedSuccessfully(processHandle, TimeSpan.FromSeconds(1));
+    }
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int getpriority(int which, uint who);
+
+    [DllImport("libc", SetLastError = true)]
+    private static extern int setpriority(int which, uint who, int prio);
+
+    private const int PRIO_PROCESS = 0;
+#endif
 }
