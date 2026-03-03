@@ -14,13 +14,20 @@ public class KillTree
     [IterationSetup(Target = nameof(Process_Kill_EntireProcessTree))]
     public void Setup_Process()
     {
-        ProcessStartInfo startInfo = new()
-        {
-            FileName = "powershell",
-            Arguments = "-Command \"Start-Process timeout -ArgumentList '/t','30','/nobreak' -NoNewWindow; Start-Process timeout -ArgumentList '/t','30','/nobreak' -NoNewWindow; Start-Process timeout -ArgumentList '/t','30','/nobreak' -NoNewWindow; timeout /t 30 /nobreak\"",
-            UseShellExecute = false,
-            RedirectStandardInput = true
-        };
+        ProcessStartInfo startInfo = OperatingSystem.IsWindows()
+            ? new()
+            {
+                FileName = "powershell",
+                Arguments = "-Command \"Start-Process timeout -ArgumentList '/t','30','/nobreak' -NoNewWindow; Start-Process timeout -ArgumentList '/t','30','/nobreak' -NoNewWindow; Start-Process timeout -ArgumentList '/t','30','/nobreak' -NoNewWindow; timeout /t 30 /nobreak\"",
+                UseShellExecute = false,
+                RedirectStandardInput = true
+            }
+            : new()
+            {
+                FileName = "sh",
+                Arguments = "-c \"sleep 30 & sleep 30 & sleep 30 & sleep 30 & wait\"",
+                UseShellExecute = false
+            };
 
         _process = Process.Start(startInfo);
     }
@@ -35,13 +42,18 @@ public class KillTree
     [IterationSetup(Target = nameof(SafeProcessHandle_KillProcessGroup))]
     public void Setup_Sfh()
     {
-        ProcessStartOptions options = new("powershell")
-        {
-            Arguments = { "-Command", "Start-Process timeout -ArgumentList '/t','30','/nobreak' -NoNewWindow; Start-Process timeout -ArgumentList '/t','30','/nobreak' -NoNewWindow; Start-Process timeout -ArgumentList '/t','30','/nobreak' -NoNewWindow; timeout /t 30 /nobreak" },
-            CreateNewProcessGroup = true
-        };
+        ProcessStartOptions options = OperatingSystem.IsWindows()
+            ? new("powershell")
+            {
+                Arguments = { "-Command", "Start-Process timeout -ArgumentList '/t','30','/nobreak' -NoNewWindow; Start-Process timeout -ArgumentList '/t','30','/nobreak' -NoNewWindow; Start-Process timeout -ArgumentList '/t','30','/nobreak' -NoNewWindow; timeout /t 30 /nobreak" },
+            }
+            : new("sh")
+            {
+                Arguments = { "-c", "sleep 30 & sleep 30 & sleep 30 & sleep 30 & wait" },
+            };
+        options.CreateNewProcessGroup = true;
 
-        using SafeFileHandle stdin = Console.OpenStandardInputHandle();
+        SafeFileHandle? stdin = OperatingSystem.IsWindows() ? Console.OpenStandardInputHandle() : null;
         _childProcessHandle = SafeChildProcessHandle.Start(options, input: stdin, output: null, error: null);
     }
 
