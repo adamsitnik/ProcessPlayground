@@ -14,7 +14,7 @@ namespace Benchmarks;
 [BenchmarkCategory(nameof(RedirectToPipe))]
 public class RedirectToPipe
 {
-    [Benchmark(Baseline = true)]
+    [Benchmark]
     public int OldSyncEvents()
     {
         using (Process process = new())
@@ -84,7 +84,10 @@ public class RedirectToPipe
     }
 
     [Benchmark]
-    public async Task<int> ChannelsAsync()
+    [Arguments(0)]
+    [Arguments(5)]
+    [Arguments(10)]
+    public async Task<int> ChannelsAsync(int capacity)
     {
         ProcessStartInfo info = new()
         {
@@ -96,7 +99,7 @@ public class RedirectToPipe
 
         using Process process = Process.Start(info)!;
 
-        await foreach (var line in ReadAllLinesChannelAsync(process))
+        await foreach (var line in ReadAllLinesChannelAsync(capacity, process))
         {
             _ = line;
         }
@@ -201,12 +204,12 @@ public class RedirectToPipe
         }
     }
 
-    public async IAsyncEnumerable<ProcessOutputLine> ReadAllLinesChannelAsync(Process process, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<ProcessOutputLine> ReadAllLinesChannelAsync(int capacity, Process process, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         StreamReader outputReader = process.StandardOutput;
         StreamReader errorReader = process.StandardError;
 
-        Channel<ProcessOutputLine> channel = Channel.CreateBounded<ProcessOutputLine>(0);
+        Channel<ProcessOutputLine> channel = Channel.CreateBounded<ProcessOutputLine>(capacity);
         int completedCount = 0;
 
         CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
