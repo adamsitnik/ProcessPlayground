@@ -19,8 +19,8 @@ public class RedirectToPipe
     {
         using (Process process = new())
         {
-            process.StartInfo.FileName = "dotnet";
-            process.StartInfo.Arguments = "--help";
+            process.StartInfo.FileName = "cmd";
+            process.StartInfo.Arguments = "/c for /L %i in (1,1,1000) do @echo Line %i";
             process.StartInfo.RedirectStandardOutput = true;
             process.StartInfo.RedirectStandardError = true;
             process.StartInfo.UseShellExecute = false;
@@ -44,8 +44,8 @@ public class RedirectToPipe
     {
         ProcessStartInfo info = new()
         {
-            FileName = "dotnet",
-            ArgumentList = { "--help" },
+            FileName = "cmd",
+            ArgumentList = { "/c", "for /L %i in (1,1,1000) do @echo Line %i" },
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
@@ -65,8 +65,8 @@ public class RedirectToPipe
     {
         ProcessStartInfo info = new()
         {
-            FileName = "dotnet",
-            ArgumentList = { "--help" },
+            FileName = "cmd",
+            ArgumentList = { "/c", "for /L %i in (1,1,1000) do @echo Line %i" },
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
@@ -88,8 +88,8 @@ public class RedirectToPipe
     {
         ProcessStartInfo info = new()
         {
-            FileName = "dotnet",
-            ArgumentList = { "--help" },
+            FileName = "cmd",
+            ArgumentList = { "/c", "for /L %i in (1,1,1000) do @echo Line %i" },
             RedirectStandardOutput = true,
             RedirectStandardError = true
         };
